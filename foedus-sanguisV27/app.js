@@ -2367,11 +2367,7 @@ function openMbrProfile(id){
   html+='</div>';
   if(m.joinDate) html+='<div style="font-size:11px;color:var(--tx3);margin-top:6px">Membre depuis '+fmtDate(m.joinDate.slice(0,10))+'</div>';
   html+='</div>';
-  html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">';
-  html+='<div style="background:var(--bg1);border-radius:3px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#66bb6a">'+present+'</div><div style="font-size:9px;color:var(--tx3)">✅ PRÉSENT</div></div>';
-  html+='<div style="background:var(--bg1);border-radius:3px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--red3)">'+absent+'</div><div style="font-size:9px;color:var(--tx3)">❌ ABSENT</div></div>';
-  html+='<div style="background:var(--bg1);border-radius:3px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:'+rc+'">'+presRate+'%</div><div style="font-size:9px;color:var(--tx3)">PRÉSENCE</div></div>';
-  html+='</div>';
+
   if(m.classes&&m.classes.length){
     html+='<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">CLASSES</div>';
     html+='<div style="display:flex;flex-wrap:wrap;gap:4px">'+memberClassBadges(m)+'</div></div>';
