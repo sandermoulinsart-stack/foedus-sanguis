@@ -816,10 +816,14 @@ function sendPushToAll(title, message, url){
         'Content-Type':'application/json',
         'x-foedus-key': FOEDUS_PUSH_SECRET
       },
-      body: JSON.stringify({subscriptions, title, message, url: url||'/'})
-    }).then(function(r){return r.json();})
-      .then(function(res){ console.log('[Push] Envoyé:', res.sent, 'abonnés'); })
-      .catch(function(e){ console.warn('[Push] Envoi err:', e); });
+      body: JSON.stringify({subscriptions:subscriptions, title:title, message:message, url:url||'/'})
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});
+      return r.json();
+    }).then(function(res){
+      console.log('[Push] Envoyé:', res.sent, 'abonnés, échecs:', res.failed);
+      if(res.errors&&res.errors.length) console.warn('[Push] Erreurs:', res.errors);
+    }).catch(function(e){ console.warn('[Push] Envoi err:', e.message||e); });
   });
 }
 
