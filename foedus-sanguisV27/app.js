@@ -360,7 +360,15 @@ function sbLoad(){
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
     console.log('[SB] Chargé: '+DB.members.length+' membres, '+(DB.pendingMembers||[]).length+' en attente');
-    // Réparer automatiquement les votes orphelins (clés p... sans membre correspondant)
+    // Vérifier que le membre connecté existe toujours en base
+    if(CU){
+      var stillExists=DB.members.find(function(m){return m.id===CU.id;});
+      if(!stillExists){
+        console.warn('[SB] Compte supprimé — déconnexion forcée');
+        doLogout();
+        return;
+      }
+    }
     repairOrphanVotes();
     if(CU)updSB();
   }).catch(function(e){
