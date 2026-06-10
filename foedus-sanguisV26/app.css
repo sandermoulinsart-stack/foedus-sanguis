@@ -1,12 +1,10 @@
 
 :root{
-  --bg0:#06060a;--bg1:#0c0b10;--bg2:#111018;--bg3:#18161f;--bg4:#1e1c27;
-  --b1:rgba(200,180,220,.07);--b2:rgba(200,180,220,.13);--b3:rgba(200,180,220,.2);
+  --bg0:#06060a;--bg1:#0c0b10;--bg2:#111018;--bg3:#18161f;
+  --b1:rgba(200,180,220,.07);--b2:rgba(200,180,220,.13);
   --tx1:#e8e4f0;--tx2:#b0a8c0;--tx3:#6a6278;--tx4:#302840;
-  --gold:#c9a227;--goldd:#e0b830;--golddim:rgba(201,162,39,.28);
-  --red:#6b0a0f;--red2:#8b0a12;--red3:#d42030;
-  --teal:#1a6b7a;--teal2:#7090a8;
-  --sh:0 4px 24px rgba(0,0,0,.5);
+  --gold:#c9a227;--golddim:rgba(201,162,39,.28);
+  --red2:#8b0a12;--red3:#d42030;--teal2:#7090a8;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:var(--bg0);color:var(--tx1);font-family:'Spectral',Georgia,serif;font-size:16px;overflow:hidden}
@@ -255,8 +253,8 @@ tr:last-child td{border-bottom:none}
     padding: 20px 16px 16px !important;
   }
   #sidebar .sb-hdr img {
-    width: 80px !important;
-    height: 80px !important;
+    width: 140px !important;
+    height: 140px !important;
   }
   #sidebar .hname-txt {
     font-size: 16px !important;
@@ -354,48 +352,3 @@ body.theme-light .badge {
 }
 
 .ni svg { width:18px; height:18px; flex-shrink:0; }
-
-/* ── Hover colorés sur les éléments clés ── */
-
-/* Threads forum */
-.thr:hover { background:var(--bg2); border-left:3px solid var(--gold); padding-left:13px; }
-
-/* Cartes membres */
-.rcard:hover { border-color:var(--golddim); background:var(--bg3); }
-
-/* Cartes .card générique */
-.card:hover { border-color:var(--golddim); background:var(--bg4); }
-
-/* Panneaux pan — légère lueur au hover */
-.pan:hover { border-color:var(--b2); }
-
-/* Bannières — hover léger */
-.banner:hover { filter:brightness(1.05); }
-.ban-event:hover { border-color:var(--red2); }
-.ban-info:hover  { border-color:var(--teal); }
-.ban-gold:hover  { border-color:var(--gold); }
-
-/* Éléments de liste vote */
-div[onclick*="castVoteW"]:hover { filter:brightness(1.15); }
-
-/* Slots groupes de combat */
-div[style*="Slot libre"]:hover { border-color:var(--golddim) !important; background:rgba(201,162,39,.05) !important; }
-
-/* Fiches formation */
-.form-card { transition:border-color .2s,box-shadow .2s; }
-.form-card:hover { border-color:var(--golddim) !important; box-shadow:0 0 12px rgba(201,162,39,.12); }
-
-/* Nav items — couleur d'accent par section au hover */
-.ni[data-page="home"]:hover    { color:var(--gold); }
-.ni[data-page="mbr"]:hover     { color:#e8943a; }
-.ni[data-page="unit"]:hover    { color:#64b5f6; }
-.ni[data-page="grp"]:hover     { color:#ef5350; }
-.ni[data-page="vote"]:hover    { color:#ffd54f; }
-.ni[data-page="for"]:hover     { color:var(--teal2); }
-.ni[data-page="form"]:hover    { color:#ce93d8; }
-.ni[data-page="cal"]:hover     { color:#80cbc4; }
-.ni[data-page="rec"]:hover     { color:#ff8a65; }
-.ni[data-page="stats"]:hover   { color:#66bb6a; }
-.ni[data-page="rank"]:hover    { color:#ffd54f; }
-.ni[data-page="planning"]:hover{ color:#80cbc4; }
-.ni[data-page="param"]:hover   { color:var(--tx2); }
