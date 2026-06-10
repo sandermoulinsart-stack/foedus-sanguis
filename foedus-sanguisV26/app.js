@@ -729,7 +729,7 @@ function doRegister(){
   sha256(p).then(function(hash){
     var pending={
       id:'p'+Date.now(), username:u, pin:hash,
-      role:'recrue', status:'attente', sanguin:false,
+      role:'recrue', status:'attente', sanguin:false, grandChampion:false,
       joinDate:nowDate(), note:msg, units:[], avatar:''
     };
     sbSaveMember(pending).then(function(){
@@ -1229,7 +1229,7 @@ function pgRank(){
         +'<div style="font-size:'+(i<3?'22px':'14px')+';min-width:36px;text-align:center;font-weight:700;color:var(--gold)">'+(medals[i]||(i+1))+'</div>'
         +avaHTML(r.m,36)
         +'<div style="flex:1;min-width:0">'
-          +'<div class="cin fw7" style="font-size:13px">'+esc(r.m.username)+(r.m.chefGroupe?' 🗡️':'')+(r.m.sanguin?' 🩸':'')+'</div>'
+          +'<div class="cin fw7" style="font-size:13px">'+esc(r.m.username)+(r.m.chefGroupe?' 🗡️':'')+(r.m.sanguin?' 🩸':'')+(r.m.grandChampion?' 🏆':'')+'</div>'
           +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:6px">'
             +'<div style="background:var(--bg1);border-radius:2px;padding:4px 6px;text-align:center">'
               +'<div style="font-size:14px;font-weight:700;color:#66bb6a">'+r.present+'</div>'
@@ -1419,7 +1419,7 @@ function openImgFull(src){
 
 function updSB(){
   if(!CU)return;
-  document.getElementById('sun').textContent=CU.username+(CU.chefGroupe?' 🗡️':'')+(CU.sanguin?' 🩸':'');
+  document.getElementById('sun').textContent=CU.username+(CU.chefGroupe?' 🗡️':'')+(CU.sanguin?' 🩸':'')+(CU.grandChampion?' 🏆':'');
   document.getElementById('srl').textContent=(CU.sanguin?'🩸 ':'')+(RN[CU.role]||CU.role);
   var av=document.getElementById('sav');
   if(av){
@@ -1691,7 +1691,7 @@ function pgHome(){
           var units=(myGrp.unitAssignments&&myGrp.unitAssignments[mid])||[];
           return'<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg1);border:1px solid '+(isMe?'var(--golddim)':'var(--b1)')+';border-radius:3px">'
             +avaHTML(mb,24)
-            +'<div><div style="font-size:11px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(mb.username)+(isMe?' (moi)':'')+(mb.chefGroupe?' 🗡️':'')+(mb.sanguin?' 🩸':'')+'</div>'
+            +'<div><div style="font-size:11px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(mb.username)+(isMe?' (moi)':'')+(mb.chefGroupe?' 🗡️':'')+(mb.sanguin?' 🩸':'')+(mb.grandChampion?' 🏆':'')+'</div>'
             +(units.filter(Boolean).length?'<div style="font-size:9px;color:var(--tx3)">'+units.filter(Boolean).join(' · ')+'</div>':'')
             +'</div></div>';
         }).join('')
@@ -2117,7 +2117,7 @@ function pgMbr(){
       var sanctions=(m.sanctions||[]).filter(function(s){return s.type&&s.type.indexOf('✅')<0;}).length;
       var maxMastery=(m.units||[]).reduce(function(a,u){return Math.max(a,u.mastery||0);},0);
       return'<div style="padding:14px 16px;border-bottom:1px solid var(--b1);'+(isMe?'background:rgba(201,162,39,.05)':'')+'">'        // Row 1: avatar + name + actions
-        +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'        +avaHTML(m,38)        +'<div style="flex:1;min-width:0">'        +'<div style="font-size:15px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+'</div>'        +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">'        +rb(m)        +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'">'+esc(m.status)+'</span>'        +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️ '+sanctions+'</span>':'')
+        +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'        +avaHTML(m,38)        +'<div style="flex:1;min-width:0">'        +'<div style="font-size:15px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+' </div>'        +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">'        +rb(m)        +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'">'+esc(m.status)+'</span>'        +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️ '+sanctions+'</span>':'')
         +'</div></div>'        +(HR('officier')?'<div style="display:flex;gap:6px;flex-shrink:0">'          +'<button class="btn bol bsm" onclick="editMbrW(this)" data-id="'+m.id+'">✏️</button>'          +(m.id!==CU.id?'<button class="btn bred bsm" onclick="delMbrW(this)" data-id="'+m.id+'">✕</button>':'')
           +'</div>':'')
         +'</div>'        // Row 2: classes
@@ -2132,13 +2132,13 @@ function openAddMbr(){
     '<div class="fr2"><div class="fg"><label class="fl">Pseudo</label><input class="fi" id="am-u"></div><div class="fg"><label class="fl">PIN</label><input class="fi" type="password" id="am-p"></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">Rôle</label><select class="fs" id="am-r">'+(HR('admin')?Object.entries(RN):Object.entries(RN).filter(function(e){return e[0]!=='admin';})).map(function(e){return'<option value="'+e[0]+'">'+e[1]+'</option>';}).join('')+'</select></div>'
     +'<div class="fg"><label class="fl">Statut</label><select class="fs" id="am-s"><option value="actif">Actif</option><option value="inactif">Inactif</option></select></div></div>'
-    +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="am-sg"> Garde Sanguin 🩸</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="am-cg"> Chef de Groupe 🗡️</label></div>'
+    +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="am-sg"> Garde Sanguin 🩸</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="am-cg"> Chef de Groupe 🗡️</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="am-gc"> Grand Champion 🏆</label></div>'
     +'<div class="fg"><label class="fl">Note</label><input class="fi" id="am-n"></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Ajouter',cls:'btn bg',fn:function(){
       var u=sanitize(gVal('am-u'),50),p=gVal('am-p');
       if(!u||!p)return alert('Pseudo et PIN requis');
       sha256(p).then(function(hash){
-        var m={id:'m'+Date.now(),username:u,pin:hash,role:gVal('am-r'),status:gVal('am-s'),sanguin:gChk('am-sg'),chefGroupe:gChk('am-cg'),joinDate:nowDate(),note:gVal('am-n'),units:[],avatar:''};
+        var m={id:'m'+Date.now(),username:u,pin:hash,role:gVal('am-r'),status:gVal('am-s'),sanguin:gChk('am-sg'),chefGroupe:gChk('am-cg'),grandChampion:false,joinDate:nowDate(),note:gVal('am-n'),units:[],avatar:''};
         DB.members.push(m);sbSaveMember(m);CM();go('mbr');
       });
     }}]);
@@ -2149,13 +2149,13 @@ function editMbr(id){
     '<div class="fg"><label class="fl">Pseudo</label><input class="fi" id="em-u" value="'+esc(m.username)+'"></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">Rôle</label><select class="fs" id="em-r">'+Object.entries(RN).map(function(e){return'<option value="'+e[0]+'"'+(m.role===e[0]?' selected':'')+'>'+e[1]+'</option>';}).join('')+'</select></div>'
     +'<div class="fg"><label class="fl">Statut</label><select class="fs" id="em-s"><option value="actif"'+(m.status==='actif'?' selected':'')+'>Actif</option><option value="inactif"'+(m.status==='inactif'?' selected':'')+'>Inactif</option></select></div></div>'
-    +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-sg"'+(m.sanguin?' checked':'')+'>Garde Sanguin 🩸</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-cg"'+(m.chefGroupe?' checked':'')+'>Chef de Groupe 🗡️</label></div>'
+    +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-sg"'+(m.sanguin?' checked':'')+'>Garde Sanguin 🩸</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-cg"'+(m.chefGroupe?' checked':'')+'>Chef de Groupe 🗡️</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-gc"'+(m.grandChampion?' checked':'')+'>Grand Champion 🏆</label></div>'
     +'<div class="fg"><label class="fl">Note</label><input class="fi" id="em-n" value="'+esc(m.note||'')+'"></div>'
     +'<div class="fg"><label class="fl">Nouveau PIN (vide = inchangé)</label><input class="fi" type="password" id="em-p"></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
       m.username=sanitize(gVal('em-u'),50)||m.username;
       m.role=gVal('em-r');m.status=gVal('em-s');
-      m.sanguin=gChk('em-sg');m.chefGroupe=gChk('em-cg');m.note=gVal('em-n');
+      m.sanguin=gChk('em-sg');m.chefGroupe=gChk('em-cg');m.grandChampion=gChk('em-gc');m.note=gVal('em-n');
       var np=gVal('em-p');
       function save(){
   if(m.id===CU.id)CU=m;
@@ -2569,7 +2569,7 @@ function renderGroupCard(g, war){
       +'<div style="font-size:8px;font-weight:700;color:var(--tx4);align-self:flex-start">'+(i===0&&isElite?'👑 ':''+(i+1))+'</div>'
       +(mb
         ? avaHTML(mb,28)
-          +'<div style="font-size:9px;font-weight:700;color:var(--tx1);word-break:break-word;line-height:1.2">'+esc(mb.username)+(mb.chefGroupe?' 🗡️':'')+(mb.sanguin?' 🩸':'')+'</div>'+mbClassSlotHTML(mb, g.id, mid, canEditSlots)
+          +'<div style="font-size:9px;font-weight:700;color:var(--tx1);word-break:break-word;line-height:1.2">'+esc(mb.username)+(mb.chefGroupe?' 🗡️':'')+(mb.sanguin?' 🩸':'')+(mb.grandChampion?' 🏆':'')+'</div>'+mbClassSlotHTML(mb, g.id, mid, canEditSlots)
           +[0,1,2].map(function(ui){
             var u=units[ui]||'';
             if(canEditSlots){
@@ -2609,7 +2609,7 @@ function renderGroupCard(g, war){
           var eu=uBM(m.id,g.minMastery);
           var maxM=eu.reduce(function(a,u){return Math.max(a,u.mastery)},0);
           return'<button class="btn bol bsm '+(eu.length?'bteal':'')+'" onclick="addGrpMbrEl(this)" data-gid="'+g.id+'" data-mid="'+m.id+'" style="display:flex;align-items:center;gap:5px">'
-            +avaHTML(m,16)+' '+esc(m.username)+(m.chefGroupe?'<span title="Chef de groupe" style="font-size:10px;margin-left:2px">🗡️</span>':'')
+            +avaHTML(m,16)+' '+esc(m.username)+(m.chefGroupe?'<span title="Chef de groupe" style="font-size:10px;margin-left:2px">🗡️</span>':'')+(m.grandChampion?'<span title="Grand Champion" style="font-size:10px;margin-left:2px">🏆</span>':'')
             +(maxM?'<span style="color:var(--gold);font-size:10px">'+maxM+'★</span>':'<span style="color:var(--red3);font-size:10px">⚠️</span>')
             +'</button>';
         }).join('')
@@ -3998,7 +3998,7 @@ function approveRec(id){
   // Conserver l'ID du candidat pour garder ses éventuels votes déjà enregistrés
   var m={
     id:p.id, username:p.username, pin:p.pin,
-    role:'membre', status:'actif', sanguin:false,
+    role:'membre', status:'actif', sanguin:false, grandChampion:false,
     joinDate:nowDate(), note:p.note||'',
     units:p.units||[], avatar:p.avatar||'',
     classe:p.classe||'', classes:p.classes||[]
@@ -4356,7 +4356,7 @@ function sbMemberToLocal(r){
   return {
     id:r.id, username:r.username, pin:r.pin||'',
     role:r.role||'recrue', status:r.status||'actif',
-    sanguin:r.sanguin||false, chefGroupe:r.chef_groupe||false,
+    sanguin:r.sanguin||false, chefGroupe:r.chef_groupe||false, grandChampion:r.grand_champion||false,
     joinDate:r.joined_at||'', note:r.note||'', units:r.units||[], avatar:r.avatar||'',
     classe:r.classe||'', classes:r.classes||[]
   };
@@ -4365,7 +4365,7 @@ function localMemberToSb(m){
   return {
     id:m.id, username:m.username, pin:m.pin||'',
     role:m.role||'recrue', status:m.status||'actif',
-    sanguin:m.sanguin||false, chef_groupe:m.chefGroupe||false,
+    sanguin:m.sanguin||false, chef_groupe:m.chefGroupe||false, grand_champion:m.grandChampion||false,
     joined_at:m.joinDate||m.date||'',
     note:m.note||m.message||'', units:m.units||[], avatar:m.avatar||'',
     classe:m.classe||'', classes:m.classes||[]
