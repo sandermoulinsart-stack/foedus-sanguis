@@ -3038,6 +3038,60 @@ function openNewVoteWar(){
 
 
 
+
+// ════════════════════════════════════════════════════════════════
+// RÉACTIONS FORUM
+// ════════════════════════════════════════════════════════════════
+var REACTIONS = ['👍','⚔️','🩸','🔥','😂'];
+
+function reactionsHTML(reactions, threadId, replyIdx){
+  reactions = reactions || {};
+  var target = replyIdx===undefined ? 'p' : 'r'+replyIdx;
+  var html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">';
+  REACTIONS.forEach(function(emoji){
+    var users = reactions[emoji] || [];
+    var hasReacted = users.indexOf(CU.username) >= 0;
+    var bg = hasReacted ? 'rgba(201,162,39,.2)' : 'var(--bg1)';
+    var bc = hasReacted ? 'var(--gold)' : 'var(--b2)';
+    var col = hasReacted ? 'var(--gold)' : 'var(--tx2)';
+    var cnt = users.length ? '<span style="font-size:11px;font-weight:700">'+users.length+'</span>' : '';
+    html += '<button onclick="toggleReaction(this)" data-tid="'+esc(threadId)+'" data-tgt="'+esc(target)+'" data-emoji="'+esc(emoji)+'" style="background:'+bg+';border:1px solid '+bc+';border-radius:20px;padding:3px 10px;cursor:pointer;font-size:13px;color:'+col+';transition:all .15s;display:flex;align-items:center;gap:4px">'+emoji+cnt+'</button>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function toggleReaction(btn){
+  var threadId=btn.dataset.tid, target=btn.dataset.tgt, emoji=btn.dataset.emoji;
+  var t = (DB.forumThreads||[]).find(function(x){return x.id===threadId;});
+  if(!t) return;
+  // Initialiser reactions sur le bon objet
+  if(target === 'p'){
+    t.reactions = t.reactions || {};
+    t.reactions[emoji] = t.reactions[emoji] || [];
+    var idx = t.reactions[emoji].indexOf(CU.username);
+    if(idx >= 0) t.reactions[emoji].splice(idx,1);
+    else t.reactions[emoji].push(CU.username);
+  } else {
+    var ri = parseInt(target.replace('r',''));
+    if(!t.replies || !t.replies[ri]) return;
+    t.replies[ri].reactions = t.replies[ri].reactions || {};
+    t.replies[ri].reactions[emoji] = t.replies[ri].reactions[emoji] || [];
+    var idx2 = t.replies[ri].reactions[emoji].indexOf(CU.username);
+    if(idx2 >= 0) t.replies[ri].reactions[emoji].splice(idx2,1);
+    else t.replies[ri].reactions[emoji].push(CU.username);
+  }
+  // Sauvegarder et re-render sans perdre la position
+  sbSaveThread(t).catch(function(e){console.warn('[Reaction]',e);});
+  // Re-render juste le thread actif
+  var content = document.getElementById('content');
+  if(content && FV==='thread' && CT && CT.id===threadId){
+    var scrollTop = content.scrollTop;
+    content.innerHTML = renderThread(t);
+    content.scrollTop = scrollTop;
+  }
+}
+
 function pgFor(){
   document.getElementById('tact').innerHTML='<button class="btn bg bsm" onclick="openNewThread()">+ Nouveau sujet</button>';
   if(FV==='thread'&&CT)return renderThread(CT);
@@ -3085,12 +3139,16 @@ function renderThread(t){
     +'<div class="pan"><div class="ph"><span class="ttag t-'+(t.tag||'general')+'">'+(TAG_LBL[t.tag]||t.tag)+'</span><span class="ptl" style="margin-left:8px;font-size:15px">'+esc(t.title)+'</span></div>'
     +(t.image?'<div style="width:100%;height:220px;border-radius:3px;margin-bottom:12px;overflow:hidden;cursor:zoom-in" onclick="showImg(this)" data-img="'+esc(t.image)+'"><img src="'+esc(t.image)+'" style="width:100%;height:100%;object-fit:cover;object-position:center top"></div>':'')
     +'<div class="pb"><div class="fbc g12 td tsm mb12"><span class="cin fw7">'+esc(t.author)+'</span><span>'+esc(t.date)+'</span></div>'
-    +'<div style="font-size:14px;line-height:1.9;white-space:pre-line">'+esc(t.content)+'</div></div></div>'
+    +'<div style="font-size:14px;line-height:1.9;white-space:pre-line">'+esc(t.content)+'</div>'
+    +reactionsHTML(t.reactions, t.id)
+    +'</div></div>'
     +(t.replies||[]).map(function(r){
       return'<div class="card" style="margin-bottom:10px">'
         +'<div class="fbt mb12"><span class="cin fw7" style="font-size:12px">'+esc(r.author)+'</span><span class="td txs">'+esc(r.date)+'</span></div>'
         +(r.image?'<div style="max-width:280px;height:160px;border-radius:3px;overflow:hidden;cursor:zoom-in;margin-bottom:8px" data-img="'+esc(r.image)+'" onclick="showImg(this)"><img src="'+esc(r.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')
-        +'<div style="font-size:13.5px;line-height:1.7;clear:both">'+esc(r.content)+'</div></div>';
+        +'<div style="font-size:13.5px;line-height:1.7;clear:both">'+esc(r.content)+'</div>'
+        +reactionsHTML(r.reactions, t.id, (t.replies||[]).indexOf(r))
+        +'</div>';
     }).join('')
     +'<div class="pan"><div class="ph"><span class="ptl">Répondre</span></div><div class="pb">'
     +'<div class="fg"><textarea class="ft" id="rep-txt" placeholder="Votre réponse..."></textarea></div>'
