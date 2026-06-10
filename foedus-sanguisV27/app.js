@@ -330,7 +330,8 @@ function sbLoad(){
     SB.from('forum_threads').get(),
     SB.from('formations').get(),
     SB.from('events').get(),
-    SB.from('tournaments').get().catch(function(e){console.warn('[SB] tournaments:',e);return[];})
+    SB.from('tournaments').get().catch(function(e){console.warn('[SB] tournaments:',e);return[];}),
+    SB.from('hierarchy').get().catch(function(e){console.warn('[SB] hierarchy:',e);return[];})
   ]).then(function(res){
     var settings=res[0][0]||{};
     var membres=res[1]||[];
@@ -355,6 +356,7 @@ function sbLoad(){
     DB.formations     = formations.map(sbFormationToLocal);
     DB.events         = events.map(sbEventToLocal);
     DB.tournaments    = tournaments.map(sbTournamentToLocal);
+    DB.hierarchy      = (res[10]||[]);
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
     console.log('[SB] Chargé: '+DB.members.length+' membres, '+(DB.pendingMembers||[]).length+' en attente');
@@ -599,7 +601,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings().catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[]}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[]}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -887,7 +889,7 @@ function _rerender(){
   if(POLL_SKIP_PAGES.indexOf(CP)>=0)return;
   var fns={home:pgHome,mbr:pgMbr,unit:pgUnit,grp:pgGrp,vote:pgVote,
            for:pgFor,form:pgForm,cal:pgCal,rec:pgRec,param:pgParam,
-           profil:pgProfil,stats:pgStats,rank:pgRank,planning:pgPlanning};
+           profil:pgProfil,stats:pgStats,rank:pgRank,planning:pgPlanning,hier:pgHierarchy};
   var fn=fns[CP];
   if(fn){
     var content=document.getElementById('content');
@@ -1258,6 +1260,132 @@ function pgRank(){
 // ════════════════════════════════════════
 // PLANNING
 // ════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════
+// HIÉRARCHIE DE LA MAISON
+// ════════════════════════════════════════════════════════════════
+var HIER_TITRES = ['Baron','Bras droit','Intendant','Officier recruteur','Référent recruteur','Raid Lead','Recruteur','Formateur'];
+var HIER_COLORS = {
+  'Baron':              {border:'#c9a227',bg:'rgba(201,162,39,.15)',color:'#c9a227'},
+  'Bras droit':         {border:'#ce93d8',bg:'rgba(206,147,216,.12)',color:'#ce93d8'},
+  'Intendant':          {border:'#64b5f6',bg:'rgba(100,181,246,.12)',color:'#64b5f6'},
+  'Officier recruteur': {border:'#ef5350',bg:'rgba(239,83,80,.1)',color:'#ef5350'},
+  'Référent recruteur': {border:'#ef5350',bg:'rgba(239,83,80,.1)',color:'#ef5350'},
+  'Raid Lead':          {border:'#66bb6a',bg:'rgba(102,187,106,.1)',color:'#66bb6a'},
+  'Recruteur':          {border:'#ffa726',bg:'rgba(255,167,38,.1)',color:'#ffa726'},
+  'Formateur':          {border:'#7090a8',bg:'rgba(112,144,168,.1)',color:'#7090a8'}
+};
+
+function sbSaveHierarchyNode(n){ return SB.from('hierarchy').upsert(n); }
+function sbDeleteHierarchyNode(id){ return SB.from('hierarchy').delete('id',id); }
+
+function pgHierarchy(){
+  var canEdit=HR('baron')||HR('admin');
+  if(canEdit) document.getElementById('tact').innerHTML='<button class="btn bg bsm" onclick="openAddHierNode()">+ Ajouter un poste</button>';
+  else document.getElementById('tact').innerHTML='';
+
+  var nodes=(DB.hierarchy||[]).slice().sort(function(a,b){return (a.ordre||0)-(b.ordre||0);});
+  if(!nodes.length){
+    return'<div class="pan"><div class="ph"><span class="ptl">⚜️ Hiérarchie de la Maison</span></div>'
+      +'<div class="pb td ta-c" style="padding:40px;color:var(--tx3)">Aucun poste défini.</div></div>';
+  }
+
+  var byTitre={};
+  HIER_TITRES.forEach(function(t){ byTitre[t]=[]; });
+  nodes.forEach(function(n){ if(!byTitre[n.titre]) byTitre[n.titre]=[]; byTitre[n.titre].push(n); });
+
+  var html='<div class="pan"><div class="ph"><span class="ptl">⚜️ Hiérarchie de la Maison</span></div><div class="pb">';
+  HIER_TITRES.forEach(function(titre){
+    var items=byTitre[titre]||[];
+    if(!items.length) return;
+    var col=HIER_COLORS[titre]||{border:'var(--b2)',bg:'var(--bg1)',color:'var(--tx2)'};
+    html+='<div style="margin-bottom:20px">';
+    html+='<div style="font-family:Cinzel,serif;font-size:10px;font-weight:700;color:'+col.color+';letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;border-bottom:1px solid '+col.border+';padding-bottom:6px">'+titre+'</div>';
+    html+='<div style="display:flex;flex-wrap:wrap;gap:10px">';
+    items.forEach(function(n){
+      var m=DB.members.find(function(x){return x.id===n.membre_id;});
+      html+='<div style="background:'+col.bg+';border:1px solid '+col.border+';border-radius:4px;padding:12px 16px;display:flex;align-items:center;gap:10px;min-width:160px">';
+      if(m) html+=avaHTML(m,32);
+      else html+='<div style="width:32px;height:32px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--tx3)">?</div>';
+      html+='<div>';
+      html+='<div style="font-size:13px;font-weight:700;color:var(--tx1);font-family:Cinzel,serif">'+esc(n.username||'—')+'</div>';
+      if(m&&m.chefGroupe)    html+='<div style="font-size:10px;color:var(--teal2)">🗡️ Chef de Groupe</div>';
+      if(m&&m.sanguin)       html+='<div style="font-size:10px;color:var(--tx3)">🩸 Garde Sanguin</div>';
+      if(m&&m.grandChampion) html+='<div style="font-size:10px;color:var(--gold)">🏆 Grand Champion</div>';
+      if(n.note)             html+='<div style="font-size:10px;color:var(--tx3);font-style:italic;margin-top:2px">'+esc(n.note)+'</div>';
+      html+='</div>';
+      if(canEdit){
+        html+='<div style="margin-left:auto;display:flex;gap:4px">'
+          +'<button class="btn bol bsm" style="font-size:10px" onclick="openEditHierNodeW(this)" data-id="'+n.id+'">✏️</button>'
+          +'<button class="btn bred bsm" style="font-size:10px" onclick="delHierNodeW(this)" data-id="'+n.id+'">✕</button>'
+          +'</div>';
+      }
+      html+='</div>';
+    });
+    html+='</div></div>';
+  });
+  html+='</div></div>';
+  return html;
+}
+
+function memberDropdown(selectedId){
+  var opts=DB.members.filter(function(m){return m.status!=='attente';})
+    .sort(function(a,b){return a.username.localeCompare(b.username);})
+    .map(function(m){return'<option value="'+esc(m.id)+'"'+(m.id===selectedId?' selected':'')+'>'+esc(m.username)+'</option>';}).join('');
+  return'<select class="fs" id="hier-mb"><option value="">— Choisir un membre —</option>'+opts+'</select>';
+}
+
+function openAddHierNode(){
+  if(!HR('baron')&&!HR('admin'))return;
+  OM('Ajouter un poste',
+    '<div class="fg"><label class="fl">Titre</label><select class="fs" id="hier-titre">'+HIER_TITRES.map(function(t){return'<option value="'+t+'">'+t+'</option>';}).join('')+'</select></div>'
+    +'<div class="fg"><label class="fl">Membre</label>'+memberDropdown('')+'</div>'
+    +'<div class="fg"><label class="fl">Note (optionnel)</label><textarea class="ft" id="hier-note" style="min-height:60px"></textarea></div>'
+    +'<div class="fg"><label class="fl">Ordre</label><input class="fi" type="number" id="hier-ordre" value="0" style="max-width:80px"></div>',
+    [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Ajouter',cls:'btn bg',fn:function(){
+      var titre=document.getElementById('hier-titre').value;
+      var mbId=document.getElementById('hier-mb').value;
+      var note=document.getElementById('hier-note').value.trim();
+      var ordre=parseInt(document.getElementById('hier-ordre').value)||0;
+      if(!mbId)return alert('Choisissez un membre.');
+      var m=DB.members.find(function(x){return x.id===mbId;});
+      var node={id:'h'+Date.now(),titre:titre,membre_id:mbId,username:m?m.username:'',note:note,ordre:ordre,updated_at:new Date().toISOString()};
+      DB.hierarchy=DB.hierarchy||[];
+      DB.hierarchy.push(node);
+      sbSaveHierarchyNode(node).then(function(){CM();go('hier');}).catch(function(e){console.warn('[hier]',e);});
+    }}]);
+}
+
+function openEditHierNodeW(btn){ openEditHierNode(btn.dataset.id); }
+function openEditHierNode(id){
+  if(!HR('baron')&&!HR('admin'))return;
+  var n=(DB.hierarchy||[]).find(function(x){return x.id===id;});if(!n)return;
+  OM('Modifier le poste',
+    '<div class="fg"><label class="fl">Titre</label><select class="fs" id="hier-titre">'+HIER_TITRES.map(function(t){return'<option value="'+t+'"'+(t===n.titre?' selected':'')+'>'+t+'</option>';}).join('')+'</select></div>'
+    +'<div class="fg"><label class="fl">Membre</label>'+memberDropdown(n.membre_id)+'</div>'
+    +'<div class="fg"><label class="fl">Note (optionnel)</label><textarea class="ft" id="hier-note" style="min-height:60px">'+esc(n.note||'')+'</textarea></div>'
+    +'<div class="fg"><label class="fl">Ordre</label><input class="fi" type="number" id="hier-ordre" value="'+(n.ordre||0)+'" style="max-width:80px"></div>',
+    [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
+      var mbId=document.getElementById('hier-mb').value;
+      if(!mbId)return alert('Choisissez un membre.');
+      var m=DB.members.find(function(x){return x.id===mbId;});
+      n.titre=document.getElementById('hier-titre').value;
+      n.membre_id=mbId; n.username=m?m.username:'';
+      n.note=document.getElementById('hier-note').value.trim();
+      n.ordre=parseInt(document.getElementById('hier-ordre').value)||0;
+      n.updated_at=new Date().toISOString();
+      sbSaveHierarchyNode(n).then(function(){CM();go('hier');}).catch(function(e){console.warn('[hier]',e);});
+    }}]);
+}
+
+function delHierNodeW(btn){ delHierNode(btn.dataset.id); }
+function delHierNode(id){
+  if(!HR('baron')&&!HR('admin'))return;
+  if(!confirm('Supprimer ce poste ?'))return;
+  DB.hierarchy=(DB.hierarchy||[]).filter(function(x){return x.id!==id;});
+  sbDeleteHierarchyNode(id).then(function(){go('hier');}).catch(function(e){console.warn('[hier]',e);});
+}
+
 function pgPlanning(){
   var now=new Date();
   var startOfWeek=new Date(now);
@@ -1460,7 +1588,8 @@ var PG={
   cal:['Calendrier','Événements à venir'],
   rec:['Recrutement','Gestion des candidatures'],
   param:['Paramètres','Configuration'],
-  profil:['Mon Profil','Mes informations']
+  profil:['Mon Profil','Mes informations'],
+  hier:['Hiérarchie','Organisation de la Maison']
 };
 
 
@@ -1627,7 +1756,7 @@ function go(p){
   if(p==='grp')markSeen('grp');
   if(p==='cal'){markSeen('cal');}
   if(p==='home')markSeen('banner');
-  var fns={home:pgHome,mbr:pgMbr,unit:pgUnit,grp:pgGrp,vote:pgVote,for:pgFor,form:pgForm,cal:pgCal,rec:pgRec,param:pgParam,profil:pgProfil,stats:pgStats,rank:pgRank,planning:pgPlanning};
+  var fns={home:pgHome,mbr:pgMbr,unit:pgUnit,grp:pgGrp,vote:pgVote,for:pgFor,form:pgForm,cal:pgCal,rec:pgRec,param:pgParam,profil:pgProfil,stats:pgStats,rank:pgRank,planning:pgPlanning,hier:pgHierarchy};
   document.getElementById('content').innerHTML=(fns[p]||pgHome)();
   postGo(p);
 }
@@ -1865,7 +1994,27 @@ function pgHome(){
     featuredHTML+='</div>';
   }
 
-  return statsH+warHtml+myGroupHTML+banHtml+extraBanHtml+featuredHTML;
+  // Bandeau d'urgence — affiché 48h avant la guerre si pas encore voté
+  var urgentWarBanner='';
+  var openWarsU=(DB.voteWars||[]).filter(function(w){return w.status==='open';});
+  var unvotedWars=openWarsU.filter(function(w){
+    if(w.votes&&w.votes[CU.id]) return false;
+    if(!w.date) return false;
+    var warTime=new Date(w.date+(w.time?' '+w.time:'')).getTime();
+    var hoursUntil=(warTime-Date.now())/(1000*60*60);
+    return hoursUntil>=0&&hoursUntil<=48;
+  });
+  if(unvotedWars.length){
+    urgentWarBanner='<div style="background:rgba(139,26,10,.25);border:2px solid var(--red2);border-radius:4px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+      +'<span style="font-size:22px">⚔️</span>'
+      +'<div style="flex:1;min-width:200px">'
+      +'<div style="font-family:Cinzel,serif;font-size:13px;font-weight:700;color:var(--red3);letter-spacing:1px">VOTE EN ATTENTE</div>'
+      +'<div style="font-size:12px;color:var(--tx2);margin-top:3px">'+unvotedWars.map(function(w){return esc(w.title)+' — '+esc(w.date||'');}).join(' · ')+'</div>'
+      +'</div>'
+      +'<button class="btn bg bsm" onclick="go(\'vote\')" style="background:var(--red2);border-color:var(--red2);flex-shrink:0">Voter maintenant →</button>'
+      +'</div>';
+  }
+  return urgentWarBanner+statsH+warHtml+myGroupHTML+banHtml+extraBanHtml+featuredHTML;
 }
 
 function openBannerMgr(){OM('Bannières',bannerMgrHTML(),[{lbl:'Fermer',cls:'bol',fn:CM}]);}
@@ -2109,24 +2258,128 @@ function pgMbr(){
   var members=DB.members.slice().sort(function(a,b){return a.username.localeCompare(b.username);});
   if(!members.length) return'<div class="td ta-c" style="padding:40px">Aucun membre.</div>';
 
-  return'<div class="pan"><div class="ph"><span class="ptl">Combattants de la Maison</span>'
-    +'<span style="margin-left:auto;font-size:11px;color:var(--tx3)">'+members.length+' membre(s)</span></div>'
-    +'<div>'
-    +members.map(function(m){
+  var activeFilter=window._mbrFilter||'tous';
+  var activeSearch=window._mbrSearch||'';
+
+  var filters=[
+    {k:'tous',   label:'Tous ('+members.length+')'},
+    {k:'actif',  label:'✅ Actifs'},
+    {k:'inactif',label:'⏸ Inactifs'},
+    {k:'sanguin',label:'🩸 Gardes'},
+    {k:'champion',label:'🏆 Champions'},
+    {k:'chef',   label:'🗡️ Chefs'}
+  ];
+
+  var filterBar='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'
+    +filters.map(function(f){
+      return'<button onclick="setMbrFilter(this)" data-f="'+f.k+'" class="btn '+(activeFilter===f.k?'bg':'bol')+' bsm" style="font-size:10px">'+f.label+'</button>';
+    }).join('')+'</div>';
+
+  var searchBar='<div style="margin-bottom:12px">'
+    +'<input class="fi" id="mbr-search" placeholder="🔍 Rechercher un membre..." value="'+esc(activeSearch)+'"'
+    +' oninput="setMbrSearch(this.value)" style="font-size:13px"></div>';
+
+  var filtered=members.filter(function(m){
+    if(activeSearch&&m.username.toLowerCase().indexOf(activeSearch.toLowerCase())<0) return false;
+    if(activeFilter==='actif')    return m.status==='actif';
+    if(activeFilter==='inactif')  return m.status==='inactif';
+    if(activeFilter==='sanguin')  return m.sanguin;
+    if(activeFilter==='champion') return m.grandChampion;
+    if(activeFilter==='chef')     return m.chefGroupe;
+    return true;
+  });
+
+  var html='<div class="pan"><div class="ph"><span class="ptl">Combattants de la Maison</span>'
+    +'<span style="margin-left:auto;font-size:11px;color:var(--tx3)">'+filtered.length+'/'+members.length+' membre(s)</span></div>'
+    +'<div class="pb">'+filterBar+searchBar+'</div><div>';
+
+  if(!filtered.length){
+    html+='<div class="td ta-c" style="padding:24px;color:var(--tx3)">Aucun membre correspondant.</div>';
+  } else {
+    html+=filtered.map(function(m){
       var isMe=m.id===CU.id;
       var sanctions=(m.sanctions||[]).filter(function(s){return s.type&&s.type.indexOf('✅')<0;}).length;
       var maxMastery=(m.units||[]).reduce(function(a,u){return Math.max(a,u.mastery||0);},0);
-      return'<div style="padding:14px 16px;border-bottom:1px solid var(--b1);'+(isMe?'background:rgba(201,162,39,.05)':'')+'">'        // Row 1: avatar + name + actions
-        +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'        +avaHTML(m,38)        +'<div style="flex:1;min-width:0">'        +'<div style="font-size:15px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+' </div>'        +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">'        +rb(m)        +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'">'+esc(m.status)+'</span>'        +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️ '+sanctions+'</span>':'')
-        +'</div></div>'        +(HR('officier')?'<div style="display:flex;gap:6px;flex-shrink:0">'          +'<button class="btn bol bsm" onclick="editMbrW(this)" data-id="'+m.id+'">✏️</button>'          +(m.id!==CU.id?'<button class="btn bred bsm" onclick="delMbrW(this)" data-id="'+m.id+'">✕</button>':'')
-          +'</div>':'')
-        +'</div>'        // Row 2: classes
-        +(m.classes&&m.classes.length?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">'+memberClassBadges(m)+'</div>':'')        // Row 3: units summary + date
-        +'<div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--tx3)">'        +'<span>🛡️ '+(m.units&&m.units.length?m.units.length+' unité(s) · max '+maxMastery+'★':'Aucune unité')+'</span>'        +(m.joinDate?'<span>Depuis '+fmtDate(m.joinDate.slice(0,10))+'</span>':'')
-        +'</div>'        +'</div>';
-    }).join('')
-    +'</div></div>';
+      return'<div style="padding:12px 16px;border-bottom:1px solid var(--b1);cursor:pointer;'+(isMe?'background:rgba(201,162,39,.05)':'')+'"'
+        +' onclick="openMbrProfileW(this)" data-id="'+m.id+'">'
+        +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+        +avaHTML(m,38)
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:14px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+'</div>'
+        +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">'+rb(m)
+        +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'">'+esc(m.status)+'</span>'
+        +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️ '+sanctions+'</span>':'')
+        +'</div>'
+        +(m.classes&&m.classes.length?'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">'+memberClassBadges(m)+'</div>':'')
+        +'</div>'
+        +'<div style="display:flex;gap:6px;flex-shrink:0;align-items:center">'
+        +(HR('officier')?'<button class="btn bol bsm" onclick="editMbrW(this);event.stopPropagation()" data-id="'+m.id+'">✏️</button>':'')
+        +(HR('officier')&&m.id!==CU.id?'<button class="btn bred bsm" onclick="delMbrW(this);event.stopPropagation()" data-id="'+m.id+'">✕</button>':'')
+        +'<span style="font-size:12px;color:var(--tx3)">›</span>'
+        +'</div></div>'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--tx3)">'
+        +'<span>🛡️ '+(m.units&&m.units.length?m.units.length+' unité(s) · max '+maxMastery+'★':'Aucune unité')+'</span>'
+        +(m.joinDate?'<span>Depuis '+fmtDate(m.joinDate.slice(0,10))+'</span>':'')
+        +'</div>'
+        +'</div>';
+    }).join('');
+  }
+  html+='</div></div>';
+  return html;
 }
+
+function setMbrFilter(btn){ window._mbrFilter=btn.dataset.f; var el=document.getElementById('content'); if(el){var s=el.scrollTop;el.innerHTML=pgMbr();el.scrollTop=s;} }
+function setMbrSearch(v){ window._mbrSearch=v; var el=document.getElementById('content'); if(el){var s=el.scrollTop;el.innerHTML=pgMbr();el.scrollTop=s;} }
+function openMbrProfileW(el){ openMbrProfile(el.dataset.id); }
+
+function openMbrProfile(id){
+  var m=DB.members.find(function(x){return x.id===id;});
+  if(!m) return;
+  var wars=DB.voteWars||[];
+  var present=0,absent=0,novote=0;
+  wars.forEach(function(w){
+    var v=(w.votes||{})[m.id];
+    if(!v) novote++;
+    else if(v.vote==='present') present++;
+    else absent++;
+  });
+  var total=wars.length;
+  var presRate=total?Math.round(present/total*100):0;
+  var rc=presRate>=70?'#66bb6a':presRate>=40?'#f9a825':'var(--red3)';
+  var html='';
+  html+='<div style="text-align:center;padding:12px 0 18px">';
+  html+=avaHTML(m,64);
+  html+='<div style="font-family:Cinzel,serif;font-size:18px;font-weight:700;color:var(--tx1);margin-top:10px">'+esc(m.username)+'</div>';
+  html+='<div style="display:flex;justify-content:center;gap:6px;margin-top:6px;flex-wrap:wrap">';
+  html+=rb(m);
+  html+='<span class="badge '+(m.status==='actif'?'bok':'bof')+'">'+esc(m.status)+'</span>';
+  if(m.chefGroupe)    html+='<span class="badge" style="background:rgba(112,144,168,.2);color:var(--teal2)">🗡️ Chef de Groupe</span>';
+  if(m.sanguin)       html+='<span class="badge" style="background:rgba(139,26,10,.2);color:var(--red3)">🩸 Garde Sanguin</span>';
+  if(m.grandChampion) html+='<span class="badge" style="background:rgba(201,162,39,.15);color:var(--gold)">🏆 Grand Champion</span>';
+  html+='</div>';
+  if(m.joinDate) html+='<div style="font-size:11px;color:var(--tx3);margin-top:6px">Membre depuis '+fmtDate(m.joinDate.slice(0,10))+'</div>';
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">';
+  html+='<div style="background:var(--bg1);border-radius:3px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#66bb6a">'+present+'</div><div style="font-size:9px;color:var(--tx3)">✅ PRÉSENT</div></div>';
+  html+='<div style="background:var(--bg1);border-radius:3px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--red3)">'+absent+'</div><div style="font-size:9px;color:var(--tx3)">❌ ABSENT</div></div>';
+  html+='<div style="background:var(--bg1);border-radius:3px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:'+rc+'">'+presRate+'%</div><div style="font-size:9px;color:var(--tx3)">PRÉSENCE</div></div>';
+  html+='</div>';
+  if(m.classes&&m.classes.length){
+    html+='<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">CLASSES</div>';
+    html+='<div style="display:flex;flex-wrap:wrap;gap:4px">'+memberClassBadges(m)+'</div></div>';
+  }
+  if(m.units&&m.units.length){
+    html+='<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">UNITÉS ('+m.units.length+')</div>';
+    html+='<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    m.units.forEach(function(u){ var rs=unitRarityStyle(u.name); html+='<span style="background:'+rs.bg+';border:1px solid '+rs.border+';color:'+rs.color+';font-size:10px;padding:2px 8px;border-radius:3px">'+esc(u.name)+' '+'★'.repeat(u.mastery||1)+'</span>'; });
+    html+='</div></div>';
+  }
+  if(m.note) html+='<div style="background:var(--bg1);border-radius:3px;padding:10px;font-size:12px;color:var(--tx2);font-style:italic">'+esc(m.note)+'</div>';
+  var btns=[{lbl:'Fermer',cls:'bol',fn:CM}];
+  if(HR('officier')) btns.unshift({lbl:'✏️ Modifier',cls:'btn bg',fn:function(){CM();editMbr(id);}});
+  OM(esc(m.username),html,btns);
+}
+
 function openAddMbr(){
   OM('Ajouter un membre',
     '<div class="fr2"><div class="fg"><label class="fl">Pseudo</label><input class="fi" id="am-u"></div><div class="fg"><label class="fl">PIN</label><input class="fi" type="password" id="am-p"></div></div>'
