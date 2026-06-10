@@ -1,6 +1,9 @@
 [build]
-  publish = "foedus-sanguisV25"
+  publish = "foedus-sanguisV26"
   functions = "netlify/functions"
 
 [functions]
   node_bundler = "esbuild"
+
+[[plugins]]
+  package = "@netlify/plugin-functions-install-core"
