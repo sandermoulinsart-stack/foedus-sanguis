@@ -2905,7 +2905,7 @@ function renderVoteWar(w){
         return'<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">'
           +avaHTML(m,22)
           +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:11px;font-weight:700;color:var(--tx1)">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+'</div>'
+          +'<div style="font-size:11px;font-weight:700;color:var(--tx1)">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+'</div>'
           +(v&&v.note?'<div style="font-size:10px;color:var(--tx2);font-style:italic">'+esc(v.note)+'</div>':'')
           +'</div>'
           +'</div>';
