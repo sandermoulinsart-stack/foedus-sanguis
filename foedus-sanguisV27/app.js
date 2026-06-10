@@ -1917,9 +1917,14 @@ function pgHome(){
 
   // Bandeau d'urgence vote — pour les membres qui n'ont pas encore voté
   var urgentWarBanner = '';
-  var openWars = (DB.voteWars||[]).filter(function(w){ return w.status==='open'; });
-  var unvotedWars = openWars.filter(function(w){
-    return !(w.votes&&w.votes[CU.id]);
+  var openWars2 = (DB.voteWars||[]).filter(function(w){ return w.status==='open'; });
+  var unvotedWars = openWars2.filter(function(w){
+    if(w.votes&&w.votes[CU.id]) return false; // déjà voté
+    // Afficher uniquement si la guerre a lieu dans les 48h
+    if(!w.date) return false;
+    var warTime = new Date(w.date+(w.time?' '+w.time:'')).getTime();
+    var hoursUntil = (warTime - Date.now()) / (1000*60*60);
+    return hoursUntil >= 0 && hoursUntil <= 48;
   });
   if(unvotedWars.length){
     urgentWarBanner = '<div style="background:rgba(139,26,10,.25);border:2px solid var(--red2);'
