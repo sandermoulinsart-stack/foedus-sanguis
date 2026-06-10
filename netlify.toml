@@ -1,0 +1,6 @@
+[build]
+  publish = "foedus-sanguisV25"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
