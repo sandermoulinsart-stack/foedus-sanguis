@@ -1912,6 +1912,26 @@ function pgHome(){
       +'</div></div>';
   }).join('');
 
+  // Bandeau d'urgence vote — pour les membres qui n'ont pas encore voté
+  var urgentWarBanner = '';
+  var openWars = (DB.voteWars||[]).filter(function(w){ return w.status==='open'; });
+  var unvotedWars = openWars.filter(function(w){
+    return !(w.votes&&w.votes[CU.id]);
+  });
+  if(unvotedWars.length){
+    urgentWarBanner = '<div style="background:rgba(139,26,10,.25);border:2px solid var(--red2);'
+      +'border-radius:4px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+      +'<span style="font-size:22px">⚔️</span>'
+      +'<div style="flex:1;min-width:200px">'
+      +'<div style="font-family:Cinzel,serif;font-size:13px;font-weight:700;color:var(--red3);letter-spacing:1px">VOTE EN ATTENTE</div>'
+      +'<div style="font-size:12px;color:var(--tx2);margin-top:3px">'
+      + unvotedWars.map(function(w){ return esc(w.title)+' — '+esc(w.date||''); }).join(' &nbsp;·&nbsp; ')
+      +'</div>'
+      +'</div>'
+      +'<button class="btn bg bsm" onclick="go(\'vote\')" style="background:var(--red2);border-color:var(--red2);flex-shrink:0">Voter maintenant →</button>'
+      +'</div>';
+  }
+
   // "À la une" — contenus épinglés par les responsables
   var featuredHTML='';
   // Formations à la une
@@ -2014,7 +2034,7 @@ function pgHome(){
     featuredHTML+='</div>';
   }
 
-  return statsH+warHtml+myGroupHTML+banHtml+extraBanHtml+featuredHTML;
+  return urgentWarBanner+statsH+warHtml+myGroupHTML+banHtml+extraBanHtml+featuredHTML;
 }
 
 function openBannerMgr(){OM('Bannières',bannerMgrHTML(),[{lbl:'Fermer',cls:'bol',fn:CM}]);}
