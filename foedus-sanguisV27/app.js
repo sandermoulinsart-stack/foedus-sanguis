@@ -1331,6 +1331,7 @@ function pgHierarchy(){
         +(m&&m.sanguin?'<div style="font-size:10px;color:var(--tx3)">🩸 Garde Sanguin</div>':'')
         +(m&&m.chefGroupe?'<div style="font-size:10px;color:var(--tx2)">🗡️ Chef de Groupe</div>':'')
         +(m&&m.grandChampion?'<div style="font-size:10px;color:var(--gold)">🏆 Grand Champion</div>':'')
+        +(n.note?'<div style="font-size:10px;color:var(--tx3);margin-top:4px;font-style:italic">'+esc(n.note)+'</div>':'')
         +'</div>';
       if(canEdit){
         html += '<div style="margin-left:auto;display:flex;gap:4px">'
@@ -1364,14 +1365,15 @@ function openAddHierNode(){
     +HIER_TITRES.map(function(t){return'<option value="'+t+'">'+t+'</option>';}).join('')
     +'</select></div>'
     +'<div class="fg"><label class="fl">Membre</label>'+memberDropdown('')+'</div>'
-    +'<div class="fg"><label class="fl">Ordre d\'affichage</label><input class="fi" type="number" id="hier-ordre" value="0" style="max-width:80px"></div>',
+    +'<div class="fg"><label class="fl">Note (optionnel)</label><textarea class="ft" id="hier-note" placeholder="Détails sur le rôle..." style="min-height:60px"></textarea></div>'    +'<div class="fg"><label class="fl">Ordre d\'affichage</label><input class="fi" type="number" id="hier-ordre" value="0" style="max-width:80px"></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Ajouter',cls:'btn bg',fn:function(){
       var titre=document.getElementById('hier-titre').value;
       var mbId=document.getElementById('hier-mb').value;
       var ordre=parseInt(document.getElementById('hier-ordre').value)||0;
+      var note=document.getElementById('hier-note').value.trim();
       if(!mbId)return alert('Choisissez un membre.');
       var m=DB.members.find(function(x){return x.id===mbId;});
-      var node={id:'h'+Date.now(),titre:titre,membre_id:mbId,username:m?m.username:'',ordre:ordre,updated_at:new Date().toISOString()};
+      var node={id:'h'+Date.now(),titre:titre,membre_id:mbId,username:m?m.username:'',ordre:ordre,note:note,updated_at:new Date().toISOString()};
       DB.hierarchy.push(node);
       sbSaveHierarchyNode(node).then(function(){CM();go('hier');}).catch(function(e){console.warn('[hier]',e);});
     }}]);
@@ -1386,14 +1388,15 @@ function openEditHierNode(btn){
     +HIER_TITRES.map(function(t){return'<option value="'+t+'"'+(t===n.titre?' selected':'')+'>'+t+'</option>';}).join('')
     +'</select></div>'
     +'<div class="fg"><label class="fl">Membre</label>'+memberDropdown(n.membre_id)+'</div>'
-    +'<div class="fg"><label class="fl">Ordre d\'affichage</label><input class="fi" type="number" id="hier-ordre" value="'+(n.ordre||0)+'" style="max-width:80px"></div>',
+    +'<div class="fg"><label class="fl">Note (optionnel)</label><textarea class="ft" id="hier-note" placeholder="Détails sur le rôle..." style="min-height:60px">'+esc(n.note||'')+'</textarea></div>'    +'<div class="fg"><label class="fl">Ordre d\'affichage</label><input class="fi" type="number" id="hier-ordre" value="'+(n.ordre||0)+'" style="max-width:80px"></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
       var titre=document.getElementById('hier-titre').value;
       var mbId=document.getElementById('hier-mb').value;
       var ordre=parseInt(document.getElementById('hier-ordre').value)||0;
+      var note=document.getElementById('hier-note').value.trim();
       if(!mbId)return alert('Choisissez un membre.');
       var m=DB.members.find(function(x){return x.id===mbId;});
-      n.titre=titre;n.membre_id=mbId;n.username=m?m.username:'';n.ordre=ordre;
+      n.titre=titre;n.membre_id=mbId;n.username=m?m.username:'';n.ordre=ordre;n.note=note;
       n.updated_at=new Date().toISOString();
       sbSaveHierarchyNode(n).then(function(){CM();go('hier');}).catch(function(e){console.warn('[hier]',e);});
     }}]);
