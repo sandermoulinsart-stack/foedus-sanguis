@@ -51,7 +51,7 @@ var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 // ════════════════════════════════════════════════════════════
 var SB_URL = 'https://xwtwmteqbmvwqjyicgal.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3dHdtdGVxYm12d3FqeWljZ2FsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDM5MjksImV4cCI6MjA5NTYxOTkyOX0.wYU_YGFZIWXvEUwemRWycTK0vcrHRfSEpUzYL2ESE7E';
-var VAPID_PUBLIC_KEY = 'BEfTs7_w6Or66Ynayn_IEzHC3S-ajPIWKW8F8mA7oNV3eoE2J4zd-u5pYOiPQBg2EPxW-4GGAYArxatpsnuyG8g';
+var VAPID_PUBLIC_KEY = 'BGEp8aqs80DPEG5bU6ZicU7TA41lvc2-pXfw0z2-D-ytItFPU7LS1iSSzFffuq-KUJk2nibJBh9vjWd1gsp2eCo';
 var PUSH_FUNCTION_URL = '/.netlify/functions/send-push';
 var FOEDUS_PUSH_SECRET = 'fs_push_2026_secret';
 
