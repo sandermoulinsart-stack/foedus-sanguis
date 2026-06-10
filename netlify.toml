@@ -1,5 +1,5 @@
 [build]
-  publish = "foedus-sanguisV26"
+  publish = "foedus-sanguisV27"
   functions = "netlify/functions"
 
 [functions]
