@@ -1290,21 +1290,29 @@ function pgHierarchy(){
       +'<div class="pb td ta-c" style="padding:40px;color:var(--tx3)">Aucun poste défini.</div></div>';
   }
 
-  var byTitre={};
-  HIER_TITRES.forEach(function(t){ byTitre[t]=[]; });
-  nodes.forEach(function(n){ if(!byTitre[n.titre]) byTitre[n.titre]=[]; byTitre[n.titre].push(n); });
+  // Grouper par titre+ordre → membres du même titre et même ordre sont côte à côte
+  var groups=[];
+  nodes.forEach(function(n){
+    var last=groups[groups.length-1];
+    if(last&&last.titre===n.titre&&last.ordre===n.ordre){
+      last.items.push(n);
+    } else {
+      groups.push({titre:n.titre,ordre:n.ordre,items:[n]});
+    }
+  });
 
   var html='<div class="pan"><div class="ph"><span class="ptl">⚜️ Hiérarchie de la Maison</span></div><div class="pb">';
-  HIER_TITRES.forEach(function(titre){
-    var items=byTitre[titre]||[];
-    if(!items.length) return;
-    var col=HIER_COLORS[titre]||{border:'var(--b2)',bg:'var(--bg1)',color:'var(--tx2)'};
+  groups.forEach(function(grp){
+    var col=HIER_COLORS[grp.titre]||{border:'var(--b2)',bg:'var(--bg1)',color:'var(--tx2)'};
     html+='<div style="margin-bottom:20px">';
-    html+='<div style="font-family:Cinzel,serif;font-size:10px;font-weight:700;color:'+col.color+';letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;border-bottom:1px solid '+col.border+';padding-bottom:6px">'+titre+'</div>';
+    html+='<div style="font-family:Cinzel,serif;font-size:10px;font-weight:700;color:'+col.color
+      +';letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;border-bottom:1px solid '
+      +col.border+';padding-bottom:6px">'+grp.titre+'</div>';
     html+='<div style="display:flex;flex-wrap:wrap;gap:10px">';
-    items.forEach(function(n){
+    grp.items.forEach(function(n){
       var m=DB.members.find(function(x){return x.id===n.membre_id;});
-      html+='<div style="background:'+col.bg+';border:1px solid '+col.border+';border-radius:4px;padding:12px 16px;display:flex;align-items:center;gap:10px;min-width:160px">';
+      html+='<div style="background:'+col.bg+';border:1px solid '+col.border
+        +';border-radius:4px;padding:12px 16px;display:flex;align-items:center;gap:10px;min-width:160px">';
       if(m) html+=avaHTML(m,32);
       else html+='<div style="width:32px;height:32px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--tx3)">?</div>';
       html+='<div>';
@@ -1320,7 +1328,7 @@ function pgHierarchy(){
           +'<button class="btn bred bsm" style="font-size:10px" onclick="delHierNodeW(this)" data-id="'+n.id+'">✕</button>'
           +'</div>';
       }
-      html+='</div>';
+      html+='</div></div>';
     });
     html+='</div></div>';
   });
