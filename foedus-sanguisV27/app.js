@@ -51,6 +51,9 @@ var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 // ════════════════════════════════════════════════════════════
 var SB_URL = 'https://xwtwmteqbmvwqjyicgal.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3dHdtdGVxYm12d3FqeWljZ2FsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwNDM5MjksImV4cCI6MjA5NTYxOTkyOX0.wYU_YGFZIWXvEUwemRWycTK0vcrHRfSEpUzYL2ESE7E';
+var VAPID_PUBLIC_KEY = 'BGEp8aqs80DPEG5bU6ZicU7TA41lvc2-pXfw0z2-D-ytItFPU7LS1iSSzFffuq-KUJk2nibJBh9vjWd1gsp2eCo';
+var PUSH_FUNCTION_URL = '/.netlify/functions/send-push';
+var FOEDUS_PUSH_SECRET = 'fs_push_2026_secret';
 
 // Simple Supabase REST client (no SDK needed)
 var SB = {
@@ -284,6 +287,37 @@ function seedRemove(idx){
   showManualSeedingModal();
 }
 
+// Répare les votes orphelins : clés 'p...' dans vote_wars qui ne correspondent
+// plus à aucun membre actuel (suite à l'ancien bug d'approbation qui changeait l'ID)
+function repairOrphanVotes(){
+  var memberIds={};
+  DB.members.forEach(function(m){ memberIds[m.id]=true; });
+  var orphans={}; // orphanId -> {count, wars, votes}
+  (DB.voteWars||[]).forEach(function(w){
+    Object.keys(w.votes||{}).forEach(function(vid){
+      if(!memberIds[vid]){
+        if(!orphans[vid]) orphans[vid]={count:0,wars:[],sample:w.votes[vid]};
+        orphans[vid].count++;
+        orphans[vid].wars.push(w.title);
+      }
+    });
+  });
+  var keys=Object.keys(orphans);
+  if(!keys.length) return;
+  // Si un seul membre non-admin existe, c'est probablement lui
+  var nonAdminMembers=DB.members.filter(function(m){return m.role!=='admin'&&m.status!=='attente';});
+  keys.forEach(function(oid){
+    var info=orphans[oid];
+    console.warn('[Votes orphelins] ID: '+oid+' | '+info.count+' vote(s) | Guerres: '+info.wars.join(', '));
+    // Auto-fix si un seul membre non-admin et un seul orphelin
+    if(keys.length===1&&nonAdminMembers.length===1){
+      var target=nonAdminMembers[0];
+      console.warn('[Auto-fix] Tentative: '+oid+' -> '+target.id+' ('+target.username+')');
+      fixVoteKeys(oid, target.id);
+    }
+  });
+}
+
 function sbLoad(){
   sbStatus('⟳ Synchronisation...','var(--tx3)');
   return Promise.all([
@@ -324,6 +358,8 @@ function sbLoad(){
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
     console.log('[SB] Chargé: '+DB.members.length+' membres, '+(DB.pendingMembers||[]).length+' en attente');
+    // Réparer automatiquement les votes orphelins (clés p... sans membre correspondant)
+    repairOrphanVotes();
     if(CU)updSB();
   }).catch(function(e){
     SB_READY = false;
@@ -666,6 +702,9 @@ function doLogin(){
       if(CU&&CU.theme&&typeof applyTheme!=='undefined')applyTheme(CU.theme);
       addNavBadge('nav-for','badge-forum');addNavBadge('nav-form','badge-form');addNavBadge('nav-vote','badge-vote');addNavBadge('nav-grp','badge-grp');addNavBadge('nav-cal','badge-cal');addNavBadge('nav-home','badge-home');
       go('home');
+      startRealtime();
+      initServiceWorker();
+      setTimeout(subscribePush, 3000); // Demander après 3s pour ne pas être intrusif
     });
   }).catch(function(){
     showLoginError('Serveur inaccessible. Vérifiez votre connexion.');
@@ -690,7 +729,7 @@ function doRegister(){
   sha256(p).then(function(hash){
     var pending={
       id:'p'+Date.now(), username:u, pin:hash,
-      role:'recrue', status:'attente', sanguin:false,
+      role:'recrue', status:'attente', sanguin:false, grandChampion:false,
       joinDate:nowDate(), note:msg, units:[], avatar:''
     };
     sbSaveMember(pending).then(function(){
@@ -704,13 +743,280 @@ function doRegister(){
     });
   });
 }
+
+// ════════════════════════════════════════════════════════════════
+// PUSH NOTIFICATIONS
+// ════════════════════════════════════════════════════════════════
+
+// Enregistrer le service worker
+function initServiceWorker(){
+  if(!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('/sw.js').then(function(reg){
+    console.log('[SW] Enregistré:', reg.scope);
+  }).catch(function(e){ console.warn('[SW] Erreur:', e); });
+}
+
+// Convertir la clé VAPID base64 en Uint8Array
+function urlB64ToUint8Array(b64){
+  var pad = '='.repeat((4 - b64.length % 4) % 4);
+  var raw = atob((b64 + pad).replace(/-/g,'+').replace(/_/g,'/'));
+  var out = new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++) out[i]=raw.charCodeAt(i);
+  return out;
+}
+
+// Demander la permission et s'abonner
+function subscribePush(){
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)) return;
+  navigator.serviceWorker.ready.then(function(reg){
+    reg.pushManager.getSubscription().then(function(existing){
+      if(existing){
+        savePushSubscription(existing);
+        return;
+      }
+      reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY)
+      }).then(function(sub){
+        console.log('[Push] Abonné');
+        savePushSubscription(sub);
+      }).catch(function(e){ console.warn('[Push] Abonnement refusé:', e); });
+    });
+  });
+}
+
+// Sauvegarder la subscription dans Supabase
+function savePushSubscription(sub){
+  if(!CU) return;
+  var subJson = sub.toJSON();
+  SB.from('push_subscriptions').upsert({
+    membre_id: CU.id,
+    username:  CU.username,
+    endpoint:  subJson.endpoint,
+    p256dh:    subJson.keys.p256dh,
+    auth:      subJson.keys.auth,
+    updated_at: new Date().toISOString()
+  }).catch(function(e){ console.warn('[Push] Save sub err:', e); });
+}
+
+// Envoyer une notification push à tous les membres abonnés (admin seulement)
+function sendPushToAll(title, message, url){
+  if(!CU||CU.username.toLowerCase()!=='adminfs') return;
+  // Récupérer toutes les subscriptions depuis Supabase
+  fetch(SB_URL+'/rest/v1/push_subscriptions?select=endpoint,p256dh,auth', {
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+  }).then(function(r){return r.json();}).then(function(subs){
+    if(!subs||!subs.length) return;
+    var subscriptions = subs.map(function(s){
+      return {endpoint:s.endpoint, keys:{p256dh:s.p256dh, auth:s.auth}};
+    });
+    fetch(PUSH_FUNCTION_URL, {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-foedus-key': FOEDUS_PUSH_SECRET
+      },
+      body: JSON.stringify({subscriptions:subscriptions, title:title, message:message, url:url||'/'})
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(t){throw new Error('HTTP '+r.status+': '+t);});
+      return r.json();
+    }).then(function(res){
+      console.log('[Push] Envoyé:', res.sent, 'abonnés, échecs:', res.failed);
+      if(res.errors&&res.errors.length) console.warn('[Push] Erreurs:', res.errors);
+    }).catch(function(e){ console.warn('[Push] Envoi err:', e.message||e); });
+  });
+}
+
 function doLogout(){
   CU=null;
+  stopRealtime();
   try{sessionStorage.removeItem('fs_session');localStorage.removeItem('fs_session_backup');}catch(e){}
   document.getElementById('app').style.display='none';
   document.getElementById('ls').style.display='flex';
   document.getElementById('lu').value='';
   document.getElementById('lp').value='';
+}
+
+// ════════════════════════════════════════════════════════════════
+// TEMPS RÉEL — Supabase Realtime WebSocket + polling fallback
+// ════════════════════════════════════════════════════════════════
+var _pollTimer=null;
+var _pollHash='';
+var _realtimeWs=null;
+var _realtimeRef=0;
+var _realtimeHeartbeat=null;
+
+function _dataHash(){
+  try{
+    var wars=DB.voteWars||[];
+    var members=DB.members||[];
+    // Hash incluant le contenu des votes (pas juste le nombre)
+    return wars.length+'|'+members.length+'|'
+      +wars.map(function(w){
+        var voteStr=Object.keys(w.votes||{}).sort().map(function(k){
+          return k+'='+((w.votes[k]&&w.votes[k].vote)||'');
+        }).join(';');
+        return w.id+':'+(w.status||'')+':'+voteStr;
+      }).join(',')
+      +'|'+members.map(function(m){return m.id+':'+m.status;}).join(',');
+  }catch(e){return '';}
+}
+
+// Pages jamais re-rendues automatiquement (rédaction longue)
+var POLL_SKIP_PAGES=['for','form'];
+
+function _userIsTyping(){
+  var active=document.activeElement;
+  if(!active)return false;
+  var tag=active.tagName.toLowerCase();
+  return tag==='input'||tag==='textarea'||tag==='select'||active.contentEditable==='true';
+}
+
+function _rerender(){
+  // Badges nav — toujours safe
+  addNavBadge('nav-for','badge-forum');
+  addNavBadge('nav-form','badge-form');
+  addNavBadge('nav-vote','badge-vote');
+  addNavBadge('nav-grp','badge-grp');
+  addNavBadge('nav-cal','badge-cal');
+  addNavBadge('nav-home','badge-home');
+  // Ne jamais re-render si modal ouvert, saisie active, ou page de rédaction
+  var modal=document.getElementById('mo');
+  if(modal&&modal.style.display!=='none')return;
+  if(_userIsTyping())return;
+  if(POLL_SKIP_PAGES.indexOf(CP)>=0)return;
+  var fns={home:pgHome,mbr:pgMbr,unit:pgUnit,grp:pgGrp,vote:pgVote,
+           for:pgFor,form:pgForm,cal:pgCal,rec:pgRec,param:pgParam,
+           profil:pgProfil,stats:pgStats,rank:pgRank,planning:pgPlanning};
+  var fn=fns[CP];
+  if(fn){
+    var content=document.getElementById('content');
+    if(content){content.innerHTML=fn();postGo(CP);}
+  }
+}
+
+// ── Supabase Realtime WebSocket ───────────────────────────────
+var _realtimeDebounce=null;
+
+function _triggerReload(){
+  // Debounce 300ms : évite les reloads en rafale si plusieurs events arrivent ensemble
+  if(_realtimeDebounce) clearTimeout(_realtimeDebounce);
+  _realtimeDebounce=setTimeout(function(){
+    _realtimeDebounce=null;
+    if(!CU)return;
+    console.log('[Realtime] → reload+render');
+    sbLoad().then(function(){
+      _rerender(); // toujours re-render après un event Realtime
+    }).catch(function(e){ console.warn('[Realtime] reload err',e); });
+  },300);
+}
+
+function startRealtime(){
+  stopRealtime();
+  var wsUrl='wss://xwtwmteqbmvwqjyicgal.supabase.co/realtime/v1/websocket?apikey='+SB_KEY+'&vsn=1.0.0';
+  try{ _realtimeWs=new WebSocket(wsUrl); }
+  catch(e){
+    console.warn('[Realtime] WS non supporté, fallback polling');
+    startPolling(); return;
+  }
+
+  _realtimeWs.onopen=function(){
+    console.log('[Realtime] ✓ Connecté');
+    _realtimeRef++;
+    // Un seul canal "realtime:fs" avec 3 subscriptions postgres_changes
+    _realtimeWs.send(JSON.stringify({
+      topic:'realtime:fs',
+      event:'phx_join',
+      payload:{
+        config:{
+          broadcast:{self:false},
+          presence:{key:''},
+          postgres_changes:[
+            {event:'*',schema:'public',table:'vote_wars'},
+            {event:'*',schema:'public',table:'membres'},
+            {event:'*',schema:'public',table:'groupes'}
+          ]
+        }
+      },
+      ref:String(_realtimeRef)
+    }));
+    // Heartbeat toutes les 25s
+    _realtimeHeartbeat=setInterval(function(){
+      if(_realtimeWs&&_realtimeWs.readyState===1){
+        _realtimeRef++;
+        _realtimeWs.send(JSON.stringify({
+          topic:'phoenix',event:'heartbeat',payload:{},ref:String(_realtimeRef)
+        }));
+      }
+    },25000);
+  };
+
+  _realtimeWs.onmessage=function(e){
+    try{
+      var msg=JSON.parse(e.data);
+      var ev=msg.event;
+      var topic=msg.topic||'';
+      // Ignorer les messages système phoenix
+      if(topic==='phoenix') return;
+      // Ignorer présence
+      if(ev==='presence_state'||ev==='presence_diff'||ev==='phx_close') return;
+      // phx_reply = ack d'abonnement (pas de données) — ignorer sauf si payload contient des données
+      if(ev==='phx_reply'){
+        // Vérifier si c'est un ack d'abonnement réussi
+        var status=msg.payload&&msg.payload.status;
+        if(status==='ok') console.log('[Realtime] ✓ Abonné:',topic);
+        return;
+      }
+      // postgres_changes et INSERT/UPDATE/DELETE = changement de données
+      console.log('[Realtime] ← event:',ev,'topic:',topic);
+      _triggerReload();
+    }catch(ex){ console.warn('[Realtime] parse err',ex); }
+  };
+
+  _realtimeWs.onerror=function(){
+    console.warn('[Realtime] Erreur WS — fallback polling');
+    stopRealtime();
+    setTimeout(function(){ if(CU) startPolling(); },5000);
+  };
+
+  _realtimeWs.onclose=function(ev){
+    console.log('[Realtime] Déconnecté (code:'+ev.code+')');
+    clearInterval(_realtimeHeartbeat);
+    _realtimeHeartbeat=null;
+    // Reconnexion auto sauf déconnexion volontaire (code 1000)
+    if(CU&&ev.code!==1000){
+      setTimeout(function(){ if(CU) startRealtime(); },3000);
+    }
+  };
+}
+
+function stopRealtime(){
+  clearInterval(_realtimeHeartbeat);
+  _realtimeHeartbeat=null;
+  if(_realtimeWs){
+    _realtimeWs.onclose=null; // éviter la reconnexion auto
+    _realtimeWs.close();
+    _realtimeWs=null;
+  }
+}
+
+// Polling fallback (si Realtime WS indisponible)
+function startPolling(){
+  stopPolling();
+  _pollHash=_dataHash();
+  _pollTimer=setInterval(function(){
+    if(!CU||!SB_READY)return;
+    sbLoad().then(function(){
+      var newHash=_dataHash();
+      if(newHash===_pollHash)return;
+      _pollHash=newHash;
+      _rerender();
+    }).catch(function(){});
+  },20000);
+}
+
+function stopPolling(){
+  if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;}
 }
 
 
@@ -865,6 +1171,7 @@ function renderSearchResults(q){
 // STATISTIQUES
 // ════════════════════════════════════════
 function pgStats(){
+  if(!CU||CU.username.toLowerCase()!=='adminfs') return '<div class="td ta-c" style="padding:60px">⛔ Accès réservé.</div>';
   var wars=(DB.voteWars||[]).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
   if(!wars.length)return'<div class="td ta-c" style="padding:40px">Aucune guerre dans l\'historique.</div>';
   var members=DB.members.filter(function(m){return m.status!=='recrue';});
@@ -877,27 +1184,75 @@ function pgStats(){
     stats[m.id]={present,maybe,absent,novote,total,rate,reliability,m};
   });
   var sorted=Object.values(stats).sort(function(a,b){return b.rate-a.rate;});
-  return'<div class="pan" style="margin-bottom:16px"><div class="ph"><span class="ptl">📊 Statistiques de participation</span><span class="td tsm" style="margin-left:auto">'+wars.length+' guerre(s)</span></div><div style="overflow-x:auto"><table style="font-size:12px;width:100%"><thead><tr><th>Joueur</th><th>✅</th><th>🤔</th><th>❌</th><th>⏳</th><th>Présence</th><th>Fiabilité</th></tr></thead><tbody>'+sorted.map(function(s){var rc=s.rate>=70?'#66bb6a':s.rate>=40?'#f9a825':'var(--red3)';return'<tr><td>'+avaHTML(s.m,20)+' '+esc(s.m.username)+'</td><td style="text-align:center;color:#66bb6a">'+s.present+'</td><td style="text-align:center;color:#f9a825">'+s.maybe+'</td><td style="text-align:center;color:var(--red3)">'+s.absent+'</td><td style="text-align:center;color:var(--tx3)">'+s.novote+'</td><td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:6px;background:var(--bg1);border-radius:3px"><div style="height:100%;width:'+s.rate+'%;background:'+rc+';border-radius:3px"></div></div><span style="color:'+rc+';font-weight:700;min-width:32px">'+s.rate+'%</span></div></td><td style="text-align:center">'+s.reliability+'%</td></tr>';}).join('')+'</tbody></table></div></div>';
+  return'<div class="pan" style="margin-bottom:16px"><div class="ph"><span class="ptl">📊 Statistiques de participation</span><span class="td tsm" style="margin-left:auto">'+wars.length+' guerre(s)</span></div><div style="overflow-x:auto"><table style="font-size:12px;width:100%"><thead><tr><th>Joueur</th><th>✅</th><th>❌</th><th>⏳</th><th>Présence</th><th>Fiabilité</th></tr></thead><tbody>'+sorted.map(function(s){var rc=s.rate>=70?'#66bb6a':s.rate>=40?'#f9a825':'var(--red3)';return'<tr><td>'+avaHTML(s.m,20)+' '+esc(s.m.username)+'</td><td style="text-align:center;color:#66bb6a">'+s.present+'</td><td style="text-align:center;color:var(--red3)">'+s.absent+'</td><td style="text-align:center;color:var(--tx3)">'+s.novote+'</td><td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:6px;background:var(--bg1);border-radius:3px"><div style="height:100%;width:'+s.rate+'%;background:'+rc+';border-radius:3px"></div></div><span style="color:'+rc+';font-weight:700;min-width:32px">'+s.rate+'%</span></div></td><td style="text-align:center">'+s.reliability+'%</td></tr>';}).join('')+'</tbody></table></div></div>';
 }
 
 // ════════════════════════════════════════
 // CLASSEMENT
 // ════════════════════════════════════════
 function pgRank(){
+  if(!CU||CU.username.toLowerCase()!=='adminfs') return '<div class="td ta-c" style="padding:60px">⛔ Accès réservé.</div>';
   var wars=(DB.voteWars||[]);
   var members=DB.members.filter(function(m){return m.status!=='recrue';});
   var ranked=members.map(function(m){
-    var present=0,voted=0,total=wars.length;
-    wars.forEach(function(w){var v=(w.votes||{})[m.id];if(v)voted++;if(v&&v.vote==='present')present++;});
-    var presenceRate=total>0?Math.round(present/total*100):0;
-    var voteRate=total>0?Math.round(voted/total*100):0;
-    var classScore=(m.classes||[]).reduce(function(a,c){return a+(c.mastery||0);},0);
-    var days=m.joinDate?Math.floor((Date.now()-new Date(m.joinDate))/(1000*60*60*24)):0;
-    var score=(presenceRate*0.5)+(voteRate*0.3)+Math.min(classScore*2,10)+Math.min(days/36.5,10);
-    return{m,present,voted,total,presenceRate,voteRate,classScore,days,score:Math.round(score)};
-  }).sort(function(a,b){return b.score-a.score;});
+    var present=0,maybe=0,absent=0,novote=0,total=wars.length;
+    wars.forEach(function(w){
+      var v=(w.votes||{})[m.id];
+      if(!v) novote++;
+      else if(v.vote==='present') present++;
+      else if(v.vote==='maybe') maybe++;
+      else absent++;
+    });
+    // Score basé uniquement sur la participation aux guerres :
+    // +5 pts par présence confirmée ✅
+    // +3 pts par vote absent — voter absent compte quand même
+    // -1 pt par guerre sans vote ⏳
+    var score = (present * 5) + (absent * 3) + (novote * -1);
+    if(score < 0) score = 0;
+    return{m, present, maybe, absent, novote, total, score};
+  }).sort(function(a,b){
+    if(b.score !== a.score) return b.score - a.score;
+    // Départage : plus de présences
+    if(b.present !== a.present) return b.present - a.present;
+    // Puis moins de sans-vote
+    return a.novote - b.novote;
+  });
   var medals=['🥇','🥈','🥉'];
-  return'<div class="pan"><div class="ph"><span class="ptl">🏆 Classement</span></div><div>'+ranked.map(function(r,i){var rc=r.presenceRate>=70?'#66bb6a':r.presenceRate>=40?'#f9a825':'var(--red3)';return'<div style="padding:12px 16px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:12px"><div style="font-size:'+(i<3?'22px':'14px')+';min-width:36px;text-align:center;font-weight:700;color:var(--gold)">'+(medals[i]||(i+1))+'</div>'+avaHTML(r.m,36)+'<div style="flex:1;min-width:0"><div class="cin fw7" style="font-size:13px">'+esc(r.m.username)+(r.m.chefGroupe?' 🗡️':'')+(r.m.sanguin?' 🩸':'')+'</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px"><div style="background:var(--bg1);border-radius:2px;padding:4px 6px;text-align:center"><div style="font-size:14px;font-weight:700;color:'+rc+'">'+r.presenceRate+'%</div><div style="font-size:9px;color:var(--tx3)">Présence</div></div><div style="background:var(--bg1);border-radius:2px;padding:4px 6px;text-align:center"><div style="font-size:14px;font-weight:700;color:var(--gold)">'+r.voteRate+'%</div><div style="font-size:9px;color:var(--tx3)">Votes</div></div><div style="background:var(--bg1);border-radius:2px;padding:4px 6px;text-align:center"><div style="font-size:14px;font-weight:700;color:var(--teal2)">'+r.present+'/'+r.total+'</div><div style="font-size:9px;color:var(--tx3)">Guerres</div></div></div></div><div style="font-size:14px;font-weight:700;color:var(--gold);text-align:right;min-width:40px">'+r.score+'<div style="font-size:9px;color:var(--tx3)">pts</div></div></div>';}).join('')+'</div></div><div style="font-size:10px;color:var(--tx3);margin-top:8px;text-align:center;padding:8px">Score = présence (50%) + votes (30%) + maîtrise classes (10%) + ancienneté (10%)</div>';
+  if(!wars.length) return '<div class="td ta-c" style="padding:40px">Aucune guerre dans l\'historique.</div>';
+  return '<div class="pan"><div class="ph"><span class="ptl">🏆 Classement</span><span class="td tsm" style="margin-left:auto">'+wars.length+' guerre(s)</span></div><div>'
+    +ranked.map(function(r,i){
+      var voted=r.present+r.absent;
+      var voteRate=r.total>0?Math.round(voted/r.total*100):0;
+      var presenceRate=r.total>0?Math.round(r.present/r.total*100):0;
+      var rc=presenceRate>=70?'#66bb6a':presenceRate>=40?'#f9a825':'var(--red3)';
+      return '<div style="padding:12px 16px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:12px">'
+        +'<div style="font-size:'+(i<3?'22px':'14px')+';min-width:36px;text-align:center;font-weight:700;color:var(--gold)">'+(medals[i]||(i+1))+'</div>'
+        +avaHTML(r.m,36)
+        +'<div style="flex:1;min-width:0">'
+          +'<div class="cin fw7" style="font-size:13px">'+esc(r.m.username)+(r.m.chefGroupe?' 🗡️':'')+(r.m.sanguin?' 🩸':'')+(r.m.grandChampion?' 🏆':'')+'</div>'
+          +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:6px">'
+            +'<div style="background:var(--bg1);border-radius:2px;padding:4px 6px;text-align:center">'
+              +'<div style="font-size:14px;font-weight:700;color:#66bb6a">'+r.present+'</div>'
+              +'<div style="font-size:9px;color:var(--tx3)">✅ Présent</div>'
+            +'</div>'
+            +'<div style="background:var(--bg1);border-radius:2px;padding:4px 6px;text-align:center">'
+              +'<div style="font-size:14px;font-weight:700;color:var(--red3)">'+r.absent+'</div>'
+              +'<div style="font-size:9px;color:var(--tx3)">❌ Absent</div>'
+            +'</div>'
+            +'<div style="background:var(--bg1);border-radius:2px;padding:4px 6px;text-align:center">'
+              +'<div style="font-size:14px;font-weight:700;color:var(--tx3)">'+r.novote+'</div>'
+              +'<div style="font-size:9px;color:var(--tx3)">⏳ Sans vote</div>'
+            +'</div>'
+          +'</div>'
+        +'</div>'
+        +'<div style="font-size:14px;font-weight:700;color:var(--gold);text-align:right;min-width:40px">'+r.score+'<div style="font-size:9px;color:var(--tx3)">pts</div></div>'
+      +'</div>';
+    }).join('')
+  +'</div></div>'
+  +'<div style="font-size:10px;color:var(--tx3);margin-top:8px;padding:10px 14px;background:var(--bg2);border-radius:3px;line-height:1.8">'
+  +'Score basé uniquement sur la participation aux guerres territoriales<br>'
+  +'✅ Présent = +5 pts &nbsp;·&nbsp; ❌ Absent = +3 pts &nbsp;·&nbsp; ⏳ Sans vote = −1 pt'
+  +'</div>';
 }
 
 // ════════════════════════════════════════
@@ -929,7 +1284,7 @@ function pgPlanning(){
     h+='<div style="border-bottom:1px solid var(--b1);'+(isToday?'background:rgba(201,162,39,.05)':'')+'"><div style="display:flex;align-items:flex-start;padding:10px 16px;gap:12px"><div style="min-width:70px"><div style="font-size:10px;font-weight:700;color:'+(isToday?'var(--gold)':'var(--tx3)')+';letter-spacing:1px">'+dayShort[i]+'</div><div style="font-size:20px;font-weight:700;color:'+(isToday?'var(--gold)':'var(--tx1)')+'">'+d.getDate()+'</div>'+(isToday?'<div style="font-size:9px;color:var(--gold);font-weight:700">Auj.</div>':'')+'</div>';
     if(!dayEvents.length&&!dayWars.length){h+='<div style="color:var(--tx4);font-size:12px;font-style:italic;padding-top:6px">Aucun événement</div>';}
     else{h+='<div style="flex:1;display:flex;flex-direction:column;gap:6px">';
-      dayWars.forEach(function(w){var mv=(w.votes||{})[CU.id];var vc=mv?(mv.vote==='present'?'#66bb6a':mv.vote==='absent'?'var(--red3)':'#f9a825'):'var(--tx3)';var vl=mv?(mv.vote==='present'?'✅ Présent':mv.vote==='absent'?'❌ Absent':'🤔 Peut-être'):'⏳ Sans vote';h+='<div style="background:rgba(139,26,10,.15);border:1px solid var(--red2);border-radius:3px;padding:8px 12px;display:flex;align-items:center;gap:10px"><span style="font-size:16px">⚔️</span><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--tx1)">'+esc(w.title)+'</div>'+(w.time?'<div style="font-size:11px;color:var(--tx3)">'+esc(w.time)+'</div>':'')+'</div><span style="font-size:11px;font-weight:700;color:'+vc+'">'+vl+'</span></div>';});
+      dayWars.forEach(function(w){var mv=(w.votes||{})[CU.id];var vc=mv?(mv.vote==='present'?'#66bb6a':mv.vote==='absent'?'var(--red3)':'var(--tx3)'):'var(--tx3)';var vl=mv?(mv.vote==='present'?'✅ Présent':mv.vote==='absent'?'❌ Absent':''):'⏳ Sans vote';h+='<div style="background:rgba(139,26,10,.15);border:1px solid var(--red2);border-radius:3px;padding:8px 12px;display:flex;align-items:center;gap:10px"><span style="font-size:16px">⚔️</span><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--tx1)">'+esc(w.title)+'</div>'+(w.time?'<div style="font-size:11px;color:var(--tx3)">'+esc(w.time)+'</div>':'')+'</div><span style="font-size:11px;font-weight:700;color:'+vc+'">'+vl+'</span></div>';});
       dayEvents.forEach(function(e){h+='<div style="background:rgba(201,162,39,.1);border:1px solid var(--golddim);border-radius:3px;padding:8px 12px;display:flex;align-items:center;gap:10px"><span style="font-size:16px">📅</span><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--tx1)">'+esc(e.title)+'</div>'+(e.time?'<div style="font-size:11px;color:var(--tx3)">'+esc(e.time)+'</div>':'')+'</div></div>';});
       h+='</div>';}
     h+='</div></div>';
@@ -1041,10 +1396,11 @@ function requestBadgePermission(){}
 
 
 var RARITY_STYLE={
-  o:{border:"#c9a227",bg:"rgba(201,162,39,.12)",label:"Élite",color:"#c9a227"},
-  m:{border:"#9c27b0",bg:"rgba(156,39,176,.12)",label:"Rare",color:"#ce93d8"},
-  v:{border:"#388e3c",bg:"rgba(56,142,60,.12)",label:"Peu commune",color:"#81c784"},
-  g:{border:"#555",bg:"rgba(100,100,100,.1)",label:"Commune",color:"#aaa"}
+  o:{border:"#e0b830",bg:"rgba(224,184,48,.13)",label:"Tier 5 — Élite",color:"#e0b830"},        // Jaune/or
+  m:{border:"#ab47bc",bg:"rgba(171,71,188,.13)",label:"Tier 4 — Rare",color:"#ce93d8"},          // Mauve
+  v:{border:"#1976d2",bg:"rgba(25,118,210,.13)",label:"Tier 3 — Peu commune",color:"#64b5f6"},   // Bleu
+  g:{border:"#388e3c",bg:"rgba(56,142,60,.13)",label:"Tier 2 — Commune",color:"#81c784"},        // Vert
+  w:{border:"#555",bg:"rgba(100,100,100,.1)",label:"Tier 1 — Standard",color:"#aaa"}             // Gris
 };
 function unitRarityStyle(n){var r=UNIT_RARITY[n]||"g";return RARITY_STYLE[r]||RARITY_STYLE.g;}
 
@@ -1063,7 +1419,7 @@ function openImgFull(src){
 
 function updSB(){
   if(!CU)return;
-  document.getElementById('sun').textContent=CU.username+(CU.chefGroupe?' 🗡️':'')+(CU.sanguin?' 🩸':'');
+  document.getElementById('sun').textContent=CU.username+(CU.chefGroupe?' 🗡️':'')+(CU.sanguin?' 🩸':'')+(CU.grandChampion?' 🏆':'');
   document.getElementById('srl').textContent=(CU.sanguin?'🩸 ':'')+(RN[CU.role]||CU.role);
   var av=document.getElementById('sav');
   if(av){
@@ -1074,6 +1430,12 @@ function updSB(){
   var ia=HR('officier'),irec=HR('recrutement')||HR('officier');
   var iform=HR('formation');
   document.getElementById('adm-sec').style.display=''; // Toujours visible (rec visible à tous)
+  // Stats et classement : uniquement AdminFS
+  var isAdminFS=CU&&CU.username.toLowerCase()==='adminfs';
+  var navStats=document.querySelector('.ni[data-page="stats"]');
+  var navRank=document.querySelector('.ni[data-page="rank"]');
+  if(navStats) navStats.style.display=isAdminFS?'':'none';
+  if(navRank)  navRank.style.display=isAdminFS?'':'none';
   document.getElementById('nav-rec').style.display='';
   document.getElementById('nav-par').style.display=ia?'':'none';
   // Formation nav accessible aux resp. formation aussi
@@ -1179,8 +1541,6 @@ function approveRecW(el){approveRec(el.dataset.id);}
 function rejectRecW(el){rejectRec(el.dataset.id);}
 function rmGrpMbrW(el){rmGrpMbr(el.dataset.gid,el.dataset.mid);}
 function addGrpMbrW(el){addGrpMbr(el.dataset.gid,el.dataset.mid);}
-function togUnitW(el){togUnit(el.dataset.u);}
-
 
 function openEditThreadW(el){openEditThread(el.dataset.id);}
 function openEditFormationW(el){openEditFormation(el.dataset.id);}
@@ -1331,7 +1691,7 @@ function pgHome(){
           var units=(myGrp.unitAssignments&&myGrp.unitAssignments[mid])||[];
           return'<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg1);border:1px solid '+(isMe?'var(--golddim)':'var(--b1)')+';border-radius:3px">'
             +avaHTML(mb,24)
-            +'<div><div style="font-size:11px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(mb.username)+(isMe?' (moi)':'')+(mb.chefGroupe?' 🗡️':'')+(mb.sanguin?' 🩸':'')+'</div>'
+            +'<div><div style="font-size:11px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(mb.username)+(isMe?' (moi)':'')+(mb.chefGroupe?' 🗡️':'')+(mb.sanguin?' 🩸':'')+(mb.grandChampion?' 🏆':'')+'</div>'
             +(units.filter(Boolean).length?'<div style="font-size:9px;color:var(--tx3)">'+units.filter(Boolean).join(' · ')+'</div>':'')
             +'</div></div>';
         }).join('')
@@ -1386,20 +1746,19 @@ function pgHome(){
   // Guerres ouvertes — affichage auto jusqu'à clôture
   var openWars=(DB.voteWars||[]).filter(function(w){return w.status==='open'});
   var warHtml=openWars.map(function(w){
-    var stats={present:0,maybe:0,absent:0};
-    Object.values(w.votes||{}).forEach(function(v){if(stats[v.vote]!==undefined)stats[v.vote]++;});
+    var stats={present:0,absent:0};
+    Object.values(w.votes||{}).forEach(function(v){if(v.vote==='present')stats.present++;else if(v.vote==='absent')stats.absent++;});
     var myVote=(w.votes||{})[CU.id];
     return'<div class="pan" style="margin-bottom:14px;border-left:3px solid var(--gold)">'
       +'<div class="ph"><span style="font-size:16px;margin-right:8px">⚔️</span>'
       +'<span class="ptl">'+esc(w.title)+'</span>'
       +'<span class="badge bc" style="margin-left:8px;font-size:9px">Vote ouvert</span>'
-      +(myVote?'<span class="badge '+(myVote.vote==='present'?'bok':myVote.vote==='absent'?'bof':'bmb')+'" style="margin-left:8px;font-size:9px">'+(myVote.vote==='present'?'✅ Présent':myVote.vote==='absent'?'❌ Absent':'🤔 Peut-être')+'</span>':'')
+      +(myVote?'<span class="badge '+(myVote.vote==='present'?'bok':myVote.vote==='absent'?'bof':'bof')+'" style="margin-left:8px;font-size:9px">'+(myVote.vote==='present'?'✅ Présent':myVote.vote==='absent'?'❌ Absent':'')+'</span>':'')
       +'<div style="margin-left:auto"><button class="btn bg bsm" onclick="goVote()">Voter \u2192</button></div>'
       +'</div>'
       +'<div style="padding:10px 18px;display:flex;gap:16px;font-size:12px;flex-wrap:wrap">'
       +'<span>📅 '+esc(w.date)+' à '+esc(w.time)+'</span>'
       +'<span style="color:#66bb6a">✅ '+stats.present+' présent(s)</span>'
-      +'<span style="color:#f9a825">🤔 '+stats.maybe+' peut-être</span>'
       +'<span style="color:var(--red3)">❌ '+stats.absent+' absent(s)</span>'
       +'</div></div>';
   }).join('');
@@ -1528,7 +1887,6 @@ function dismissBanner(id){var b=(DB.banners||[]).find(function(x){return x.id==
 function toggleBannerW(el){toggleBanner(el.dataset.id);}
 function toggleBanner(id){
   var b=(DB.banners||[]).find(function(x){return x.id===id;});if(!b)return;
-  if(!b.active&&(DB.banners||[]).filter(function(x){return x.active;}).length>=2){alert('Maximum 2 bannières actives.');return;}
   b.active=!b.active;sbSaveBanner(b).then(function(){sbLoad().then(function(){go('home');OM('Gérer les bannières',bannerMgrHTML(),[{lbl:'Fermer',cls:'bol',fn:CM}]);});});;OM('Gérer les bannières',bannerMgrHTML(),[{lbl:'Fermer',cls:'bol',fn:CM}]);
 }
 function delBannerW(el){delBanner(el.dataset.id);}
@@ -1648,31 +2006,51 @@ function newBannerForm(){
 // CALCUL AUTOMATIQUE DES STATUTS
 // ════════════════════════════════════════════════════════════════
 function computeMemberStatus(m){
-  // Récupérer les 3 dernières guerres clôturées
+  // Récupérer les 3 dernières guerres clôturées, triées du plus récent au plus ancien
   var closedWars=(DB.voteWars||[])
     .filter(function(w){return w.status!=='open'})
     .sort(function(a,b){return b.date.localeCompare(a.date)})
     .slice(0,3);
-  if(!closedWars.length) return m.status; // Pas assez de données
+
+  // Pas assez d'historique (moins de 3 guerres clôturées) — ne rien changer
+  if(closedWars.length<3) return m.status;
 
   var votes=closedWars.map(function(w){
     var v=(w.votes||{})[m.id];
     return v?v.vote:null; // null = pas voté
   });
 
-  // Règle 1: 3 votes "absent" consécutifs \u2192 Déserteur
-  var allAbsent=votes.length>=3&&votes.every(function(v){return v==='absent'});
-  if(allAbsent) return 'deserteur';
+  // Règle 1 : 3 sans-vote de suite → Inactif
+  if(votes.every(function(v){return v===null;})) return 'inactif';
 
-  // Règle 2: Jamais voté sur 3 guerres \u2192 Inactif
-  var neverVoted=votes.length>=3&&votes.every(function(v){return v===null});
-  if(neverVoted) return 'inactif';
+  // Règle 2 : 3 absences de suite (vote 'absent') → Inactif
+  if(votes.every(function(v){return v==='absent';})) return 'inactif';
 
-  // Règle 3: A voté présent sur au moins 1/3 \u2192 Actif
-  var presentCount=votes.filter(function(v){return v==='present'}).length;
-  if(presentCount>=1) return 'actif';
+  // Règle 3 : Mix absent + sans-vote, aucun engagement → Inactif
+  // (ex: absent, null, absent ou null, absent, null)
+  var hasEngaged=votes.some(function(v){return v==='present';});
+  if(!hasEngaged){
+    var hasAbsent=votes.some(function(v){return v==='absent';});
+    var hasNoVote=votes.some(function(v){return v===null;});
+    if(hasAbsent&&hasNoVote) return 'inactif';
+  }
 
-  return m.status; // Garder le statut actuel
+  // Règle 4 : Au moins 1 présent parmi les 3 → Actif
+  if(hasEngaged) return 'actif';
+
+  return m.status; // Conserver le statut actuel dans les cas non couverts
+}
+
+// Mise à jour silencieuse des statuts — appelée automatiquement à la clôture d'une guerre
+function silentUpdateStatuses(){
+  DB.members.forEach(function(m){
+    if(m.role==='recrue') return;
+    var newStatus=computeMemberStatus(m);
+    if(newStatus!==m.status){
+      m.status=newStatus;
+      sbSaveMember(m).catch(function(e){console.warn('[silentStatus]',e);});
+    }
+  });
 }
 
 function autoUpdateStatuses(){
@@ -1695,156 +2073,72 @@ function autoUpdateStatuses(){
   }
 }
 
+// Répare les votes enregistrés sous un ancien ID 'p...' après approbation
+// À lancer une seule fois si des membres ont été approuvés avec l'ancien code
+function migrateVoteKeys(){
+  if(!HR('admin')) return;
+  // Construire un map username -> id actuel
+  var usernameToId={};
+  DB.members.forEach(function(m){ usernameToId[m.username.toLowerCase()]=m.id; });
+  var fixes=0;
+  (DB.voteWars||[]).forEach(function(w){
+    var votes=w.votes||{};
+    var newVotes={};
+    var changed=false;
+    Object.keys(votes).forEach(function(key){
+      // Si la clé commence par 'p' et qu'aucun membre actuel n'a cet ID
+      var member=DB.members.find(function(m){return m.id===key;});
+      if(!member){
+        // Tenter de trouver le membre par son vote (on ne peut pas deviner le username ici)
+        newVotes[key]=votes[key]; // conserver la clé orpheline
+      } else {
+        newVotes[key]=votes[key];
+      }
+    });
+    if(changed){ w.votes=newVotes; sbSaveWar(w); fixes++; }
+  });
+  alert('Migration terminée. '+fixes+' guerre(s) corrigée(s). Rechargement...');
+  sbLoad().then(function(){go('mbr');});
+}
+
 function pgMbr(){
   if(HR('officier'))document.getElementById('tact').innerHTML=
     '<button class="btn bg bsm" onclick="openAddMbr()">+ Ajouter</button>'
-    +'<button class="btn bol bsm" style="margin-left:6px" onclick="autoUpdateStatuses()">\u21ba Statuts auto</button>';
+    +'<button class="btn bol bsm" style="margin-left:6px" onclick="autoUpdateStatuses()">↺ Statuts auto</button>';
 
   var members=DB.members.slice().sort(function(a,b){return a.username.localeCompare(b.username);});
   if(!members.length) return'<div class="td ta-c" style="padding:40px">Aucun membre.</div>';
 
-  var activeFilter=window._mbrFilter||'tous';
-  var activeSearch=window._mbrSearch||'';
-
-  var filters=[
-    {k:'tous',label:'Tous ('+members.length+')'},
-    {k:'actif',label:'Actifs'},
-    {k:'inactif',label:'Inactifs'},
-    {k:'sanguin',label:'\ud83e\ude78 Gardes'},
-    {k:'champion',label:'\ud83c\udfc6 Champions'},
-    {k:'chef',label:'\ud83d\udde1\ufe0f Chefs'}
-  ];
-
-  var filterBar='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'
-    +filters.map(function(f){
-      var active=activeFilter===f.k;
-      return'<button onclick="setMbrFilter(this)" data-f="'+f.k+'" class="btn '+(active?'bg':'bol')+' bsm" style="font-size:10px">'+f.label+'</button>';
-    }).join('')+'</div>';
-
-  var searchBar='<div style="margin-bottom:12px">'
-    +'<input class="fi" id="mbr-search" placeholder="Rechercher un membre..." value="'+esc(activeSearch)+'"'
-    +' oninput="setMbrSearch(this.value)" style="font-size:13px"></div>';
-
-  var filtered=members.filter(function(m){
-    if(activeSearch&&m.username.toLowerCase().indexOf(activeSearch.toLowerCase())<0) return false;
-    if(activeFilter==='actif') return m.status==='actif';
-    if(activeFilter==='inactif') return m.status==='inactif';
-    if(activeFilter==='sanguin') return m.sanguin;
-    if(activeFilter==='champion') return m.grandChampion;
-    if(activeFilter==='chef') return m.chefGroupe;
-    return true;
-  });
-
-  var html='<div class="pan"><div class="ph"><span class="ptl">Combattants de la Maison</span>'
-    +'<span style="margin-left:auto;font-size:11px;color:var(--tx3)">'+filtered.length+'/'+members.length+' membre(s)</span></div>'
-    +'<div class="pb">'+filterBar+searchBar+'</div><div>';
-
-  if(!filtered.length){
-    html+='<div class="td ta-c" style="padding:24px;color:var(--tx3)">Aucun membre correspondant.</div>';
-  } else {
-    html+=filtered.map(function(m){
+  return'<div class="pan"><div class="ph"><span class="ptl">Combattants de la Maison</span>'
+    +'<span style="margin-left:auto;font-size:11px;color:var(--tx3)">'+members.length+' membre(s)</span></div>'
+    +'<div>'
+    +members.map(function(m){
       var isMe=m.id===CU.id;
-      var sanctions=(m.sanctions||[]).filter(function(s){return s.type&&s.type.indexOf('\u2705')<0;}).length;
-      return'<div style="padding:12px 16px;border-bottom:1px solid var(--b1);cursor:pointer;'+(isMe?'background:rgba(201,162,39,.05)':'')+'"'
-        +' onclick="openMbrProfileW(this)" data-id="'+m.id+'">'
-        +'<div style="display:flex;align-items:center;gap:10px">'
-        +avaHTML(m,38)
-        +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:14px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' \ud83d\udde1\ufe0f':'')+(m.sanguin?' \ud83e\ude78':'')+(m.grandChampion?' \ud83c\udfc6':'')+'</div>'
-        +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">'+rb(m)
-        +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'">'+esc(m.status)+'</span>'
-        +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">\u26a0\ufe0f '+sanctions+'</span>':'')
-        +'</div>'
-        +(m.classes&&m.classes.length?'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">'+memberClassBadges(m)+'</div>':'')
-        +'</div>'
-        +'<div style="display:flex;gap:6px;flex-shrink:0;align-items:center">'
-        +(HR('officier')?'<button class="btn bol bsm" onclick="editMbrW(this);event.stopPropagation()" data-id="'+m.id+'">\u270f\ufe0f</button>':'')
-        +(HR('officier')&&m.id!==CU.id?'<button class="btn bred bsm" onclick="delMbrW(this);event.stopPropagation()" data-id="'+m.id+'">\u2715</button>':'')
-        +'<span style="font-size:12px;color:var(--tx3)">\u203a</span>'
-        +'</div></div></div>';
-    }).join('');
-  }
-  html+='</div></div>';
-  return html;
+      var sanctions=(m.sanctions||[]).filter(function(s){return s.type&&s.type.indexOf('✅')<0;}).length;
+      var maxMastery=(m.units||[]).reduce(function(a,u){return Math.max(a,u.mastery||0);},0);
+      return'<div style="padding:14px 16px;border-bottom:1px solid var(--b1);'+(isMe?'background:rgba(201,162,39,.05)':'')+'">'        // Row 1: avatar + name + actions
+        +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'        +avaHTML(m,38)        +'<div style="flex:1;min-width:0">'        +'<div style="font-size:15px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+' </div>'        +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">'        +rb(m)        +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'">'+esc(m.status)+'</span>'        +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️ '+sanctions+'</span>':'')
+        +'</div></div>'        +(HR('officier')?'<div style="display:flex;gap:6px;flex-shrink:0">'          +'<button class="btn bol bsm" onclick="editMbrW(this)" data-id="'+m.id+'">✏️</button>'          +(m.id!==CU.id?'<button class="btn bred bsm" onclick="delMbrW(this)" data-id="'+m.id+'">✕</button>':'')
+          +'</div>':'')
+        +'</div>'        // Row 2: classes
+        +(m.classes&&m.classes.length?'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">'+memberClassBadges(m)+'</div>':'')        // Row 3: units summary + date
+        +'<div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--tx3)">'        +'<span>🛡️ '+(m.units&&m.units.length?m.units.length+' unité(s) · max '+maxMastery+'★':'Aucune unité')+'</span>'        +(m.joinDate?'<span>Depuis '+fmtDate(m.joinDate.slice(0,10))+'</span>':'')
+        +'</div>'        +'</div>';
+    }).join('')
+    +'</div></div>';
 }
-
-function setMbrFilter(btn){ window._mbrFilter=btn.dataset.f; var el=document.getElementById('content'); if(el){var s=el.scrollTop;el.innerHTML=pgMbr();el.scrollTop=s;} }
-function setMbrSearch(v){ window._mbrSearch=v; var el=document.getElementById('content'); if(el){var s=el.scrollTop;el.innerHTML=pgMbr();el.scrollTop=s;} }
-function openMbrProfileW(el){ openMbrProfile(el.dataset.id); }
-
-function openMbrProfile(el){
-  var id = el.dataset ? el.dataset.id : el;
-  var m = DB.members.find(function(x){ return x.id===id; });
-  if(!m) return;
-  var wars = DB.voteWars||[];
-  var present=0, absent=0, novote=0;
-  wars.forEach(function(w){
-    var v=(w.votes||{})[m.id];
-    if(!v) novote++;
-    else if(v.vote==='present') present++;
-    else absent++;
-  });
-  var total = wars.length;
-  var presRate = total ? Math.round(present/total*100) : 0;
-  var rc = presRate>=70 ? '#66bb6a' : presRate>=40 ? '#f9a825' : 'var(--red3)';
-  var hierNodes = (DB.hierarchy||[]).filter(function(n){ return n.membre_id===m.id; });
-  var html = '';
-  html += '<div style="text-align:center;padding:12px 0 18px">';
-  html += avaHTML(m, 64);
-  html += '<div style="font-family:Cinzel,serif;font-size:18px;font-weight:700;color:var(--tx1);margin-top:10px">'+esc(m.username)+'</div>';
-  html += '<div style="display:flex;justify-content:center;gap:6px;margin-top:6px;flex-wrap:wrap">';
-  html += rb(m);
-  html += '<span class="badge '+(m.status==='actif'?'bok':'bof')+'">'+esc(m.status)+'</span>';
-  if(m.chefGroupe)    html += '<span class="badge" style="background:rgba(112,144,168,.2);color:var(--teal2)">🗡️ Chef de Groupe</span>';
-  if(m.sanguin)       html += '<span class="badge" style="background:rgba(139,26,10,.2);color:var(--red3)">🩸 Garde Sanguin</span>';
-  if(m.grandChampion) html += '<span class="badge" style="background:rgba(201,162,39,.15);color:var(--gold)">🏆 Grand Champion</span>';
-  html += '</div>';
-  if(m.joinDate) html += '<div style="font-size:11px;color:var(--tx3);margin-top:6px">Membre depuis '+fmtDate(m.joinDate.slice(0,10))+'</div>';
-  html += '</div>';
-  if(hierNodes.length){
-    html += '<div style="margin-bottom:14px;text-align:center">';
-    hierNodes.forEach(function(n){
-      var col = (typeof HIER_COLORS!=='undefined' && HIER_COLORS[n.titre]) || {color:'var(--gold)',border:'var(--golddim)',bg:'rgba(201,162,39,.1)'};
-      html += '<span style="display:inline-block;background:'+col.bg+';border:1px solid '+col.border+';color:'+col.color+';font-family:Cinzel,serif;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;margin:2px">'+esc(n.titre)+'</span>';
-    });
-    html += '</div>';
-  }
-  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">';
-  html += '<div style="background:var(--bg1);border-radius:3px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:#66bb6a">'+present+'</div><div style="font-size:9px;color:var(--tx3)">✅ PRÉSENT</div></div>';
-  html += '<div style="background:var(--bg1);border-radius:3px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:var(--red3)">'+absent+'</div><div style="font-size:9px;color:var(--tx3)">❌ ABSENT</div></div>';
-  html += '<div style="background:var(--bg1);border-radius:3px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:700;color:'+rc+'">'+presRate+'%</div><div style="font-size:9px;color:var(--tx3)">PRÉSENCE</div></div>';
-  html += '</div>';
-  if(m.classes && m.classes.length){
-    html += '<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">CLASSES</div>';
-    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">'+memberClassBadges(m)+'</div></div>';
-  }
-  if(m.units && m.units.length){
-    html += '<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">UNITÉS ('+m.units.length+')</div>';
-    html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
-    m.units.forEach(function(u){
-      var rs = unitRarityStyle(u.name);
-      html += '<span style="background:'+rs.bg+';border:1px solid '+rs.border+';color:'+rs.color+';font-size:10px;padding:2px 8px;border-radius:3px">'+esc(u.name)+' '+'★'.repeat(u.mastery||1)+'</span>';
-    });
-    html += '</div></div>';
-  }
-  if(m.note) html += '<div style="background:var(--bg1);border-radius:3px;padding:10px;font-size:12px;color:var(--tx2);font-style:italic">'+esc(m.note)+'</div>';
-  var btns = [{lbl:'Fermer', cls:'bol', fn:CM}];
-  if(HR('officier')) btns.unshift({lbl:'✏️ Modifier', cls:'btn bg', fn:function(){ CM(); editMbr(id); }});
-  OM(esc(m.username), html, btns);
-}
-
 function openAddMbr(){
   OM('Ajouter un membre',
     '<div class="fr2"><div class="fg"><label class="fl">Pseudo</label><input class="fi" id="am-u"></div><div class="fg"><label class="fl">PIN</label><input class="fi" type="password" id="am-p"></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">Rôle</label><select class="fs" id="am-r">'+(HR('admin')?Object.entries(RN):Object.entries(RN).filter(function(e){return e[0]!=='admin';})).map(function(e){return'<option value="'+e[0]+'">'+e[1]+'</option>';}).join('')+'</select></div>'
     +'<div class="fg"><label class="fl">Statut</label><select class="fs" id="am-s"><option value="actif">Actif</option><option value="inactif">Inactif</option></select></div></div>'
-    +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="am-sg"> Garde Sanguin 🩸</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="am-cg"> Chef de Groupe 🗡️</label></div>'
+    +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="am-sg"> Garde Sanguin 🩸</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="am-cg"> Chef de Groupe 🗡️</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="am-gc"> Grand Champion 🏆</label></div>'
     +'<div class="fg"><label class="fl">Note</label><input class="fi" id="am-n"></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Ajouter',cls:'btn bg',fn:function(){
       var u=sanitize(gVal('am-u'),50),p=gVal('am-p');
       if(!u||!p)return alert('Pseudo et PIN requis');
       sha256(p).then(function(hash){
-        var m={id:'m'+Date.now(),username:u,pin:hash,role:gVal('am-r'),status:gVal('am-s'),sanguin:gChk('am-sg'),chefGroupe:gChk('am-cg'),joinDate:nowDate(),note:gVal('am-n'),units:[],avatar:''};
+        var m={id:'m'+Date.now(),username:u,pin:hash,role:gVal('am-r'),status:gVal('am-s'),sanguin:gChk('am-sg'),chefGroupe:gChk('am-cg'),grandChampion:false,joinDate:nowDate(),note:gVal('am-n'),units:[],avatar:''};
         DB.members.push(m);sbSaveMember(m);CM();go('mbr');
       });
     }}]);
@@ -1855,13 +2149,13 @@ function editMbr(id){
     '<div class="fg"><label class="fl">Pseudo</label><input class="fi" id="em-u" value="'+esc(m.username)+'"></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">Rôle</label><select class="fs" id="em-r">'+Object.entries(RN).map(function(e){return'<option value="'+e[0]+'"'+(m.role===e[0]?' selected':'')+'>'+e[1]+'</option>';}).join('')+'</select></div>'
     +'<div class="fg"><label class="fl">Statut</label><select class="fs" id="em-s"><option value="actif"'+(m.status==='actif'?' selected':'')+'>Actif</option><option value="inactif"'+(m.status==='inactif'?' selected':'')+'>Inactif</option></select></div></div>'
-    +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-sg"'+(m.sanguin?' checked':'')+'>Garde Sanguin 🩸</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-cg"'+(m.chefGroupe?' checked':'')+'>Chef de Groupe 🗡️</label></div>'
+    +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-sg"'+(m.sanguin?' checked':'')+'>Garde Sanguin 🩸</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-cg"'+(m.chefGroupe?' checked':'')+'>Chef de Groupe 🗡️</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-gc"'+(m.grandChampion?' checked':'')+'>Grand Champion 🏆</label></div>'
     +'<div class="fg"><label class="fl">Note</label><input class="fi" id="em-n" value="'+esc(m.note||'')+'"></div>'
     +'<div class="fg"><label class="fl">Nouveau PIN (vide = inchangé)</label><input class="fi" type="password" id="em-p"></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
       m.username=sanitize(gVal('em-u'),50)||m.username;
       m.role=gVal('em-r');m.status=gVal('em-s');
-      m.sanguin=gChk('em-sg');m.chefGroupe=gChk('em-cg');m.note=gVal('em-n');
+      m.sanguin=gChk('em-sg');m.chefGroupe=gChk('em-cg');m.grandChampion=gChk('em-gc');m.note=gVal('em-n');
       var np=gVal('em-p');
       function save(){
   if(m.id===CU.id)CU=m;
@@ -1901,6 +2195,16 @@ function pgUnit(){
 
   // Tact buttons
   document.getElementById('tact').innerHTML='';
+
+  // Bloc d'information
+  var infoH='<div style="background:rgba(201,162,39,.07);border:1px solid var(--golddim);border-radius:4px;padding:14px 18px;margin-bottom:20px;line-height:1.8">'
+    +'<div style="font-family:\'Cinzel\',serif;font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">⚔️ COMMENT CHOISIR TES UNITÉS</div>'
+    +'<div style="font-size:12px;color:var(--tx2);display:flex;flex-direction:column;gap:5px">'
+    +'<div>📋 Sélectionne jusqu\'à <strong style="color:var(--tx1)">10 unités</strong> qui correspondent à tes préférences et aux exigences de la <strong style="color:var(--tx1)">méta actuelle</strong>.</div>'
+    +'<div>⭐ Les étoiles représentent ta <strong style="color:var(--tx1)">maîtrise</strong> de l\'unité ainsi que ta <strong style="color:var(--tx1)">préférence</strong> pour la jouer.</div>'
+    +'<div>⚠️ Tu ne peux pas avoir <strong style="color:var(--red3)">5 étoiles partout</strong> — réserve les hautes maîtrises à tes vraies unités de prédilection.</div>'
+    +'</div>'
+    +'</div>';
 
   // My units list
   var listH=myU.length===0?'<div class="td tsm">Aucune unité sélectionnée.</div>'
@@ -1950,13 +2254,17 @@ function pgUnit(){
 
   if(!catH) catH='<div class="td tsm" style="padding:20px">Aucune unité trouvée.</div>';
 
-  return'<div class="g2">'
-    +'<div><div class="pan"><div class="ph"><span class="ptl">Mes Unités ('+myU.length+')</span></div><div class="pb">'+listH+'</div></div></div>'
-    +'<div><div class="pan"><div class="ph"><span class="ptl">Catalogue</span></div><div class="pb">'+filterH+catH+'</div></div></div>'
+  return infoH
+    +'<div class="g2">'
+    +'<div><div class="pan"><div class="ph"><span class="ptl">Mes Unités ('+myU.length+'/10)</span></div><div class="pb">'+listH+'</div></div></div>'
+    +'<div><div class="pan"><div class="ph"><span class="ptl">Catalogue</span>'+(myU.length>=10?'<span style="font-size:11px;color:var(--red3);margin-left:auto">⚠️ Maximum atteint</span>':'')+'</div><div class="pb">'+filterH+catH+'</div></div></div>'
     +'</div>';
 }
 
-function setUnitFilter(f){window._unitFilter=f||'';go('unit');}
+function setUnitFilter(f){
+  window._unitFilter=f||'';
+  _rerenderUnit();
+}
 function setUnitSearch(v){window._unitSearch=v;
   // Re-render catalogue only without full page reload
   var content=document.getElementById('content');
@@ -1966,13 +2274,77 @@ function setUnitSearch(v){window._unitSearch=v;
   if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}
 }
 function togUnit(name){
-  var units=CU.units||[];var idx=units.findIndex(function(u){return u.name===name;});
-  if(idx>=0){if(!confirm('Retirer "'+name+'" ?'))return;CU.units.splice(idx,1);}
-  else{CU.units=units;CU.units.push({name:name,mastery:1});}
-  sbSaveMember(CU);go('unit');
+  var units=CU.units||[];
+  var idx=units.findIndex(function(u){return u.name===name;});
+  if(idx>=0){
+    // Déjà sélectionnée → demander confirmation de retrait
+    if(!confirm('Retirer "'+name+'" de tes unités ?'))return;
+    CU.units.splice(idx,1);
+    sbSaveMember(CU);
+    _rerenderUnit();
+  } else {
+    // Nouvelle unité → popup inline pour choisir la maîtrise
+    openMasteryPicker(name);
+  }
 }
-function setM(idx,val){if(CU.units[idx])CU.units[idx].mastery=val;sbSaveMember(CU);go('unit');}
-function remU(idx){CU.units.splice(idx,1);sbSaveMember(CU);go('unit');}
+
+function openMasteryPicker(name){
+  var rs=unitRarityStyle(name);
+  var btns='';
+  for(var n=1;n<=5;n++){
+    var stars='';for(var s=0;s<n;s++)stars+='★';
+    btns+='<button onclick="confirmAddUnit(this)" data-name="'+esc(name)+'" data-mas="'+n+'" style="'
+      +'width:52px;height:52px;background:var(--bg1);border:2px solid var(--b2);border-radius:4px;'
+      +'color:var(--tx3);cursor:pointer;font-size:10px;font-family:Cinzel,serif;font-weight:700;'
+      +'transition:all .15s;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;margin:0 4px">'
+      +'<span style="font-size:15px">'+stars+'</span>'
+      +'<span>'+n+'★</span>'
+      +'</button>';
+  }
+  var html='<div style="text-align:center;padding:8px 0">'
+    +'<div style="font-family:Cinzel,serif;font-size:14px;font-weight:700;color:'+rs.color+';margin-bottom:16px">'+esc(name)+'</div>'
+    +'<div style="font-size:12px;color:var(--tx3);margin-bottom:12px;font-family:Cinzel,serif;letter-spacing:1px">NIVEAU DE MAîTRISE</div>'
+    +'<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:4px;margin-bottom:20px">'+btns+'</div>'
+    +'<div style="font-size:11px;color:var(--tx3)">Tu pourras modifier ce niveau à tout moment</div>'
+    +'</div>';
+  OM('Ajouter une unité', html, [{lbl:'Annuler',cls:'bol',fn:CM}]);
+}
+
+
+function confirmAddUnit(btn){
+  var name=btn.dataset.name;
+  var mastery=parseInt(btn.dataset.mas)||1;
+  CU.units = CU.units||[];
+  if(CU.units.length>=10){
+    alert('Maximum 10 unités. Retire une unité avant d\'en ajouter une nouvelle.');
+    CM();return;
+  }
+  CU.units.push({name:name, mastery:mastery});
+  sbSaveMember(CU);
+  CM();
+  _rerenderUnit();
+}
+
+function _rerenderUnit(){
+  // Re-render sans scroller en haut — sauvegarde et restaure la position de scroll
+  var content=document.getElementById('content');
+  var scrollTop=content?content.scrollTop:0;
+  if(content){content.innerHTML=pgUnit();}
+  if(content) content.scrollTop=scrollTop;
+}
+
+function togUnitW(el){togUnit(el.dataset.u);}
+
+function setM(idx,val){
+  if(CU.units[idx]) CU.units[idx].mastery=val;
+  sbSaveMember(CU);
+  _rerenderUnit();
+}
+function remU(idx){
+  CU.units.splice(idx,1);
+  sbSaveMember(CU);
+  _rerenderUnit();
+}
 
 // ════════════════════════════════════════
 // PAGE: GROUPES
@@ -2010,7 +2382,7 @@ function getWarPresents(war){
   if(!war)return[];
   var votes=war.votes||{};
   return DB.members.filter(function(m){
-    return m.status==='actif'&&votes[m.id]&&votes[m.id].vote==='present';
+    return m.status!=='attente'&&votes[m.id]&&votes[m.id].vote==='present';
   });
 }
 
@@ -2107,16 +2479,18 @@ function pgGrp(){
 function warSummaryHTML(){
   var war=getSelectedWar();if(!war)return'';
   var votes=war.votes||{};
-  var presents=Object.values(votes).filter(function(v){return v.vote==='present'}).length;
-  var maybe=Object.values(votes).filter(function(v){return v.vote==='maybe'}).length;
-  var absent=Object.values(votes).filter(function(v){return v.vote==='absent'}).length;
-  var total=DB.members.filter(function(m){return m.status==='actif'}).length;
+  // Compter uniquement les votes des membres connus (exclut les IDs orphelins p...)
+  var knownIds=DB.members.filter(function(m){return m.status!=='attente';}).map(function(m){return m.id;});
+  var presents=knownIds.filter(function(id){return votes[id]&&votes[id].vote==='present';}).length;
+  var maybe=knownIds.filter(function(id){return votes[id]&&votes[id].vote==='maybe';}).length;
+  var absent=knownIds.filter(function(id){return votes[id]&&votes[id].vote==='absent';}).length;
+  var total=knownIds.length;
   var pct=total?Math.round(presents/total*100):0;
   return'<div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">'
     +'<span style="font-size:12px">✅ <strong style="color:#66bb6a">'+presents+'</strong> présent(s)</span>'
     +'<span style="font-size:12px">🤔 <strong style="color:#f9a825">'+maybe+'</strong> peut-être</span>'
     +'<span style="font-size:12px">❌ <strong style="color:var(--red3)">'+absent+'</strong> absent(s)</span>'
-    +'<span style="font-size:12px;color:var(--tx3)">⏳ '+(total-presents-maybe-absent)+' sans vote</span>'
+    +'<span style="font-size:12px;color:var(--tx3)">⏳ '+(total-presents-absent)+' sans vote</span>'
     +'<div style="flex:1;min-width:120px;height:6px;background:var(--bg1);border-radius:3px;overflow:hidden">'
     +'<div style="height:100%;width:'+pct+'%;background:#388e3c;transition:width .3s"></div></div>'
     +'<span class="badge '+(war.status==='open'?'bok':'bof')+'">'+(war.status==='open'?'Vote ouvert':'Clôturé')+'</span>'
@@ -2195,7 +2569,7 @@ function renderGroupCard(g, war){
       +'<div style="font-size:8px;font-weight:700;color:var(--tx4);align-self:flex-start">'+(i===0&&isElite?'👑 ':''+(i+1))+'</div>'
       +(mb
         ? avaHTML(mb,28)
-          +'<div style="font-size:9px;font-weight:700;color:var(--tx1);word-break:break-word;line-height:1.2">'+esc(mb.username)+(mb.chefGroupe?' 🗡️':'')+(mb.sanguin?' 🩸':'')+'</div>'+mbClassSlotHTML(mb, g.id, mid, canEditSlots)
+          +'<div style="font-size:9px;font-weight:700;color:var(--tx1);word-break:break-word;line-height:1.2">'+esc(mb.username)+(mb.chefGroupe?' 🗡️':'')+(mb.sanguin?' 🩸':'')+(mb.grandChampion?' 🏆':'')+'</div>'+mbClassSlotHTML(mb, g.id, mid, canEditSlots)
           +[0,1,2].map(function(ui){
             var u=units[ui]||'';
             if(canEditSlots){
@@ -2235,7 +2609,7 @@ function renderGroupCard(g, war){
           var eu=uBM(m.id,g.minMastery);
           var maxM=eu.reduce(function(a,u){return Math.max(a,u.mastery)},0);
           return'<button class="btn bol bsm '+(eu.length?'bteal':'')+'" onclick="addGrpMbrEl(this)" data-gid="'+g.id+'" data-mid="'+m.id+'" style="display:flex;align-items:center;gap:5px">'
-            +avaHTML(m,16)+' '+esc(m.username)+(m.chefGroupe?'<span title="Chef de groupe" style="font-size:10px;margin-left:2px">🗡️</span>':'')
+            +avaHTML(m,16)+' '+esc(m.username)+(m.chefGroupe?'<span title="Chef de groupe" style="font-size:10px;margin-left:2px">🗡️</span>':'')+(m.grandChampion?'<span title="Grand Champion" style="font-size:10px;margin-left:2px">🏆</span>':'')
             +(maxM?'<span style="color:var(--gold);font-size:10px">'+maxM+'★</span>':'<span style="color:var(--red3);font-size:10px">⚠️</span>')
             +'</button>';
         }).join('')
@@ -2427,7 +2801,7 @@ function toggleArchive(headerEl){
 function voteStats(w){
   var votes=w.votes||{};
   // Only count votes from current active members
-  var activeIds=DB.members.filter(function(m){return m.status==='actif';}).map(function(m){return m.id;});
+  var activeIds=DB.members.filter(function(m){return m.status!=='attente';}).map(function(m){return m.id;});
   var present=0,absent=0,maybe=0,voted=0;
   activeIds.forEach(function(id){
     var v=votes[id];
@@ -2435,7 +2809,6 @@ function voteStats(w){
     voted++;
     if(v.vote==='present') present++;
     else if(v.vote==='absent') absent++;
-    else if(v.vote==='maybe') maybe++;
   });
   var total=activeIds.length;
   return{present:present,absent:absent,maybe:maybe,total:total,voted:voted,noVote:total-voted};
@@ -2449,7 +2822,6 @@ function renderVoteWar(w){
   var linkedGrp=w.linkedGroupId?gG(w.linkedGroupId):null;
   var pPct=stats.total?Math.round(stats.present/stats.total*100):0;
   var aPct=stats.total?Math.round(stats.absent/stats.total*100):0;
-  var mPct=stats.total?Math.round(stats.maybe/stats.total*100):0;
   var nPct=stats.total?Math.round(stats.noVote/stats.total*100):0;
 
   var html='<div class="pan" style="margin-bottom:20px;border-top:2px solid '+(isOpen?'var(--gold)':'var(--b2)') +'">';
@@ -2479,8 +2851,7 @@ function renderVoteWar(w){
     +'<div style="font-size:9px;font-weight:700;color:var(--tx3);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px">MON VOTE</div>'
     +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
     +[{v:'present',icon:'✅',label:'Présent',color:'#2e7d32',bg:'rgba(46,125,50,.15)',border:'#388e3c'},
-      {v:'maybe',icon:'🤔',label:'Peut-être',color:'#f9a825',bg:'rgba(249,168,37,.12)',border:'#f9a825'},
-      {v:'absent',icon:'❌',label:'Absent',color:'var(--red3)',bg:'rgba(139,26,10,.15)',border:'var(--red2)'}
+            {v:'absent',icon:'❌',label:'Absent',color:'var(--red3)',bg:'rgba(139,26,10,.15)',border:'var(--red2)'}
     ].map(function(c){
       var isSelected=myVote&&myVote.vote===c.v;
       return'<div onclick="'+(isOpen?'castVoteW(this)':'void 0')+'" data-wid="'+w.id+'" data-vote="'+c.v+'"'
@@ -2502,19 +2873,17 @@ function renderVoteWar(w){
     +'<div style="font-size:9px;font-weight:700;color:var(--tx3);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px">PARTICIPATION — '+stats.voted+'/'+stats.total+' ont voté</div>'
     +'<div style="height:16px;border-radius:8px;overflow:hidden;display:flex;margin-bottom:10px;background:var(--bg1)">'
     +(pPct?'<div style="width:'+pPct+'%;background:#388e3c;transition:width .4s"></div>':'')
-    +(mPct?'<div style="width:'+mPct+'%;background:#f9a825;transition:width .4s"></div>':'')
     +(aPct?'<div style="width:'+aPct+'%;background:var(--red2);transition:width .4s"></div>':'')
     +(nPct?'<div style="width:'+nPct+'%;background:var(--b1);transition:width .4s"></div>':'')
     +'</div>'
     +'<div style="display:flex;gap:14px;flex-wrap:wrap">'
     +'<span style="font-size:11px;color:#66bb6a">✅ Présent: <strong>'+stats.present+'</strong></span>'
-    +'<span style="font-size:11px;color:#f9a825">🤔 Peut-être: <strong>'+stats.maybe+'</strong></span>'
-    +'<span style="font-size:11px;color:var(--red3)">❌ Absent: <strong>'+stats.absent+'</strong></span>'
+        +'<span style="font-size:11px;color:var(--red3)">❌ Absent: <strong>'+stats.absent+'</strong></span>'
     +'<span style="font-size:11px;color:var(--tx3)">⏳ Pas voté: <strong>'+stats.noVote+'</strong></span>'
     +'</div></div>';
 
   // Voter lists
-  var activeMembers=DB.members.filter(function(m){return m.status==='actif'});
+  var activeMembers=DB.members.filter(function(m){return m.status!=='attente';});
   var byVote={present:[],maybe:[],absent:[],novote:[]};
   activeMembers.forEach(function(m){
     var v=(w.votes||{})[m.id];
@@ -2524,7 +2893,6 @@ function renderVoteWar(w){
   });
   html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
   [{key:'present',label:'Présents',icon:'✅',color:'#388e3c',bg:'rgba(46,125,50,.08)',border:'rgba(56,142,60,.3)'},
-   {key:'maybe',label:'Peut-être',icon:'🤔',color:'#f9a825',bg:'rgba(249,168,37,.06)',border:'rgba(249,168,37,.3)'},
    {key:'absent',label:'Absents',icon:'❌',color:'var(--red2)',bg:'rgba(139,26,10,.06)',border:'rgba(139,26,10,.3)'},
    {key:'novote',label:'Pas encore voté',icon:'⏳',color:'var(--tx3)',bg:'var(--bg1)',border:'var(--b1)'}
   ].forEach(function(grp){
@@ -2537,10 +2905,9 @@ function renderVoteWar(w){
         return'<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">'
           +avaHTML(m,22)
           +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:11px;font-weight:700;color:var(--tx1)">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+'</div>'
+          +'<div style="font-size:11px;font-weight:700;color:var(--tx1)">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+'</div>'
           +(v&&v.note?'<div style="font-size:10px;color:var(--tx2);font-style:italic">'+esc(v.note)+'</div>':'')
           +'</div>'
-          +(m.sanguin?'<span style="font-size:9px">🩸</span>':'')
           +'</div>';
       }).join('')
       +'</div>';
@@ -2563,10 +2930,9 @@ function renderVoteWarArchive(w){
     +'</div></div>'
     +'<div style="display:flex;gap:10px;font-size:11px">'
     +'<span style="color:#66bb6a">✅ '+stats.present+'</span>'
-    +'<span style="color:#f9a825">🤔 '+stats.maybe+'</span>'
-    +'<span style="color:var(--red3)">❌ '+stats.absent+'</span>'
+        +'<span style="color:var(--red3)">❌ '+stats.absent+'</span>'
     +'</div>'
-    +(myVote?'<span class="badge '+(myVote.vote==='present'?'bok':'bof')+'" style="font-size:8px">'+(myVote.vote==='present'?'Présent':myVote.vote==='absent'?'Absent':'Peut-être')+'</span>':'')
+    +(myVote?'<span class="badge '+(myVote.vote==='present'?'bok':'bof')+'" style="font-size:8px">'+(myVote.vote==='present'?'Présent':myVote.vote==='absent'?'Absent':'')+'</span>':'')
     +(HR('officier')?'<button class="btn bol bsm" style="font-size:9px" onclick="toggleVoteWarW(this)" data-id="'+w.id+'">Rouvrir</button>':'')
     +(HR('officier')?'<button class="btn bred bsm" style="font-size:9px" onclick="delVoteWarW(this)" data-id="'+w.id+'">✕</button>':'')
     +'</div>';
@@ -2584,7 +2950,11 @@ function castVote(warId,voteVal){
   if(!w.votes)w.votes={};
   var note=(w.votes[CU.id]&&w.votes[CU.id].note)||'';
   w.votes[CU.id]={vote:voteVal,note:note,updatedAt:nowDate()};
-  sbSaveWar(w);go('vote');
+  sbSaveWar(w).then(function(){
+    // Recalculer le statut du votant — permet de repasser Actif si présent
+    silentUpdateStatuses();
+  }).catch(function(e){console.warn('[castVote]',e);});
+  go('vote');
 }
 
 function saveVoteNote(warId){
@@ -2594,7 +2964,7 @@ function saveVoteNote(warId){
   var noteEl=document.getElementById('vote-note-'+warId);
   if(!noteEl)return;
   var note=noteEl.value.trim();
-  if(!w.votes[CU.id])w.votes[CU.id]={vote:'maybe',note:note,updatedAt:nowDate()};
+  if(!w.votes[CU.id])w.votes[CU.id]={vote:'absent',note:note,updatedAt:nowDate()};
   else w.votes[CU.id].note=note;
   sbSaveWar(w);
   noteEl.style.borderColor='var(--gold)';
@@ -2606,8 +2976,10 @@ function toggleVoteWar(id){
   if(!w)return;
   var wasOpen=w.status==='open';
   w.status=wasOpen?'closed':'open';
-  go('vote');
-  sbSaveWar(w).catch(function(e){console.warn('[toggleWar]',e);});
+  sbSaveWar(w).then(function(){
+    // Mettre à jour les statuts automatiquement à chaque clôture
+    if(wasOpen) silentUpdateStatuses();
+  }).catch(function(e){console.warn('[toggleWar]',e);});
   // When closing a war, offer to archive linked groups
   if(wasOpen&&w.linkedGroupId){
     var warGroups=DB.groups.filter(function(g){return(DB.voteWars||[]).some(function(x){return x.id===w.id&&x.linkedGroupId===g.id})});
@@ -2651,11 +3023,74 @@ function openNewVoteWar(){
       var t=gVal('nvw-t').trim();if(!t)return alert('Titre requis');
       if(!DB.voteWars)DB.voteWars=[];
       var w={id:'vw'+Date.now(),title:t,date:gVal('nvw-d'),time:gVal('nvw-h'),description:gVal('nvw-dc'),status:'open',votes:{},createdBy:CU.username,createdAt:nowDate()};
-      DB.voteWars.push(w);sbSaveWar(w);CM();go('vote');
+      DB.voteWars.push(w);
+  sbSaveWar(w).then(function(){
+    // Notifier tous les membres
+    sendPushToAll(
+      '⚔️ Vote de guerre ouvert !',
+      w.title + ' — ' + (w.date||'') + (w.time?' à '+w.time:'') + '. Indiquez votre présence !',
+      '/'
+    );
+  });
+  CM();go('vote');
     }}]);
 }
 
 
+
+
+// ════════════════════════════════════════════════════════════════
+// RÉACTIONS FORUM
+// ════════════════════════════════════════════════════════════════
+var REACTIONS = ['👍','⚔️','🩸','🔥','😂'];
+
+function reactionsHTML(reactions, threadId, replyIdx){
+  reactions = reactions || {};
+  var target = replyIdx===undefined ? 'p' : 'r'+replyIdx;
+  var html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">';
+  REACTIONS.forEach(function(emoji){
+    var users = reactions[emoji] || [];
+    var hasReacted = users.indexOf(CU.username) >= 0;
+    var bg = hasReacted ? 'rgba(201,162,39,.2)' : 'var(--bg1)';
+    var bc = hasReacted ? 'var(--gold)' : 'var(--b2)';
+    var col = hasReacted ? 'var(--gold)' : 'var(--tx2)';
+    var cnt = users.length ? '<span style="font-size:11px;font-weight:700">'+users.length+'</span>' : '';
+    html += '<button onclick="toggleReaction(this)" data-tid="'+esc(threadId)+'" data-tgt="'+esc(target)+'" data-emoji="'+esc(emoji)+'" style="background:'+bg+';border:1px solid '+bc+';border-radius:20px;padding:3px 10px;cursor:pointer;font-size:13px;color:'+col+';transition:all .15s;display:flex;align-items:center;gap:4px">'+emoji+cnt+'</button>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function toggleReaction(btn){
+  var threadId=btn.dataset.tid, target=btn.dataset.tgt, emoji=btn.dataset.emoji;
+  var t = (DB.forumThreads||[]).find(function(x){return x.id===threadId;});
+  if(!t) return;
+  // Initialiser reactions sur le bon objet
+  if(target === 'p'){
+    t.reactions = t.reactions || {};
+    t.reactions[emoji] = t.reactions[emoji] || [];
+    var idx = t.reactions[emoji].indexOf(CU.username);
+    if(idx >= 0) t.reactions[emoji].splice(idx,1);
+    else t.reactions[emoji].push(CU.username);
+  } else {
+    var ri = parseInt(target.replace('r',''));
+    if(!t.replies || !t.replies[ri]) return;
+    t.replies[ri].reactions = t.replies[ri].reactions || {};
+    t.replies[ri].reactions[emoji] = t.replies[ri].reactions[emoji] || [];
+    var idx2 = t.replies[ri].reactions[emoji].indexOf(CU.username);
+    if(idx2 >= 0) t.replies[ri].reactions[emoji].splice(idx2,1);
+    else t.replies[ri].reactions[emoji].push(CU.username);
+  }
+  // Sauvegarder et re-render sans perdre la position
+  sbSaveThread(t).catch(function(e){console.warn('[Reaction]',e);});
+  // Re-render juste le thread actif
+  var content = document.getElementById('content');
+  if(content && FV==='thread' && CT && CT.id===threadId){
+    var scrollTop = content.scrollTop;
+    content.innerHTML = renderThread(t);
+    content.scrollTop = scrollTop;
+  }
+}
 
 function pgFor(){
   document.getElementById('tact').innerHTML='<button class="btn bg bsm" onclick="openNewThread()">+ Nouveau sujet</button>';
@@ -2704,12 +3139,16 @@ function renderThread(t){
     +'<div class="pan"><div class="ph"><span class="ttag t-'+(t.tag||'general')+'">'+(TAG_LBL[t.tag]||t.tag)+'</span><span class="ptl" style="margin-left:8px;font-size:15px">'+esc(t.title)+'</span></div>'
     +(t.image?'<div style="width:100%;height:220px;border-radius:3px;margin-bottom:12px;overflow:hidden;cursor:zoom-in" onclick="showImg(this)" data-img="'+esc(t.image)+'"><img src="'+esc(t.image)+'" style="width:100%;height:100%;object-fit:cover;object-position:center top"></div>':'')
     +'<div class="pb"><div class="fbc g12 td tsm mb12"><span class="cin fw7">'+esc(t.author)+'</span><span>'+esc(t.date)+'</span></div>'
-    +'<div style="font-size:14px;line-height:1.9;white-space:pre-line">'+esc(t.content)+'</div></div></div>'
+    +'<div style="font-size:14px;line-height:1.9;white-space:pre-line">'+esc(t.content)+'</div>'
+    +reactionsHTML(t.reactions, t.id)
+    +'</div></div>'
     +(t.replies||[]).map(function(r){
       return'<div class="card" style="margin-bottom:10px">'
         +'<div class="fbt mb12"><span class="cin fw7" style="font-size:12px">'+esc(r.author)+'</span><span class="td txs">'+esc(r.date)+'</span></div>'
         +(r.image?'<div style="max-width:280px;height:160px;border-radius:3px;overflow:hidden;cursor:zoom-in;margin-bottom:8px" data-img="'+esc(r.image)+'" onclick="showImg(this)"><img src="'+esc(r.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')
-        +'<div style="font-size:13.5px;line-height:1.7;clear:both">'+esc(r.content)+'</div></div>';
+        +'<div style="font-size:13.5px;line-height:1.7;clear:both">'+esc(r.content)+'</div>'
+        +reactionsHTML(r.reactions, t.id, (t.replies||[]).indexOf(r))
+        +'</div>';
     }).join('')
     +'<div class="pan"><div class="ph"><span class="ptl">Répondre</span></div><div class="pb">'
     +'<div class="fg"><textarea class="ft" id="rep-txt" placeholder="Votre réponse..."></textarea></div>'
@@ -3556,10 +3995,38 @@ function pgRec(){
 }
 function approveRec(id){
   var p=(DB.pendingMembers||[]).find(function(m){return m.id===id;});if(!p)return;
-  var m={id:'m'+Date.now(),username:p.username,pin:p.pin,role:'membre',status:'actif',sanguin:false,joinDate:nowDate(),note:'',units:[],avatar:''};
-  Promise.all([sbSaveMember(m), sbDeleteMember(id)]).then(function(){
+  // Conserver l'ID du candidat pour garder ses éventuels votes déjà enregistrés
+  var m={
+    id:p.id, username:p.username, pin:p.pin,
+    role:'membre', status:'actif', sanguin:false, grandChampion:false,
+    joinDate:nowDate(), note:p.note||'',
+    units:p.units||[], avatar:p.avatar||'',
+    classe:p.classe||'', classes:p.classes||[]
+  };
+  // Mettre à jour le statut en base (upsert sur le même ID = simple mise à jour)
+  sbSaveMember(m).then(function(){
     sbLoad().then(function(){go('rec');});
   }).catch(function(e){console.warn('[approveRec]',e);alert('Erreur serveur.');});
+}
+
+// Corrige les votes d'un membre dont l'ancien ID 'p...' a été remplacé par 'm...'
+// À appeler manuellement par un admin si des votes sont perdus suite à une ancienne approbation
+function fixVoteKeys(oldId, newId){
+  if(!HR('admin')) return;
+  var wars=DB.voteWars||[];
+  var count=0;
+  wars.forEach(function(w){
+    if(w.votes&&w.votes[oldId]!==undefined){
+      w.votes[newId]=w.votes[oldId];
+      delete w.votes[oldId];
+      sbSaveWar(w);
+      count++;
+    }
+  });
+  sbLoad().then(function(){
+    alert(count+' guerre(s) corrigée(s) : votes déplacés de '+oldId+' vers '+newId);
+    go('mbr');
+  });
 }
 function rejectRec(id){
   DB.pendingMembers=(DB.pendingMembers||[]).filter(function(m){return m.id!==id;});
@@ -3570,11 +4037,57 @@ function rejectRec(id){
 // PAGE: PARAMÈTRES
 // ════════════════════════════════════════
 function pgParam(){
-  return'<div class="pan"><div class="ph"><span class="ptl">⚙️ Configuration</span></div><div class="pb">'
+  var diagBlock='';
+  if(HR('admin')){
+    var memberIds={};
+    DB.members.forEach(function(m){ memberIds[m.id]=true; });
+    var orphans={};
+    (DB.voteWars||[]).forEach(function(w){
+      Object.keys(w.votes||{}).forEach(function(vid){
+        if(!memberIds[vid]) orphans[vid]=(orphans[vid]||0)+1;
+      });
+    });
+    var orphanKeys=Object.keys(orphans);
+    if(orphanKeys.length){
+      // Afficher les IDs des membres pour référence
+      var membersList='<div style="margin-bottom:12px;padding:8px;background:var(--bg1);border-radius:3px">'
+        +'<div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:6px">IDs MEMBRES ACTUELS</div>'
+        +DB.members.filter(function(m){return m.status!=='attente';}).map(function(m){
+          return '<div style="font-size:10px;display:flex;gap:8px;margin-bottom:3px">'
+            +'<code style="color:var(--gold);min-width:180px">'+esc(m.id)+'</code>'
+            +'<span style="color:var(--tx2)">'+esc(m.username)+'</span>'
+            +'<span style="color:var(--tx3)">('+esc(m.status)+')</span>'
+            +'</div>';
+        }).join('')
+        +'</div>';
+      diagBlock='<div class="pan" style="border-left:3px solid var(--red3)"><div class="ph"><span class="ptl" style="color:var(--red3)">⚠️ Votes orphelins</span></div><div class="pb">'
+        +membersList
+        +'<p class="td tsm" style="margin-bottom:12px">Ces IDs sont dans les votes mais sans membre correspondant. Entrez l\'ID actuel du membre pour réparer :</p>'
+        +orphanKeys.map(function(oid){
+          return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+            +'<code style="font-size:11px;background:var(--bg1);padding:4px 8px;border-radius:3px;flex-shrink:0">'+esc(oid)+'</code>'
+            +'<span style="color:var(--tx3);font-size:11px">('+orphans[oid]+' vote(s))</span>'
+            +'<input class="fi" id="fix-'+esc(oid)+'" placeholder="ID actuel du membre" style="font-size:11px;flex:1">'
+            +'<button class="btn bred bsm" onclick="applyFixVoteKey(\''+esc(oid)+'\')">Réparer</button>'
+            +'</div>';
+        }).join('')
+        +'</div></div>';
+    } else {
+      diagBlock='<div class="pan" style="border-left:3px solid #66bb6a"><div class="ph"><span class="ptl" style="color:#66bb6a">✅ Aucun vote orphelin</span></div></div>';
+    }
+  }
+  return diagBlock
+    +'<div class="pan"><div class="ph"><span class="ptl">⚙️ Configuration</span></div><div class="pb">'
     +'<div class="fg"><label class="fl">Nom de la Maison</label><input class="fi" id="p-name" value="'+esc(DB.houseName)+'" style="max-width:300px"></div>'
     +'<div class="fg"><label class="fl">Maîtrise minimum par défaut</label><select class="fs" id="p-mas" style="max-width:200px">'+[1,2,3,4,5].map(function(n){return'<option value="'+n+'"'+(n===DB.minMastery?' selected':'')+'>'+n+'★</option>';}).join('')+'</select></div>'
     +'<button class="btn bg" onclick="saveParams()">Sauvegarder</button></div></div>'
     +'<div class="pan"><div class="ph"><span class="ptl">🚪 Session</span></div><div class="pb"><p class="td tsm" style="margin-bottom:16px">Connecté: <strong>'+esc(CU.username)+'</strong></p><button class="btn bol" onclick="doLogout()">Se déconnecter</button></div></div>';
+}
+
+function applyFixVoteKey(oldId){
+  var inp=document.getElementById('fix-'+oldId);
+  if(!inp||!inp.value.trim()){alert('Entre l\'ID actuel du membre.');return;}
+  fixVoteKeys(oldId,inp.value.trim());
 }
 function saveParams(){
   DB.houseName=sanitize(gVal('p-name'),100)||DB.houseName;
@@ -3727,7 +4240,11 @@ document.addEventListener('click', function(e){
           var m=DB.members.find(function(m){
             return m.username.toLowerCase()===_sess.username.toLowerCase()&&(m.pin===hash||m.pin===_sess.pin);
           });
-          if(m){
+          // Vérifier que le membre n'est pas en attente d'approbation
+          var isPending=(DB.pendingMembers||[]).find(function(p){
+            return p.username.toLowerCase()===_sess.username.toLowerCase();
+          });
+          if(m&&!isPending&&m.status!=='attente'){
             CU=m;
             document.getElementById('ls').style.display='none';
             document.getElementById('app').style.display='flex';
@@ -3735,8 +4252,11 @@ document.addEventListener('click', function(e){
             updSB();
             if(CU&&CU.theme&&typeof applyTheme!=='undefined')applyTheme(CU.theme);
             go(CP||'home'); // CP already restored from sessionStorage
+            startRealtime();
           } else {
-            try{sessionStorage.removeItem('fs_session');}catch(e){}
+            // Nettoyer la session invalide ou en attente
+            try{sessionStorage.removeItem('fs_session');localStorage.removeItem('fs_session_backup');}catch(e){}
+            if(isPending) showLoginError('Candidature en attente d\'approbation.');
           }
         });
       }
@@ -3745,10 +4265,9 @@ document.addEventListener('click', function(e){
       if(_retries<3){_retries++;setTimeout(_initLoad,3000+(2000*_retries));}
       else{
         // If we have a session, show the app anyway with cached data
-        if(_sess&&DB.members.length){
-          var m=DB.members.find(function(m){return m.username.toLowerCase()===_sess.username.toLowerCase();});
-          if(m){CU=m;document.getElementById('ls').style.display='none';document.getElementById('app').style.display='flex';updSB();go(CP||'home');return;}
-        }
+        // En cas d'échec réseau, NE PAS restaurer la session depuis le cache
+        // — trop risqué si le membre a été supprimé entre temps
+        try{sessionStorage.removeItem('fs_session');localStorage.removeItem('fs_session_backup');}catch(e){}
         sbStatus('⚠ Connexion impossible','var(--red3)');
       }
     });
@@ -3837,7 +4356,7 @@ function sbMemberToLocal(r){
   return {
     id:r.id, username:r.username, pin:r.pin||'',
     role:r.role||'recrue', status:r.status||'actif',
-    sanguin:r.sanguin||false, chefGroupe:r.chef_groupe||false,
+    sanguin:r.sanguin||false, chefGroupe:r.chef_groupe||false, grandChampion:r.grand_champion||false,
     joinDate:r.joined_at||'', note:r.note||'', units:r.units||[], avatar:r.avatar||'',
     classe:r.classe||'', classes:r.classes||[]
   };
@@ -3846,7 +4365,7 @@ function localMemberToSb(m){
   return {
     id:m.id, username:m.username, pin:m.pin||'',
     role:m.role||'recrue', status:m.status||'actif',
-    sanguin:m.sanguin||false, chef_groupe:m.chefGroupe||false,
+    sanguin:m.sanguin||false, chef_groupe:m.chefGroupe||false, grand_champion:m.grandChampion||false,
     joined_at:m.joinDate||m.date||'',
     note:m.note||m.message||'', units:m.units||[], avatar:m.avatar||'',
     classe:m.classe||'', classes:m.classes||[]
