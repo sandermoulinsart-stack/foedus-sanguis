@@ -129,10 +129,10 @@ function localFormationToSb(f){
     image:f.image||'',content:f.content||'',created_by:f.createdBy||CU.username||'',featured:f.featured||false};
 }
 function sbEventToLocal(r){
-  return {id:r.id,title:r.title,date:r.date||'',time:r.time||'',description:r.description||'',image:r.image||'',featured:r.featured||false};
+  return {id:r.id,title:r.title,date:r.date||'',time:r.time||'',description:r.description||'',image:r.image||'',featured:r.featured||false,votes:r.votes||{},voteOpen:r.vote_open||false};
 }
 function localEventToSb(e){
-  return {id:e.id,title:e.title,date:e.date||'',time:e.time||'',description:e.description||'',image:e.image||'',featured:e.featured||false};
+  return {id:e.id,title:e.title,date:e.date||'',time:e.time||'',description:e.description||'',image:e.image||'',featured:e.featured||false,votes:e.votes||{},vote_open:e.voteOpen||false};
 }
 function sbSaveThread(t){ return SB.from('forum_threads').upsert(localThreadToSb(t)); }
 function sbDeleteThread(id){ return SB.from('forum_threads').delete('id',id); }
@@ -3812,6 +3812,32 @@ function pgCal(){
 
 function setCalTab(t){window._calTab=t;try{sessionStorage.setItem('calTab',t);}catch(e){}window._calDetail=null;go('cal');}
 
+// ── Votes participation événements ───────────────────────────
+function castEventVote(btn){
+  var id=btn.dataset.id, vote=btn.dataset.v;
+  var e=(DB.events||[]).find(function(x){return x.id===id;});
+  if(!e||!e.voteOpen) return;
+  e.votes=e.votes||{};
+  e.votes[CU.id]=vote;
+  sbSaveEvent(e).then(function(){
+    window._calDetail={type:'event',data:e};
+    go('cal');
+  }).catch(function(err){console.warn('[eventVote]',err);});
+}
+
+function toggleEventVoteW(btn){ toggleEventVote(btn.dataset.id); }
+function toggleEventVote(id){
+  if(!HR('evenement')&&!HR('officier')) return;
+  var e=(DB.events||[]).find(function(x){return x.id===id;});
+  if(!e) return;
+  e.voteOpen=!e.voteOpen;
+  sbSaveEvent(e).then(function(){
+    window._calDetail={type:'event',data:e};
+    go('cal');
+  }).catch(function(err){console.warn('[toggleEventVote]',err);});
+}
+
+
 function openCalDetail(el){
   var id=el.dataset.id, type=el.dataset.type;
   if(type==='event'){
@@ -3828,14 +3854,57 @@ function renderCalDetail(detail){
   if(detail.type==='event'){
     var e=detail.data;
     var canManage=HR('evenement')||HR('officier');
+    var myVote=(e.votes||{})[CU.id];
+    var votes=e.votes||{};
+    var knownIds=DB.members.filter(function(m){return m.status!=='attente';}).map(function(m){return m.id;});
+    var presents=knownIds.filter(function(id){return votes[id]&&votes[id]==='present';});
+    var absents=knownIds.filter(function(id){return votes[id]&&votes[id]==='absent';});
+
+    var voteSection='';
+    if(e.voteOpen){
+      voteSection='<div style="margin-bottom:16px">'
+        +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">MON VOTE</div>'
+        +'<div style="display:flex;gap:10px;margin-bottom:12px">'
+        +'<button onclick="castEventVote(this)" data-id="'+e.id+'" data-v="present" class="btn '+(myVote==='present'?'bg':'bol')+'" style="flex:1;'+(myVote==='present'?'border-color:#66bb6a;background:rgba(56,142,60,.15)':'')+'">✅ Présent</button>'
+        +'<button onclick="castEventVote(this)" data-id="'+e.id+'" data-v="absent" class="btn '+(myVote==='absent'?'bred':'bol')+'" style="flex:1;'+(myVote==='absent'?'':'')+'">❌ Absent</button>'
+        +'</div>'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+        +'<div style="background:rgba(46,125,50,.08);border:1px solid rgba(56,142,60,.3);border-radius:3px;padding:10px">'
+        +'<div style="font-size:10px;font-weight:700;color:#66bb6a;margin-bottom:6px">✅ PRÉSENTS ('+presents.length+')</div>'
+        +(presents.length===0?'<div style="font-size:11px;color:var(--tx3)">—</div>':'')
+        +presents.map(function(id){var m=DB.members.find(function(x){return x.id===id;});return m?'<div style="font-size:11px;color:var(--tx1);margin-bottom:3px">'+avaHTML(m,18)+' '+esc(m.username)+'</div>':'';}).join('')
+        +'</div>'
+        +'<div style="background:rgba(139,26,10,.06);border:1px solid rgba(139,26,10,.3);border-radius:3px;padding:10px">'
+        +'<div style="font-size:10px;font-weight:700;color:var(--red3);margin-bottom:6px">❌ ABSENTS ('+absents.length+')</div>'
+        +(absents.length===0?'<div style="font-size:11px;color:var(--tx3)">—</div>':'')
+        +absents.map(function(id){var m=DB.members.find(function(x){return x.id===id;});return m?'<div style="font-size:11px;color:var(--tx1);margin-bottom:3px">'+avaHTML(m,18)+' '+esc(m.username)+'</div>':'';}).join('')
+        +'</div>'
+        +'</div>'
+        +'</div>';
+    } else if(Object.keys(votes).length){
+      // Vote clôturé — affichage lecture seule
+      voteSection='<div style="margin-bottom:16px;background:var(--bg1);border-radius:3px;padding:12px">'
+        +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">PARTICIPATION (vote clôturé)</div>'
+        +'<div style="display:flex;gap:16px;font-size:12px">'
+        +'<span style="color:#66bb6a">✅ '+presents.length+' présent(s)</span>'
+        +'<span style="color:var(--red3)">❌ '+absents.length+' absent(s)</span>'
+        +'</div>'
+        +'</div>';
+    }
+
     return backBtn
       +'<div class="pan"><div class="ph"><span class="ptl" style="font-size:16px">'+esc(e.title)+'</span>'
-      +(canManage?'<button class="btn bol bsm" style="margin-left:auto" onclick="editEventW(this)" data-id="'+e.id+'">✏️ Éditer</button>':'')
+      +'<div style="display:flex;gap:6px;margin-left:auto">'
+      +(e.voteOpen?'<span style="font-size:10px;font-weight:700;color:#66bb6a;border:1px solid #388e3c;padding:2px 8px;border-radius:3px">VOTE OUVERT</span>':'')
+      +(canManage?'<button class="btn bol bsm" onclick="toggleEventVoteW(this)" data-id="'+e.id+'">'+(e.voteOpen?'🔒 Clôturer vote':'📋 Ouvrir vote')+'</button>':'')
+      +(canManage?'<button class="btn bol bsm" onclick="editEventW(this)" data-id="'+e.id+'">✏️</button>':'')
+      +'</div>'
       +'</div>'
       +(e.image?'<div style="width:100%;height:220px;overflow:hidden;border-radius:3px;margin-bottom:12px"><img src="'+esc(e.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')
       +'<div class="pb"><div style="display:flex;gap:16px;font-size:12px;color:var(--tx3);margin-bottom:12px">'
       +'<span>📅 '+esc(e.date)+'</span><span>🕐 '+esc(e.time)+'</span></div>'
-      +(e.description?'<div style="font-size:14px;line-height:1.8;white-space:pre-line">'+esc(e.description)+'</div>':'')
+      +(e.description?'<div style="font-size:14px;line-height:1.8;white-space:pre-line;margin-bottom:12px">'+esc(e.description)+'</div>':'')
+      +voteSection
       +'</div></div>';
   } else {
     return backBtn + renderTournamentDetail(detail.data);
