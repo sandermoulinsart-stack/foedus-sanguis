@@ -3260,7 +3260,7 @@ function castVote(warId,voteVal){
   if(!w||w.status!=='open')return;
   if(!w.votes)w.votes={};
   var note=(w.votes[CU.id]&&w.votes[CU.id].note)||'';
-  w.votes[CU.id]={vote:voteVal,note:note,updatedAt:nowDate()};
+  w.votes[CU.id]={vote:voteVal,note:note,updatedAt:new Date().toISOString()};
   sbSaveWar(w).then(function(){
     // Recalculer le statut du votant — permet de repasser Actif si présent
     silentUpdateStatuses();
@@ -3275,7 +3275,7 @@ function saveVoteNote(warId){
   var noteEl=document.getElementById('vote-note-'+warId);
   if(!noteEl)return;
   var note=noteEl.value.trim();
-  if(!w.votes[CU.id])w.votes[CU.id]={vote:'absent',note:note,updatedAt:nowDate()};
+  if(!w.votes[CU.id])w.votes[CU.id]={vote:'absent',note:note,updatedAt:new Date().toISOString()};
   else w.votes[CU.id].note=note;
   sbSaveWar(w);
   noteEl.style.borderColor='var(--gold)';
