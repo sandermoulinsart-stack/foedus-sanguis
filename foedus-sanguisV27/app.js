@@ -174,8 +174,6 @@ function sbDeleteTournament(id){ return SB.from('tournaments').delete('id',id); 
 
 
 function toggleSeedingMode(sel){
-  var wrap=document.getElementById('nt-seeding-wrap');
-  if(wrap) wrap.style.display=sel.value==='team'?'block':'none';
   var tw=document.getElementById('nt-teamsize-wrap');
   if(tw) tw.style.display=sel.value==='team'?'block':'none';
 }
@@ -3940,22 +3938,51 @@ function renderTournamentDetail(t){
     +'</div></div>';
 
   // Participants list
-  h+='<div class="pan" style="margin-bottom:12px"><div class="ph"><span class="ptl">Participants ('+(t.participants||[]).length+')</span>'
-    +(canManage&&t.status==='open'?'<button class="btn bol bsm" style="margin-left:auto" onclick="addParticipantW(this.dataset.tid)" data-tid="'+t.id+'">+ Ajouter</button>':'')
-    +'</div><div style="padding:8px 0">'
-    +((t.participants||[]).length===0?'<div class="td tsm" style="padding:8px 16px">Aucun inscrit.</div>':'')
-    +(t.participants||[]).map(function(p,i){
-      var mb=DB.members.find(function(m){return m.id===p.memberId;});
-      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--b1)">'
-        +'<div style="font-size:12px;font-weight:700;color:var(--gold);min-width:24px">'+(i+1)+'</div>'
-        +(mb?avaHTML(mb,28):'<div style="width:28px;height:28px;border-radius:50%;background:var(--bg3)"></div>')
-        +'<div style="flex:1;font-size:13px;font-weight:600">'+(mb?esc(mb.username):esc(p.name||'Inconnu'))+'</div>'
-        +(p.seed?'<span style="font-size:10px;color:var(--tx3)">Tête de série #'+p.seed+'</span>':'')
-        +(canManage?'<button class="btn bred bsm" style="font-size:9px" data-tid="'+t.id+'" data-mid="'+p.memberId+'" onclick="removeParticipantW(this.dataset.tid,this.dataset.mid)">✕</button>':'')
-        +'</div>';
-    }).join('')
-    +'</div></div>';
-
+  // Équipes si formées, sinon liste participants
+  if(t.type==='team'&&t.teams&&t.teams.length&&t.teams.some(function(te){return te.members.length>0;})){
+    h+='<div class="pan" style="margin-bottom:12px"><div class="ph"><span class="ptl">Équipes ('+(t.teamSize||2)+'v'+(t.teamSize||2)+')</span>'
+      +(canManage&&t.status==='open'?'<button class="btn bol bsm" style="margin-left:auto" onclick="openTeamBuilderW(this)" data-id="'+t.id+'">✏️ Modifier les équipes</button>':'')
+      +'</div><div class="pb"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">';
+    t.teams.forEach(function(team){
+      h+='<div style="background:var(--bg1);border:1px solid var(--b2);border-radius:4px;padding:10px">';
+      h+='<div style="font-family:Cinzel,serif;font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px">'+esc(team.name)+'</div>';
+      team.members.forEach(function(p){
+        var mb=DB.members.find(function(m){return m.id===p.memberId;});
+        h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;color:var(--tx1)">'
+          +(mb?avaHTML(mb,18):'')+(mb?esc(mb.username):esc(p.name||'?'))+'</div>';
+      });
+      h+='</div>';
+    });
+    h+='</div></div></div>';
+  } else {
+    // Affichage par équipes si tournoi d'équipes avec équipes formées
+    if(t.type==='team'&&(t.teams||[]).length>0){
+      h+='<div class="pan" style="margin-bottom:12px"><div class="ph"><span class="ptl">Équipes ('+(t.teams.length)+')</span>'
+        +(canManage&&t.status==='open'?'<button class="btn bol bsm" style="margin-left:auto" onclick="openTeamBuilder(window._calDetail.data)">✏️ Modifier</button>':'')
+        +'</div><div class="pb"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">';
+      t.teams.forEach(function(team){
+        h+='<div style="background:var(--bg1);border:1px solid var(--golddim);border-radius:4px;padding:10px">';
+        h+='<div style="font-family:Cinzel,serif;font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px;border-bottom:1px solid var(--golddim);padding-bottom:4px">'+esc(team.name)+'</div>';
+        (team.members||[]).forEach(function(p){
+          var mb=DB.members.find(function(m){return m.id===p.memberId;});
+          h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;color:var(--tx1)">'
+            +(mb?avaHTML(mb,18):'')+(mb?esc(mb.username):esc(p.name||p.memberId))+'</div>';
+        });
+        h+='</div>';
+      });
+      h+='</div></div></div>';
+    } else {
+      h+='<div class="pan" style="margin-bottom:12px"><div class="ph"><span class="ptl">Participants ('+(t.participants||[]).length+')</span>'
+        +(canManage&&t.status==='open'?'<button class="btn bol bsm" style="margin-left:auto" onclick="addParticipantW(this.dataset.tid)" data-tid="'+t.id+'">+ Ajouter</button>':'')
+        +'</div><div style="padding:8px 0">'
+        +((t.participants||[]).length===0?'<div class="td tsm" style="padding:8px 16px">Aucun inscrit.</div>':'')
+        +(t.participants||[]).map(function(p,i){
+          var mb=DB.members.find(function(m){return m.id===p.memberId;});
+          return'<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--b1)">'            +'<div style="font-size:12px;font-weight:700;color:var(--gold);min-width:24px">'+(i+1)+'</div>'            +(mb?avaHTML(mb,28):'<div style="width:28px;height:28px;border-radius:50%;background:var(--bg3)"></div>')            +'<div style="flex:1;font-size:13px;font-weight:600">'+(mb?esc(mb.username):esc(p.name||'Inconnu'))+'</div>'            +(canManage?'<button class="btn bred bsm" style="font-size:9px" data-tid="'+t.id+'" data-mid="'+p.memberId+'" onclick="removeParticipantW(this.dataset.tid,this.dataset.mid)">✕</button>':'')            +'</div>';
+        }).join('')
+        +'</div></div>';
+    }
+  }
   // Bracket
   if(t.status!=='open'&&(t.bracket||[]).length>0){
     h+=renderBracket(t);
@@ -4161,6 +4188,11 @@ function startTournamentW(el){
     window._calDetail={type:'tournament',data:t};
     go('cal');
   }
+}
+
+function openTeamBuilderW(el){
+  var t=(DB.tournaments||[]).find(function(x){return x.id===el.dataset.id;});
+  if(t) openTeamBuilder(t);
 }
 
 function openTeamBuilder(t){
@@ -4418,7 +4450,7 @@ function openNewTournament(){
     +'<div id="nt-teamsize-wrap" style="display:none"><div class="fg"><label class="fl">Joueurs par équipe</label><input class="fi" type="number" id="nt-teamsize" value="2" min="1" max="50" style="max-width:100px"> <span style="font-size:11px;color:var(--tx3)">ex: 2 pour du 2v2, 5 pour du 5v5</span></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">Max participants</label><input class="fi" type="number" id="nt-max" value="16" min="2"></div>'
     +'<div class="fg"><label class="fl">Limite inscription</label><input class="fi" type="date" id="nt-deadline"></div></div>'
-    +'<div id="nt-seeding-wrap" style="display:none"><div class="fg"><label class="fl">Placement des équipes</label><select class="fs" id="nt-seeding"><option value="random">Aléatoire</option><option value="manual">Manuel</option></select></div></div>'+'<div class="fg"><label class="fl">Image (optionnel)</label>'+imgPickerHTML('nt-tour-img','')+'</div>'+(HR('evenement')||HR('officier')?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nt-feat"> 📌 Mettre à la une sur l\'accueil</label></div>':'<input type="hidden" id="nt-feat" value="false">'),
+    +'<div class="fg"><label class="fl">Image (optionnel)</label>'+imgPickerHTML('nt-tour-img','')+'</div>'+(HR('evenement')||HR('officier')?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nt-feat"> 📌 Mettre à la une sur l\'accueil</label></div>':'<input type="hidden" id="nt-feat" value="false">'),
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Créer',cls:'btn bg',fn:function(){
       var title=gVal('nt-title').trim();if(!title)return alert('Titre requis');
       getImgUrl('nt-tour-img').then(function(imgUrl){
@@ -4429,7 +4461,7 @@ function openNewTournament(){
           maxParticipants:parseInt(gVal('nt-max'))||16,
           registrationDeadline:gVal('nt-deadline'),
           status:'open', participants:[], bracket:[],
-          createdBy:CU.username, featured:gChk('nt-feat'), seedingMode:gVal('nt-seeding')||'random'
+          createdBy:CU.username, featured:gChk('nt-feat')
         };
         DB.tournaments=DB.tournaments||[];
         DB.tournaments.push(tour);
@@ -4447,6 +4479,9 @@ function editTournamentW(el){
     +'<div class="fg"><label class="fl">Description</label><textarea class="ft" id="et-desc">'+esc(t.description||'')+'</textarea></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">Date</label><input class="fi" type="date" id="et-date" value="'+esc(t.date)+'"></div>'
     +'<div class="fg"><label class="fl">Heure</label><input class="fi" type="time" id="et-time" value="'+esc(t.time)+'"></div></div>'
+    +'<div class="fr2"><div class="fg"><label class="fl">Type</label><select class="fs" id="et-type" onchange="var tw=document.getElementById(\'et-teamsize-wrap\');if(tw)tw.style.display=this.value===\'team\'?\'block\':\'none\'"><option value="1v1"'+(t.type==='1v1'?' selected':'')+'>Individuel (1v1)</option><option value="team"'+(t.type==='team'?' selected':'')+'>Équipes</option></select></div>'
+    +'<div class="fg"><label class="fl">Format</label><select class="fs" id="et-format"><option value="elimination"'+(t.format==='elimination'?' selected':'')+'>Élimination directe</option><option value="pools"'+(t.format==='pools'?' selected':'')+'>Poules + finale</option></select></div></div>'
+    +'<div id="et-teamsize-wrap" style="display:'+(t.type==='team'?'block':'none')+'"><div class="fg"><label class="fl">Joueurs par équipe</label><input class="fi" type="number" id="et-teamsize" value="'+(t.teamSize||2)+'" min="1" max="50" style="max-width:100px"> <span style="font-size:11px;color:var(--tx3)">ex: 2 pour 2v2</span></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">Max participants</label><input class="fi" type="number" id="et-max" value="'+(t.maxParticipants||16)+'"></div>'
     +'<div class="fg"><label class="fl">Statut</label><select class="fs" id="et-status"><option value="open"'+(t.status==='open'?' selected':'')+'>Inscriptions ouvertes</option><option value="ongoing"'+(t.status==='ongoing'?' selected':'')+'>En cours</option><option value="finished"'+(t.status==='finished'?' selected':'')+'>Terminé</option></select></div></div>'
     +(HR('evenement')||HR('officier')?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="et-feat"'+(t.featured?' checked':'')+'>📌 Mettre à la une sur l\'accueil</label></div>':''),
@@ -4455,6 +4490,9 @@ function editTournamentW(el){
       t.title=gVal('et-title')||t.title;
       t.description=gVal('et-desc');
       t.date=gVal('et-date'); t.time=gVal('et-time');
+      t.type=gVal('et-type');
+      t.format=gVal('et-format');
+      t.teamSize=parseInt(gVal('et-teamsize'))||t.teamSize||2;
       t.maxParticipants=parseInt(gVal('et-max'))||t.maxParticipants;
       t.status=gVal('et-status');
       sbSaveTournament(t).catch(function(e){console.warn(e);});
