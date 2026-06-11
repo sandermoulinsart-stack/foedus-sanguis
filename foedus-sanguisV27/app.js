@@ -147,7 +147,7 @@ function sbTournamentToLocal(r){
   return {
     id:r.id, title:r.title||'', description:r.description||'',
     image:r.image||'', date:r.date||'', time:r.time||'',
-    type:r.type||'1v1', format:r.format||'elimination',
+    type:r.type||'1v1', format:r.format||'elimination', teamSize:r.team_size||2, teams:r.teams||[],
     maxParticipants:r.max_participants||16,
     registrationDeadline:r.registration_deadline||'',
     status:r.status||'open',
@@ -160,7 +160,7 @@ function localTournamentToSb(t){
   return {
     id:t.id, title:t.title, description:t.description||'',
     image:t.image||'', date:t.date||'', time:t.time||'',
-    type:t.type||'1v1', format:t.format||'elimination',
+    type:t.type||'1v1', format:t.format||'elimination', team_size:t.teamSize||2, teams:t.teams||[],
     max_participants:t.maxParticipants||16,
     registration_deadline:t.registrationDeadline||'',
     status:t.status||'open',
@@ -176,6 +176,8 @@ function sbDeleteTournament(id){ return SB.from('tournaments').delete('id',id); 
 function toggleSeedingMode(sel){
   var wrap=document.getElementById('nt-seeding-wrap');
   if(wrap) wrap.style.display=sel.value==='team'?'block':'none';
+  var tw=document.getElementById('nt-teamsize-wrap');
+  if(tw) tw.style.display=sel.value==='team'?'block':'none';
 }
 
 function launchTournament(t,orderedParts){
@@ -4143,19 +4145,146 @@ function removeParticipantW(tid,mid){
 }
 
 function startTournamentW(el){
-  var t=(DB.tournaments||[]).find(function(x){return x.id===el.dataset.id;});
+  var tid=el.dataset.id;
+  var t=(DB.tournaments||[]).find(function(x){return x.id===tid;});
   if(!t) return;
-  if(!confirm('Générer le bracket et démarrer le tournoi ?')) return;
-  // Shuffle participants
-  var parts=[].concat(t.participants||[]);
-  for(var i=parts.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var tmp=parts[i];parts[i]=parts[j];parts[j]=tmp;}
-  // Generate elimination bracket
-  t.bracket=generateEliminationBracket(parts);
-  t.status='ongoing';
-  t.participants=parts;
-  sbSaveTournament(t).catch(function(e){console.warn(e);});
-  window._calDetail={type:'tournament',data:t};
-  go('cal');
+  if(t.type==='team'){
+    openTeamBuilder(t);
+  } else {
+    if(!confirm('Générer le bracket et démarrer le tournoi ?')) return;
+    var parts=[].concat(t.participants||[]);
+    for(var i=parts.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var tmp=parts[i];parts[i]=parts[j];parts[j]=tmp;}
+    t.bracket=generateEliminationBracket(parts);
+    t.status='ongoing';
+    t.participants=parts;
+    sbSaveTournament(t).catch(function(e){console.warn(e);});
+    window._calDetail={type:'tournament',data:t};
+    go('cal');
+  }
+}
+
+function openTeamBuilder(t){
+  var teamSize=t.teamSize||2;
+  var participants=t.participants||[];
+  var nbTeams=Math.floor(participants.length/teamSize);
+  if(nbTeams<2){alert('Pas assez de participants pour former au moins 2 équipes de '+teamSize+' joueurs.');return;}
+
+  // Initialiser les équipes si pas encore fait
+  if(!t.teams||!t.teams.length){
+    t.teams=[];
+    for(var i=0;i<nbTeams;i++){
+      t.teams.push({id:'team'+i,name:'Équipe '+(i+1),members:[]});
+    }
+  }
+
+  renderTeamBuilder(t);
+}
+
+function renderTeamBuilder(t){
+  var teamSize=t.teamSize||2;
+  var participants=t.participants||[];
+  var teams=t.teams||[];
+
+  // Membres non assignés
+  var assignedIds=[];
+  teams.forEach(function(team){team.members.forEach(function(m){assignedIds.push(m.memberId);});});
+  var unassigned=participants.filter(function(p){return assignedIds.indexOf(p.memberId)<0;});
+
+  var html='<div style="font-size:12px;color:var(--tx3);margin-bottom:12px">Assignez les joueurs dans les équipes ('
+    +teamSize+'v'+teamSize+'). Cliquez sur un joueur non assigné puis sur une équipe pour l\'y ajouter.</div>';
+
+  // Non assignés
+  html+='<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">NON ASSIGNÉS ('+unassigned.length+')</div>';
+  html+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  unassigned.forEach(function(p){
+    var m=DB.members.find(function(x){return x.id===p.memberId;});
+    html+='<div onclick="assignPlayerW(this)" data-tid="'+t.id+'" data-pid="'+p.memberId+'" style="cursor:pointer;background:var(--bg2);border:1px solid var(--b2);border-radius:3px;padding:5px 10px;font-size:12px;color:var(--tx1);display:flex;align-items:center;gap:6px">'
+      +(m?avaHTML(m,18):'')
+      +(m?esc(m.username):esc(p.name||p.memberId))
+      +'</div>';
+  });
+  html+='</div></div>';
+
+  // Équipes
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">';
+  teams.forEach(function(team,ti){
+    html+='<div style="background:var(--bg1);border:1px solid var(--b2);border-radius:4px;padding:10px" id="team-slot-'+ti+'">';
+    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
+      +'<input style="flex:1;background:transparent;border:none;border-bottom:1px solid var(--b2);color:var(--tx1);font-family:Cinzel,serif;font-size:12px;font-weight:700;padding:2px" value="'+esc(team.name)+'" onchange="renameTeamW(this)" data-tid="'+t.id+'" data-ti="'+ti+'">'
+      +'</div>';
+    team.members.forEach(function(p){
+      var m=DB.members.find(function(x){return x.id===p.memberId;});
+      html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;color:var(--tx1)">'
+        +(m?avaHTML(m,18):'')
+        +(m?esc(m.username):esc(p.name||p.memberId))
+        +'<button onclick="removeFromTeamW(this)" data-tid="'+t.id+'" data-pid="'+p.memberId+'" data-ti="'+ti+'" style="margin-left:auto;background:none;border:none;color:var(--red3);cursor:pointer;font-size:12px">✕</button>'
+        +'</div>';
+    });
+    if(team.members.length<(t.teamSize||2)){
+      html+='<button onclick="addToTeamW(this)" data-tid="'+t.id+'" data-ti="'+ti+'" style="width:100%;margin-top:4px;background:none;border:1px dashed var(--b2);color:var(--tx3);border-radius:3px;padding:4px;cursor:pointer;font-size:11px">+ Ajouter</button>';
+    }
+    html+='</div>';
+  });
+  html+='</div>';
+
+  var allFull=teams.every(function(team){return team.members.length>=(t.teamSize||2);});
+
+  OM('Formation des équipes — '+esc(t.title), html,
+    [{lbl:'Annuler',cls:'bol',fn:CM},
+     {lbl:'+ Ajouter une équipe',cls:'btn bol',fn:function(){
+       t.teams=t.teams||[];
+       t.teams.push({id:'team'+Date.now(),name:'Équipe '+(t.teams.length+1),members:[]});
+       renderTeamBuilder(t);
+     }},
+     {lbl:'⚔️ Générer le bracket',cls:'btn bg'+(allFull?'':' disabled'),fn:function(){
+       if(!allFull){alert('Toutes les équipes doivent être complètes ('+t.teamSize+'v'+t.teamSize+').');return;}
+       CM();
+       var teamParts=t.teams.map(function(team){
+         return{memberId:team.id,name:team.name,teamData:team};
+       });
+       t.bracket=generateEliminationBracket(teamParts);
+       t.status='ongoing';
+       sbSaveTournament(t).catch(function(e){console.warn(e);});
+       window._calDetail={type:'tournament',data:t};
+       go('cal');
+     }}]);
+}
+
+var _pendingPlayer=null;
+
+function assignPlayerW(el){
+  _pendingPlayer={tid:el.dataset.tid, pid:el.dataset.pid};
+  alert('Joueur sélectionné. Cliquez sur "+ Ajouter" dans l\'équipe de destination.');
+}
+
+function addToTeamW(btn){
+  if(!_pendingPlayer||_pendingPlayer.tid!==btn.dataset.tid){
+    alert('Sélectionnez d\'abord un joueur non assigné.');return;
+  }
+  var t=(DB.tournaments||[]).find(function(x){return x.id===btn.dataset.tid;});
+  if(!t) return;
+  var ti=parseInt(btn.dataset.ti);
+  var p=(t.participants||[]).find(function(x){return x.memberId===_pendingPlayer.pid;});
+  if(p&&t.teams[ti].members.length<(t.teamSize||2)){
+    t.teams[ti].members.push(p);
+    _pendingPlayer=null;
+    renderTeamBuilder(t);
+  }
+}
+
+function removeFromTeamW(btn){
+  var t=(DB.tournaments||[]).find(function(x){return x.id===btn.dataset.tid;});
+  if(!t) return;
+  var ti=parseInt(btn.dataset.ti);
+  t.teams[ti].members=t.teams[ti].members.filter(function(m){return m.memberId!==btn.dataset.pid;});
+  renderTeamBuilder(t);
+}
+
+function renameTeamW(inp){
+  var t=(DB.tournaments||[]).find(function(x){return x.id===inp.dataset.tid;});
+  if(!t) return;
+  var ti=parseInt(inp.dataset.ti);
+  if(t.teams[ti]) t.teams[ti].name=inp.value;
 }
 
 function generateEliminationBracket(participants){
@@ -4248,6 +4377,7 @@ function openNewTournament(){
     +'<div class="fg"><label class="fl">Heure</label><input class="fi" type="time" id="nt-time" value="20:00"></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">Type</label><select class="fs" id="nt-type" onchange="toggleSeedingMode(this)"><option value="1v1">Individuel (1v1)</option><option value="team">Équipes</option></select></div>'
     +'<div class="fg"><label class="fl">Format</label><select class="fs" id="nt-format"><option value="elimination">Élimination directe</option><option value="pools">Poules + finale</option></select></div></div>'
+    +'<div id="nt-teamsize-wrap" style="display:none"><div class="fg"><label class="fl">Joueurs par équipe</label><input class="fi" type="number" id="nt-teamsize" value="2" min="1" max="50" style="max-width:100px"> <span style="font-size:11px;color:var(--tx3)">ex: 2 pour du 2v2, 5 pour du 5v5</span></div></div>'
     +'<div class="fr2"><div class="fg"><label class="fl">Max participants</label><input class="fi" type="number" id="nt-max" value="16" min="2"></div>'
     +'<div class="fg"><label class="fl">Limite inscription</label><input class="fi" type="date" id="nt-deadline"></div></div>'
     +'<div id="nt-seeding-wrap" style="display:none"><div class="fg"><label class="fl">Placement des équipes</label><select class="fs" id="nt-seeding"><option value="random">Aléatoire</option><option value="manual">Manuel</option></select></div></div>'+'<div class="fg"><label class="fl">Image (optionnel)</label>'+imgPickerHTML('nt-tour-img','')+'</div>'+(HR('evenement')||HR('officier')?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nt-feat"> 📌 Mettre à la une sur l\'accueil</label></div>':'<input type="hidden" id="nt-feat" value="false">'),
@@ -4257,7 +4387,7 @@ function openNewTournament(){
         var tour={
           id:'tour'+Date.now(), title:title, description:gVal('nt-desc'),
           image:imgUrl||'', date:gVal('nt-date'), time:gVal('nt-time'),
-          type:gVal('nt-type'), format:gVal('nt-format'),
+          type:gVal('nt-type'), format:gVal('nt-format'), teamSize:parseInt(gVal('nt-teamsize'))||2, teams:[],
           maxParticipants:parseInt(gVal('nt-max'))||16,
           registrationDeadline:gVal('nt-deadline'),
           status:'open', participants:[], bracket:[],
