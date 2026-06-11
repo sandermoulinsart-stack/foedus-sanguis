@@ -1187,14 +1187,23 @@ function pgStats(){
   var members=DB.members.filter(function(m){return m.status!=='recrue';});
   var stats={};
   members.forEach(function(m){
-    var present=0,maybe=0,absent=0,novote=0,total=wars.length;
-    wars.forEach(function(w){var v=(w.votes||{})[m.id];if(!v)novote++;else if(v.vote==='present')present++;else if(v.vote==='maybe')maybe++;else absent++;});
-    var rate=total>0?Math.round(present/total*100):0;
-    var reliability=total>0?Math.round((present+maybe)/total*100):0;
-    stats[m.id]={present,maybe,absent,novote,total,rate,reliability,m};
+    var present=0,late=0,absent=0,novote=0,total=wars.length;
+    wars.forEach(function(w){
+      var v=(w.votes||{})[m.id];
+      if(!v){ novote++; return; }
+      if(v.vote==='present'){
+        var warT=(w.date&&w.time)?new Date(w.date+' '+w.time).getTime():null;
+        var voteT=v.updatedAt?new Date(v.updatedAt).getTime():0;
+        if(warT&&voteT>warT) late++;
+        else present++;
+      } else if(v.vote==='absent'){ absent++; }
+      else novote++;
+    });
+    var rate=total>0?Math.round((present+late)/total*100):0;
+    stats[m.id]={present,late,absent,novote,total,rate,m};
   });
   var sorted=Object.values(stats).sort(function(a,b){return b.rate-a.rate;});
-  return'<div class="pan" style="margin-bottom:16px"><div class="ph"><span class="ptl">📊 Statistiques de participation</span><span class="td tsm" style="margin-left:auto">'+wars.length+' guerre(s)</span></div><div style="overflow-x:auto"><table style="font-size:12px;width:100%"><thead><tr><th>Joueur</th><th>✅</th><th>❌</th><th>⏳</th><th>Présence</th><th>Fiabilité</th></tr></thead><tbody>'+sorted.map(function(s){var rc=s.rate>=70?'#66bb6a':s.rate>=40?'#f9a825':'var(--red3)';return'<tr><td>'+avaHTML(s.m,20)+' '+esc(s.m.username)+'</td><td style="text-align:center;color:#66bb6a">'+s.present+'</td><td style="text-align:center;color:var(--red3)">'+s.absent+'</td><td style="text-align:center;color:var(--tx3)">'+s.novote+'</td><td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:6px;background:var(--bg1);border-radius:3px"><div style="height:100%;width:'+s.rate+'%;background:'+rc+';border-radius:3px"></div></div><span style="color:'+rc+';font-weight:700;min-width:32px">'+s.rate+'%</span></div></td><td style="text-align:center">'+s.reliability+'%</td></tr>';}).join('')+'</tbody></table></div></div>';
+  return'<div class="pan" style="margin-bottom:16px"><div class="ph"><span class="ptl">📊 Statistiques de participation</span><span class="td tsm" style="margin-left:auto">'+wars.length+' guerre(s)</span></div><div style="overflow-x:auto"><table style="font-size:12px;width:100%"><thead><tr><th>Joueur</th><th>✅</th><th>⏰</th><th>❌</th><th>⏳</th><th>Présence</th></tr></thead><tbody>'+sorted.map(function(s){var rc=s.rate>=70?'#66bb6a':s.rate>=40?'#f9a825':'var(--red3)';return'<tr><td>'+avaHTML(s.m,20)+' '+esc(s.m.username)+'</td><td style="text-align:center;color:#66bb6a">'+s.present+'</td><td style="text-align:center;color:#f9a825">'+s.late+'</td><td style="text-align:center;color:var(--red3)">'+s.absent+'</td><td style="text-align:center;color:var(--tx3)">'+s.novote+'</td><td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:6px;background:var(--bg1);border-radius:3px"><div style="height:100%;width:'+s.rate+'%;background:'+rc+';border-radius:3px"></div></div><span style="color:'+rc+';font-weight:700;min-width:32px">'+s.rate+'%</span></div></td></tr>';}).join('')+'</tbody></table></div></div>';
 }
 
 // ════════════════════════════════════════
@@ -1205,21 +1214,22 @@ function pgRank(){
   var wars=(DB.voteWars||[]);
   var members=DB.members.filter(function(m){return m.status!=='recrue';});
   var ranked=members.map(function(m){
-    var present=0,maybe=0,absent=0,novote=0,total=wars.length;
+    var present=0,late=0,absent=0,novote=0,total=wars.length;
     wars.forEach(function(w){
       var v=(w.votes||{})[m.id];
-      if(!v) novote++;
-      else if(v.vote==='present') present++;
-      else if(v.vote==='maybe') maybe++;
-      else absent++;
+      if(!v){ novote++; return; }
+      if(v.vote==='present'){
+        var warT=(w.date&&w.time)?new Date(w.date+' '+w.time).getTime():null;
+        var voteT=v.updatedAt?new Date(v.updatedAt).getTime():0;
+        if(warT&&voteT>warT) late++;
+        else present++;
+      } else if(v.vote==='absent'){ absent++; }
+      else novote++;
     });
-    // Score basé uniquement sur la participation aux guerres :
-    // +5 pts par présence confirmée ✅
-    // +3 pts par vote absent — voter absent compte quand même
-    // -1 pt par guerre sans vote ⏳
-    var score = (present * 5) + (absent * 3) + (novote * -1);
+    // Score : présent=+5, présent en retard=+3, absent=+3, sans vote=-1
+    var score = (present*5) + (late*3) + (absent*3) + (novote*-1);
     if(score < 0) score = 0;
-    return{m, present, maybe, absent, novote, total, score};
+    return{m, present, late, absent, novote, total, score};
   }).sort(function(a,b){
     if(b.score !== a.score) return b.score - a.score;
     // Départage : plus de présences
@@ -1240,10 +1250,14 @@ function pgRank(){
         +avaHTML(r.m,36)
         +'<div style="flex:1;min-width:0">'
           +'<div class="cin fw7" style="font-size:13px">'+esc(r.m.username)+(r.m.chefGroupe?' 🗡️':'')+(r.m.sanguin?' 🩸':'')+(r.m.grandChampion?' 🏆':'')+'</div>'
-          +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:6px">'
+          +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-top:6px">'
             +'<div style="background:var(--bg1);border-radius:2px;padding:4px 6px;text-align:center">'
               +'<div style="font-size:14px;font-weight:700;color:#66bb6a">'+r.present+'</div>'
               +'<div style="font-size:9px;color:var(--tx3)">✅ Présent</div>'
+            +'</div>'
+            +'<div style="background:var(--bg1);border-radius:2px;padding:4px 6px;text-align:center">'
+              +'<div style="font-size:14px;font-weight:700;color:#f9a825">'+r.late+'</div>'
+              +'<div style="font-size:9px;color:var(--tx3)">⏰ En retard</div>'
             +'</div>'
             +'<div style="background:var(--bg1);border-radius:2px;padding:4px 6px;text-align:center">'
               +'<div style="font-size:14px;font-weight:700;color:var(--red3)">'+r.absent+'</div>'
@@ -1261,7 +1275,7 @@ function pgRank(){
   +'</div></div>'
   +'<div style="font-size:10px;color:var(--tx3);margin-top:8px;padding:10px 14px;background:var(--bg2);border-radius:3px;line-height:1.8">'
   +'Score basé uniquement sur la participation aux guerres territoriales<br>'
-  +'✅ Présent = +5 pts &nbsp;·&nbsp; ❌ Absent = +3 pts &nbsp;·&nbsp; ⏳ Sans vote = −1 pt'
+  +'✅ Présent = +5 pts &nbsp;·&nbsp; ⏰ En retard = +3 pts &nbsp;·&nbsp; ❌ Absent = +3 pts &nbsp;·&nbsp; ⏳ Sans vote = −1 pt'
   +'</div>';
 }
 
