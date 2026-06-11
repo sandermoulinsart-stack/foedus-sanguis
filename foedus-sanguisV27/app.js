@@ -3796,7 +3796,7 @@ function pgCal(){
         +(myReg?'<span class="badge bok" style="font-size:8px">✅ Inscrit</span>':'')
         +'</div></div>'
         +'<div style="padding:8px 16px;display:flex;gap:16px;font-size:11px;color:var(--tx3);border-top:1px solid var(--b1)">'
-        +'<span>🎮 '+(t.type==='1v1'?'Individuel':'Équipes')+'</span>'
+        +'<span>🎮 '+(t.type==='1v1'?'Individuel (1v1)':'Équipes ('+(t.teamSize||2)+'v'+(t.teamSize||2)+')')+'</span>'
         +'<span>📈 '+(t.format==='elimination'?'Élimination directe':'Poules + finale')+'</span>'
         +'<span>👥 '+(t.participants||[]).length+'/'+(t.maxParticipants||16)+' inscrits</span>'
         +(t.registrationDeadline?'<span>⏰ Limite: '+esc(t.registrationDeadline)+'</span>':'')
@@ -3926,7 +3926,7 @@ function renderTournamentDetail(t){
     +'<div class="pb">'
     +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:16px">'
     +'<div style="background:var(--bg1);border-radius:3px;padding:8px;text-align:center"><div style="font-size:18px">📅</div><div style="font-size:12px;color:var(--tx1)">'+esc(t.date+(t.time?' à '+t.time:''))+'</div><div style="font-size:9px;color:var(--tx3)">Date</div></div>'
-    +'<div style="background:var(--bg1);border-radius:3px;padding:8px;text-align:center"><div style="font-size:18px">🎮</div><div style="font-size:12px;color:var(--tx1)">'+(t.type==='1v1'?'Individuel':'Équipes')+'</div><div style="font-size:9px;color:var(--tx3)">Type</div></div>'
+    +'<div style="background:var(--bg1);border-radius:3px;padding:8px;text-align:center"><div style="font-size:18px">🎮</div><div style="font-size:12px;color:var(--tx1)">'+(t.type==='1v1'?'Individuel (1v1)':'Équipes ('+(t.teamSize||2)+'v'+(t.teamSize||2)+')')+'</div><div style="font-size:9px;color:var(--tx3)">Type</div></div>'
     +'<div style="background:var(--bg1);border-radius:3px;padding:8px;text-align:center"><div style="font-size:18px">📈</div><div style="font-size:12px;color:var(--tx1)">'+(t.format==='elimination'?'Élim. directe':'Poules')+'</div><div style="font-size:9px;color:var(--tx3)">Format</div></div>'
     +'<div style="background:var(--bg1);border-radius:3px;padding:8px;text-align:center"><div style="font-size:18px">👥</div><div style="font-size:12px;color:var(--tx1)">'+(t.participants||[]).length+'/'+(t.maxParticipants||16)+'</div><div style="font-size:9px;color:var(--tx3)">Inscrits</div></div>'
     +'</div>'
@@ -4184,64 +4184,78 @@ function renderTeamBuilder(t){
   var teamSize=t.teamSize||2;
   var participants=t.participants||[];
   var teams=t.teams||[];
+  var sel=window._tbSelected||null; // ID joueur sélectionné
 
   // Membres non assignés
   var assignedIds=[];
   teams.forEach(function(team){team.members.forEach(function(m){assignedIds.push(m.memberId);});});
   var unassigned=participants.filter(function(p){return assignedIds.indexOf(p.memberId)<0;});
 
-  var html='<div style="font-size:12px;color:var(--tx3);margin-bottom:12px">Assignez les joueurs dans les équipes ('
-    +teamSize+'v'+teamSize+'). Cliquez sur un joueur non assigné puis sur une équipe pour l\'y ajouter.</div>';
+  var html='<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+    +'<span style="font-size:11px;color:var(--tx3)">'+teamSize+'v'+teamSize+' — Cliquez un joueur puis une équipe pour l\'assigner.</span>'
+    +'<button onclick="autoFillTeamsW(this)" data-tid="'+t.id+'" class="btn bol bsm" style="margin-left:auto">⚡ Auto-répartir</button>'
+    +'</div>';
 
   // Non assignés
   html+='<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">NON ASSIGNÉS ('+unassigned.length+')</div>';
   html+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
   unassigned.forEach(function(p){
     var m=DB.members.find(function(x){return x.id===p.memberId;});
-    html+='<div onclick="assignPlayerW(this)" data-tid="'+t.id+'" data-pid="'+p.memberId+'" style="cursor:pointer;background:var(--bg2);border:1px solid var(--b2);border-radius:3px;padding:5px 10px;font-size:12px;color:var(--tx1);display:flex;align-items:center;gap:6px">'
+    var isSelected=sel===p.memberId;
+    html+='<div onclick="tbSelectPlayer(this)" data-tid="'+t.id+'" data-pid="'+p.memberId+'" style="cursor:pointer;border-radius:3px;padding:5px 10px;font-size:12px;display:flex;align-items:center;gap:6px;transition:all .15s;'
+      +(isSelected?'background:var(--golddim);border:2px solid var(--gold);color:var(--gold);':'background:var(--bg2);border:2px solid var(--b2);color:var(--tx1);')
+      +'">'
       +(m?avaHTML(m,18):'')
       +(m?esc(m.username):esc(p.name||p.memberId))
+      +(isSelected?'<span style="font-size:10px">✓</span>':'')
       +'</div>';
   });
   html+='</div></div>';
 
   // Équipes
-  html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">';
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px">';
   teams.forEach(function(team,ti){
-    html+='<div style="background:var(--bg1);border:1px solid var(--b2);border-radius:4px;padding:10px" id="team-slot-'+ti+'">';
-    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'
-      +'<input style="flex:1;background:transparent;border:none;border-bottom:1px solid var(--b2);color:var(--tx1);font-family:Cinzel,serif;font-size:12px;font-weight:700;padding:2px" value="'+esc(team.name)+'" onchange="renameTeamW(this)" data-tid="'+t.id+'" data-ti="'+ti+'">'
-      +'</div>';
+    var isFull=team.members.length>=(teamSize);
+    var canAdd=sel&&!isFull;
+    html+='<div onclick="tbDropToTeam(this)" data-tid="'+t.id+'" data-ti="'+ti+'" style="background:var(--bg1);border:2px solid '+(canAdd?'var(--gold)':'var(--b2)')+';border-radius:4px;padding:10px;cursor:'+(canAdd?'pointer':'default')+';transition:border-color .15s">';
+    html+='<input style="width:100%;background:transparent;border:none;border-bottom:1px solid var(--b2);color:var(--gold);font-family:Cinzel,serif;font-size:11px;font-weight:700;padding:2px 0;margin-bottom:8px" value="'+esc(team.name)+'" onclick="event.stopPropagation()" onchange="renameTeamW(this)" data-tid="'+t.id+'" data-ti="'+ti+'">';
+    if(team.members.length===0){
+      html+='<div style="font-size:11px;color:var(--tx3);text-align:center;padding:6px 0">'+(canAdd?'👆 Cliquer pour ajouter':'Vide')+'</div>';
+    }
     team.members.forEach(function(p){
       var m=DB.members.find(function(x){return x.id===p.memberId;});
-      html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;color:var(--tx1)">'
-        +(m?avaHTML(m,18):'')
+      html+='<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px;font-size:11px;color:var(--tx1)">'
+        +(m?avaHTML(m,16):'')
         +(m?esc(m.username):esc(p.name||p.memberId))
-        +'<button onclick="removeFromTeamW(this)" data-tid="'+t.id+'" data-pid="'+p.memberId+'" data-ti="'+ti+'" style="margin-left:auto;background:none;border:none;color:var(--red3);cursor:pointer;font-size:12px">✕</button>'
+        +'<button onclick="tbRemovePlayer(this);event.stopPropagation()" data-tid="'+t.id+'" data-pid="'+p.memberId+'" data-ti="'+ti+'" style="margin-left:auto;background:none;border:none;color:var(--red3);cursor:pointer;font-size:11px;padding:0">✕</button>'
         +'</div>';
     });
-    if(team.members.length<(t.teamSize||2)){
-      html+='<button onclick="addToTeamW(this)" data-tid="'+t.id+'" data-ti="'+ti+'" style="width:100%;margin-top:4px;background:none;border:1px dashed var(--b2);color:var(--tx3);border-radius:3px;padding:4px;cursor:pointer;font-size:11px">+ Ajouter</button>';
-    }
+    if(!isFull) html+='<div style="font-size:9px;color:var(--tx3);text-align:right;margin-top:4px">'+team.members.length+'/'+teamSize+'</div>';
+    else html+='<div style="font-size:9px;color:#66bb6a;text-align:right;margin-top:4px">✅ Complet</div>';
     html+='</div>';
   });
   html+='</div>';
 
-  var allFull=teams.every(function(team){return team.members.length>=(t.teamSize||2);});
+  var allFull=unassigned.length===0&&teams.every(function(team){return team.members.length>=teamSize;});
 
   OM('Formation des équipes — '+esc(t.title), html,
-    [{lbl:'Annuler',cls:'bol',fn:CM},
+    [{lbl:'Annuler',cls:'bol',fn:function(){window._tbSelected=null;CM();}},
      {lbl:'+ Ajouter une équipe',cls:'btn bol',fn:function(){
        t.teams=t.teams||[];
        t.teams.push({id:'team'+Date.now(),name:'Équipe '+(t.teams.length+1),members:[]});
+       window._tbSelected=null;
        renderTeamBuilder(t);
      }},
-     {lbl:'⚔️ Générer le bracket',cls:'btn bg'+(allFull?'':' disabled'),fn:function(){
-       if(!allFull){alert('Toutes les équipes doivent être complètes ('+t.teamSize+'v'+t.teamSize+').');return;}
+     {lbl:'⚔️ Générer le bracket',cls:'btn bg',fn:function(){
+       if(unassigned.length>0){
+         if(!confirm(unassigned.length+' joueur(s) non assigné(s). Continuer quand même ?')) return;
+       }
+       window._tbSelected=null;
        CM();
-       var teamParts=t.teams.map(function(team){
+       var teamParts=t.teams.filter(function(team){return team.members.length>0;}).map(function(team){
          return{memberId:team.id,name:team.name,teamData:team};
        });
+       if(teamParts.length<2){alert('Il faut au moins 2 équipes.');return;}
        t.bracket=generateEliminationBracket(teamParts);
        t.status='ongoing';
        sbSaveTournament(t).catch(function(e){console.warn(e);});
@@ -4250,35 +4264,59 @@ function renderTeamBuilder(t){
      }}]);
 }
 
-var _pendingPlayer=null;
-
-function assignPlayerW(el){
-  _pendingPlayer={tid:el.dataset.tid, pid:el.dataset.pid};
-  alert('Joueur sélectionné. Cliquez sur "+ Ajouter" dans l\'équipe de destination.');
-}
-
-function addToTeamW(btn){
-  if(!_pendingPlayer||_pendingPlayer.tid!==btn.dataset.tid){
-    alert('Sélectionnez d\'abord un joueur non assigné.');return;
-  }
-  var t=(DB.tournaments||[]).find(function(x){return x.id===btn.dataset.tid;});
+function tbSelectPlayer(el){
+  var pid=el.dataset.pid;
+  var t=(DB.tournaments||[]).find(function(x){return x.id===el.dataset.tid;});
   if(!t) return;
-  var ti=parseInt(btn.dataset.ti);
-  var p=(t.participants||[]).find(function(x){return x.memberId===_pendingPlayer.pid;});
-  if(p&&t.teams[ti].members.length<(t.teamSize||2)){
-    t.teams[ti].members.push(p);
-    _pendingPlayer=null;
-    renderTeamBuilder(t);
-  }
+  window._tbSelected=(window._tbSelected===pid)?null:pid;
+  renderTeamBuilder(t);
 }
 
-function removeFromTeamW(btn){
+function tbDropToTeam(el){
+  if(!window._tbSelected) return;
+  var t=(DB.tournaments||[]).find(function(x){return x.id===el.dataset.tid;});
+  if(!t) return;
+  var ti=parseInt(el.dataset.ti);
+  var team=t.teams[ti];
+  if(!team||team.members.length>=(t.teamSize||2)) return;
+  var p=(t.participants||[]).find(function(x){return x.memberId===window._tbSelected;});
+  if(!p) return;
+  // Vérifier pas déjà dans une équipe
+  var alreadyIn=false;
+  t.teams.forEach(function(te){te.members.forEach(function(m){if(m.memberId===p.memberId)alreadyIn=true;});});
+  if(alreadyIn) return;
+  team.members.push(p);
+  window._tbSelected=null;
+  renderTeamBuilder(t);
+}
+
+function tbRemovePlayer(btn){
   var t=(DB.tournaments||[]).find(function(x){return x.id===btn.dataset.tid;});
   if(!t) return;
   var ti=parseInt(btn.dataset.ti);
   t.teams[ti].members=t.teams[ti].members.filter(function(m){return m.memberId!==btn.dataset.pid;});
+  window._tbSelected=null;
   renderTeamBuilder(t);
 }
+
+function autoFillTeamsW(btn){
+  var t=(DB.tournaments||[]).find(function(x){return x.id===btn.dataset.tid;});
+  if(!t) return;
+  var teamSize=t.teamSize||2;
+  var participants=[].concat(t.participants||[]);
+  // Mélanger
+  for(var i=participants.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var tmp=participants[i];participants[i]=participants[j];participants[j]=tmp;}
+  // Créer les équipes
+  var nbTeams=Math.floor(participants.length/teamSize);
+  if(nbTeams<2){alert('Pas assez de participants pour au moins 2 équipes.');return;}
+  t.teams=[];
+  for(var k=0;k<nbTeams;k++){
+    t.teams.push({id:'team'+Date.now()+k,name:'Équipe '+(k+1),members:participants.slice(k*teamSize,(k+1)*teamSize)});
+  }
+  window._tbSelected=null;
+  renderTeamBuilder(t);
+}
+
 
 function renameTeamW(inp){
   var t=(DB.tournaments||[]).find(function(x){return x.id===inp.dataset.tid;});
