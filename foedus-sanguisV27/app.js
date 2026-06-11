@@ -331,7 +331,8 @@ function sbLoad(){
     SB.from('formations').get(),
     SB.from('events').get(),
     SB.from('tournaments').get().catch(function(e){console.warn('[SB] tournaments:',e);return[];}),
-    SB.from('hierarchy').get().catch(function(e){console.warn('[SB] hierarchy:',e);return[];})
+    SB.from('hierarchy').get().catch(function(e){console.warn('[SB] hierarchy:',e);return[];}),
+    SB.from('presence').get().catch(function(e){console.warn('[SB] presence:',e);return[];})
   ]).then(function(res){
     var settings=res[0][0]||{};
     var membres=res[1]||[];
@@ -357,6 +358,7 @@ function sbLoad(){
     DB.events         = events.map(sbEventToLocal);
     DB.tournaments    = tournaments.map(sbTournamentToLocal);
     DB.hierarchy      = (res[10]||[]);
+    DB.presence       = (res[11]||[]);
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
     console.log('[SB] Chargé: '+DB.members.length+' membres, '+(DB.pendingMembers||[]).length+' en attente');
@@ -609,7 +611,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings().catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[]}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[]}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -714,7 +716,8 @@ function doLogin(){
       go('home');
       startRealtime();
       initServiceWorker();
-      setTimeout(subscribePush, 3000); // Demander après 3s pour ne pas être intrusif
+      setTimeout(subscribePush, 3000);
+      startPresence(); // Demander après 3s pour ne pas être intrusif
     });
   }).catch(function(){
     showLoginError('Serveur inaccessible. Vérifiez votre connexion.');
@@ -920,6 +923,22 @@ function _triggerReload(){
     }).catch(function(e){ console.warn('[Realtime] reload err',e); });
   },300);
 }
+
+// ── Présence en ligne ─────────────────────────────────────────
+function pingPresence(){
+  if(!CU) return;
+  SB.from('presence').upsert({
+    membre_id: CU.id,
+    username: CU.username,
+    last_seen: new Date().toISOString()
+  }).catch(function(e){ console.warn('[presence]', e); });
+}
+
+function startPresence(){
+  pingPresence(); // ping immédiat
+  setInterval(pingPresence, 60*1000); // puis toutes les 60s
+}
+
 
 function startRealtime(){
   stopRealtime();
@@ -1894,12 +1913,10 @@ function pgHome(){
 
   var actifs=DB.members.filter(function(m){return m.status==='actif';}).length;
   var gardes=DB.members.filter(function(m){return m.sanguin;}).length;
-  var statsH='<div class="stats-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">'
-    +'<div class="stat"><div class="sn">'+DB.members.length+'</div><div class="sl">Membres</div></div>'
-    +'<div class="stat"><div class="sn">'+actifs+'</div><div class="sl">Actifs</div></div>'
-    +'<div class="stat"><div class="sn">'+gardes+'</div><div class="sl">Gardes Sanguins</div></div>'
-    +'<div class="stat"><div class="sn">'+(function(){var aw=(DB.voteWars||[]).find(function(w){return w.status==="open"});return aw?DB.groups.filter(function(g){return g.warId===aw.id&&g.leaderId&&!g.archived}).length:DB.groups.filter(function(g){return!g.archived}).length})()+'</div><div class="sl">Chefs de groupe</div></div>'
-    +'</div>';
+  var onlineCount=(DB.presence||[]).filter(function(p){
+    return p.last_seen && (Date.now()-new Date(p.last_seen).getTime()) < 2*60*1000;
+  }).length;
+  var statsH='<div class="stats-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">'    +'<div class="stat"><div class="sn">'+DB.members.length+'</div><div class="sl">Membres</div></div>'    +'<div class="stat"><div class="sn">'+actifs+'</div><div class="sl">Actifs</div></div>'    +'<div class="stat"><div class="sn">'+gardes+'</div><div class="sl">Gardes Sanguins</div></div>'    +'<div class="stat"><div class="sn" style="display:flex;align-items:center;justify-content:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:#66bb6a;display:inline-block;box-shadow:0 0 6px #66bb6a"></span>'+onlineCount+'</div><div class="sl">En ligne</div></div>'    +'</div>';
   var evtHtml=''; // Retiré — les événements sont affichés via "À la une"
 
   // Guerres ouvertes — affichage auto jusqu'à clôture
