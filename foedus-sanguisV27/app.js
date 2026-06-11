@@ -2646,8 +2646,12 @@ function getSelectedWar(){
 function getWarPresents(war){
   if(!war)return[];
   var votes=war.votes||{};
+  var warT=(war.date&&war.time)?new Date(war.date+' '+war.time).getTime():null;
   return DB.members.filter(function(m){
-    return m.status!=='attente'&&votes[m.id]&&votes[m.id].vote==='present';
+    var v=votes[m.id];
+    if(!v||v.vote!=='present') return false;
+    if(m.status==='attente') return false;
+    return true; // présents normaux ET en retard sont dans les groupes
   });
 }
 
@@ -3068,6 +3072,7 @@ function voteStats(w){
   // Only count votes from current active members
   var activeIds=DB.members.filter(function(m){return m.status!=='attente';}).map(function(m){return m.id;});
   var present=0,absent=0,maybe=0,voted=0;
+  var warTimeVS = (w.date&&w.time) ? new Date(w.date+' '+w.time).getTime() : null;
   activeIds.forEach(function(id){
     var v=votes[id];
     if(!v) return;
@@ -3149,20 +3154,32 @@ function renderVoteWar(w){
 
   // Voter lists
   var activeMembers=DB.members.filter(function(m){return m.status!=='attente';});
-  var byVote={present:[],maybe:[],absent:[],novote:[]};
+  // Calculer l'heure de la guerre pour détecter les votes en retard
+  var warTime = (w.date&&w.time) ? new Date(w.date+' '+w.time).getTime() : null;
+  var byVote={present:[],late:[],absent:[],novote:[]};
   activeMembers.forEach(function(m){
     var v=(w.votes||{})[m.id];
-    if(!v) byVote.novote.push({m:m,v:null});
-    else if(byVote[v.vote]) byVote[v.vote].push({m:m,v:v});
-    else byVote.novote.push({m:m,v:null});
+    if(!v){ byVote.novote.push({m:m,v:null}); return; }
+    if(v.vote==='present'){
+      // Présent en retard si le vote a été fait après l'heure de la guerre
+      var voteTime = v.updatedAt ? new Date(v.updatedAt).getTime() : 0;
+      if(warTime && voteTime > warTime) byVote.late.push({m:m,v:v});
+      else byVote.present.push({m:m,v:v});
+    } else if(v.vote==='absent'){
+      byVote.absent.push({m:m,v:v});
+    } else {
+      byVote.novote.push({m:m,v:null});
+    }
   });
   // Trier chaque liste par ordre alphabétique
   var sortAlpha=function(a,b){return a.m.username.localeCompare(b.m.username);};
   byVote.present.sort(sortAlpha);
+  byVote.late.sort(sortAlpha);
   byVote.absent.sort(sortAlpha);
   byVote.novote.sort(sortAlpha);
   html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
   [{key:'present',label:'Présents',icon:'✅',color:'#388e3c',bg:'rgba(46,125,50,.08)',border:'rgba(56,142,60,.3)'},
+   {key:'late',label:'Présents en retard',icon:'⏰',color:'#f9a825',bg:'rgba(249,168,37,.06)',border:'rgba(249,168,37,.3)'},
    {key:'absent',label:'Absents',icon:'❌',color:'var(--red2)',bg:'rgba(139,26,10,.06)',border:'rgba(139,26,10,.3)'},
    {key:'novote',label:'Pas encore voté',icon:'⏳',color:'var(--tx3)',bg:'var(--bg1)',border:'var(--b1)'}
   ].forEach(function(grp){
