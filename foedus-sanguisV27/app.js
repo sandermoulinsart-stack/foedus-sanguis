@@ -1192,7 +1192,7 @@ function pgStats(){
       var v=(w.votes||{})[m.id];
       if(!v){ novote++; return; }
       if(v.vote==='present'){
-        var warT=(w.date&&w.time)?new Date(w.date+' '+w.time).getTime():null;
+        var warT=(w.date&&w.time)?parseLocalDateTime(w.date,w.time):null;
         var voteT=v.updatedAt?new Date(v.updatedAt).getTime():0;
         if(warT&&voteT>warT) late++;
         else present++;
@@ -1219,7 +1219,7 @@ function pgRank(){
       var v=(w.votes||{})[m.id];
       if(!v){ novote++; return; }
       if(v.vote==='present'){
-        var warT=(w.date&&w.time)?new Date(w.date+' '+w.time).getTime():null;
+        var warT=(w.date&&w.time)?parseLocalDateTime(w.date,w.time):null;
         var voteT=v.updatedAt?new Date(v.updatedAt).getTime():0;
         if(warT&&voteT>warT) late++;
         else present++;
@@ -2030,7 +2030,7 @@ function pgHome(){
   var unvotedWars=openWarsU.filter(function(w){
     if(w.votes&&w.votes[CU.id]) return false;
     if(!w.date) return false;
-    var warTime=new Date(w.date+(w.time?' '+w.time:'')).getTime();
+    var warTime=parseLocalDateTime(w.date,w.time);
     var hoursUntil=(warTime-Date.now())/(1000*60*60);
     return hoursUntil>=0&&hoursUntil<=48;
   });
@@ -3049,6 +3049,16 @@ function openNewGrp(){
 // ════════════════════════════════════════════════════════════════
 // PAGE: GUERRES — VOTE
 // ════════════════════════════════════════════════════════════════
+// Parse date+heure locale (évite les ambiguïtés UTC vs local)
+function parseLocalDateTime(date, time){
+  if(!date) return null;
+  var parts = date.split('-');
+  var y=parseInt(parts[0]),mo=parseInt(parts[1])-1,d=parseInt(parts[2]);
+  var h=0,mn=0;
+  if(time){ var tp=time.split(':'); h=parseInt(tp[0])||0; mn=parseInt(tp[1])||0; }
+  return new Date(y,mo,d,h,mn,0,0).getTime();
+}
+
 function pgVote(){
   if(HR('officier'))document.getElementById('tact').innerHTML='<button class="btn bg bsm" onclick="openNewVoteWar()">+ Nouvelle guerre</button>';
   if(!DB.voteWars)DB.voteWars=[];
@@ -3086,7 +3096,7 @@ function voteStats(w){
   // Only count votes from current active members
   var activeIds=DB.members.filter(function(m){return m.status!=='attente';}).map(function(m){return m.id;});
   var present=0,absent=0,maybe=0,voted=0;
-  var warTimeVS = (w.date&&w.time) ? new Date(w.date+' '+w.time).getTime() : null;
+  var warTimeVS = (w.date&&w.time) ? parseLocalDateTime(w.date,w.time) : null;
   activeIds.forEach(function(id){
     var v=votes[id];
     if(!v) return;
@@ -3169,7 +3179,7 @@ function renderVoteWar(w){
   // Voter lists
   var activeMembers=DB.members.filter(function(m){return m.status!=='attente';});
   // Calculer l'heure de la guerre pour détecter les votes en retard
-  var warTime = (w.date&&w.time) ? new Date(w.date+' '+w.time).getTime() : null;
+  var warTime = (w.date&&w.time) ? parseLocalDateTime(w.date, w.time) : null;
   var byVote={present:[],late:[],absent:[],novote:[]};
   activeMembers.forEach(function(m){
     var v=(w.votes||{})[m.id];
