@@ -3814,11 +3814,16 @@ function setCalTab(t){window._calTab=t;try{sessionStorage.setItem('calTab',t);}c
 
 // ── Votes participation événements ───────────────────────────
 function castEventVote(btn){
-  var id=btn.dataset.id, vote=btn.dataset.v;
+  var id=btn.dataset.id;
   var e=(DB.events||[]).find(function(x){return x.id===id;});
   if(!e||!e.voteOpen) return;
   e.votes=e.votes||{};
-  e.votes[CU.id]=vote;
+  // Toggle : si déjà inscrit → retirer, sinon → inscrire
+  if(e.votes[CU.id]===true||e.votes[CU.id]==='present'){
+    delete e.votes[CU.id];
+  } else {
+    e.votes[CU.id]=true;
+  }
   sbSaveEvent(e).then(function(){
     window._calDetail={type:'event',data:e};
     go('cal');
@@ -3854,41 +3859,33 @@ function renderCalDetail(detail){
   if(detail.type==='event'){
     var e=detail.data;
     var canManage=HR('evenement')||HR('officier');
-    var myVote=(e.votes||{})[CU.id];
     var votes=e.votes||{};
-    var knownIds=DB.members.filter(function(m){return m.status!=='attente';}).map(function(m){return m.id;});
-    var presents=knownIds.filter(function(id){return votes[id]&&votes[id]==='present';});
-    var absents=knownIds.filter(function(id){return votes[id]&&votes[id]==='absent';});
+    var myIn=votes[CU.id]===true||votes[CU.id]==='present';
+    var participants=DB.members.filter(function(m){
+      return m.status!=='attente'&&(votes[m.id]===true||votes[m.id]==='present');
+    }).sort(function(a,b){return a.username.localeCompare(b.username);});
 
     var voteSection='';
     if(e.voteOpen){
       voteSection='<div style="margin-bottom:16px">'
-        +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">MON VOTE</div>'
-        +'<div style="display:flex;gap:10px;margin-bottom:12px">'
-        +'<button onclick="castEventVote(this)" data-id="'+e.id+'" data-v="present" class="btn '+(myVote==='present'?'bg':'bol')+'" style="flex:1;'+(myVote==='present'?'border-color:#66bb6a;background:rgba(56,142,60,.15)':'')+'">✅ Présent</button>'
-        +'<button onclick="castEventVote(this)" data-id="'+e.id+'" data-v="absent" class="btn '+(myVote==='absent'?'bred':'bol')+'" style="flex:1;'+(myVote==='absent'?'':'')+'">❌ Absent</button>'
+        +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">'
+        +'<button onclick="castEventVote(this)" data-id="'+e.id+'" style="'
+        +(myIn?'background:rgba(56,142,60,.2);border-color:#388e3c;color:#66bb6a;':'')
+        +'padding:10px 24px;font-size:13px;font-family:Cinzel,serif;font-weight:700;cursor:pointer;border-radius:3px;border:1px solid var(--b2);color:var(--tx2);transition:all .2s" class="btn '+(myIn?'':'bol')+'">'
+        +(myIn?'✅ Je participe — Retirer':'🙋 Je participe')+'</button>'
+        +'<span style="font-size:12px;color:var(--tx3)">'+participants.length+' participant(s)</span>'
         +'</div>'
-        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-        +'<div style="background:rgba(46,125,50,.08);border:1px solid rgba(56,142,60,.3);border-radius:3px;padding:10px">'
-        +'<div style="font-size:10px;font-weight:700;color:#66bb6a;margin-bottom:6px">✅ PRÉSENTS ('+presents.length+')</div>'
-        +(presents.length===0?'<div style="font-size:11px;color:var(--tx3)">—</div>':'')
-        +presents.map(function(id){var m=DB.members.find(function(x){return x.id===id;});return m?'<div style="font-size:11px;color:var(--tx1);margin-bottom:3px">'+avaHTML(m,18)+' '+esc(m.username)+'</div>':'';}).join('')
-        +'</div>'
-        +'<div style="background:rgba(139,26,10,.06);border:1px solid rgba(139,26,10,.3);border-radius:3px;padding:10px">'
-        +'<div style="font-size:10px;font-weight:700;color:var(--red3);margin-bottom:6px">❌ ABSENTS ('+absents.length+')</div>'
-        +(absents.length===0?'<div style="font-size:11px;color:var(--tx3)">—</div>':'')
-        +absents.map(function(id){var m=DB.members.find(function(x){return x.id===id;});return m?'<div style="font-size:11px;color:var(--tx1);margin-bottom:3px">'+avaHTML(m,18)+' '+esc(m.username)+'</div>':'';}).join('')
-        +'</div>'
+        +'<div style="background:rgba(46,125,50,.06);border:1px solid rgba(56,142,60,.25);border-radius:3px;padding:10px">'
+        +'<div style="font-size:10px;font-weight:700;color:#66bb6a;letter-spacing:1px;margin-bottom:8px">PARTICIPANTS ('+participants.length+')</div>'
+        +(participants.length===0?'<div style="font-size:11px;color:var(--tx3)">Aucun participant pour l\'instant.</div>':'')
+        +participants.map(function(m){return'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'+avaHTML(m,20)+'<span style="font-size:12px;color:var(--tx1)">'+esc(m.username)+'</span></div>';}).join('')
         +'</div>'
         +'</div>';
     } else if(Object.keys(votes).length){
-      // Vote clôturé — affichage lecture seule
-      voteSection='<div style="margin-bottom:16px;background:var(--bg1);border-radius:3px;padding:12px">'
-        +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">PARTICIPATION (vote clôturé)</div>'
-        +'<div style="display:flex;gap:16px;font-size:12px">'
-        +'<span style="color:#66bb6a">✅ '+presents.length+' présent(s)</span>'
-        +'<span style="color:var(--red3)">❌ '+absents.length+' absent(s)</span>'
-        +'</div>'
+      voteSection='<div style="margin-bottom:16px;background:rgba(46,125,50,.06);border:1px solid rgba(56,142,60,.25);border-radius:3px;padding:12px">'
+        +'<div style="font-size:10px;font-weight:700;color:#66bb6a;letter-spacing:1px;margin-bottom:8px">PARTICIPANTS ('+participants.length+')</div>'
+        +(participants.length===0?'<div style="font-size:11px;color:var(--tx3)">Aucun participant.</div>':'')
+        +participants.map(function(m){return'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'+avaHTML(m,20)+'<span style="font-size:12px;color:var(--tx1)">'+esc(m.username)+'</span></div>';}).join('')
         +'</div>';
     }
 
