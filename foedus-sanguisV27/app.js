@@ -3156,6 +3156,11 @@ function renderVoteWar(w){
     else if(byVote[v.vote]) byVote[v.vote].push({m:m,v:v});
     else byVote.novote.push({m:m,v:null});
   });
+  // Trier chaque liste par ordre alphabétique
+  var sortAlpha=function(a,b){return a.m.username.localeCompare(b.m.username);};
+  byVote.present.sort(sortAlpha);
+  byVote.absent.sort(sortAlpha);
+  byVote.novote.sort(sortAlpha);
   html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
   [{key:'present',label:'Présents',icon:'✅',color:'#388e3c',bg:'rgba(46,125,50,.08)',border:'rgba(56,142,60,.3)'},
    {key:'absent',label:'Absents',icon:'❌',color:'var(--red2)',bg:'rgba(139,26,10,.06)',border:'rgba(139,26,10,.3)'},
