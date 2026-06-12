@@ -1531,19 +1531,18 @@ function pgRH(){
   var activeFilter = window._rhFilter||'tous';
   var filters = [
     {k:'tous', label:'Tous ('+members.length+')'},
-    {k:'surveiller', label:'⚠️ À surveiller'},
-    {k:'contacter', label:'📩 À contacter'},
-    {k:'discord', label:'🚫 Sans Discord'},
-    {k:'absence', label:'🏥 En absence'},
-    {k:'bas', label:'📉 Niveau <200'}
+    {k:'surveiller', label:'⚠️ Surveiller'},
+    {k:'contacter', label:'📩 Contacter'},
+    {k:'discord', label:'🚫 Discord'},
+    {k:'absence', label:'🏥 Absence'},
+    {k:'bas', label:'📉 Niv.<200'}
   ];
 
   var filterBar = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">'
     +filters.map(function(f){
-      return '<button onclick="setRHFilter(this)" data-f="'+f.k+'" class="btn '+(activeFilter===f.k?'bg':'bol')+' bsm" style="font-size:10px">'+f.label+'</button>';
+      return '<button onclick="setRHFilter(this)" data-f="'+f.k+'" class="btn '+(activeFilter===f.k?'bg':'bol')+' bsm" style="font-size:11px">'+f.label+'</button>';
     }).join('')+'</div>';
 
-  // Filtrer
   var filtered = members.filter(function(m){
     var d = getRHMemberData(m.id);
     var ws = getMemberWarStatus(m, wars);
@@ -1557,64 +1556,61 @@ function pgRH(){
 
   var h = '<div class="pan"><div class="ph"><span class="ptl">👥 Gestion RH</span>'
     +'<span style="font-size:11px;color:var(--tx3);margin-left:8px">'+filtered.length+'/'+members.length+' membres · '+wars.length+' dernières guerres</span>'
-    +'</div><div class="pb">'+filterBar+'</div>'
-    +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
-    +'<thead><tr style="border-bottom:2px solid var(--b1);color:var(--tx3);font-size:10px;text-transform:uppercase;letter-spacing:1px">'
-    +'<th style="text-align:left;padding:8px 10px;white-space:nowrap">Membre</th>'
-    +'<th style="text-align:center;padding:8px 6px;white-space:nowrap">Niv.</th>'
-    +'<th style="text-align:center;padding:8px 6px;white-space:nowrap">Score</th>'
-    +'<th style="text-align:left;padding:8px 6px;white-space:nowrap">Statut guerres</th>'
-    +'<th style="text-align:center;padding:8px 6px;white-space:nowrap">Discord</th>'
-    +'<th style="text-align:left;padding:8px 6px;white-space:nowrap">Contact</th>'
-    +'<th style="text-align:left;padding:8px 6px;white-space:nowrap">Absence</th>'
-    +'<th style="text-align:center;padding:8px 6px;white-space:nowrap">⚠️</th>'
-    +'<th style="text-align:center;padding:8px 6px;white-space:nowrap">Actions</th>'
-    +'</tr></thead><tbody>';
+    +'</div><div class="pb">'+filterBar+'</div><div style="display:flex;flex-direction:column;gap:8px;padding-bottom:8px">';
 
   filtered.forEach(function(m){
     var d = getRHMemberData(m.id);
     var ws = getMemberWarStatus(m, wars);
     var score = calcMemberScore(m);
-    var sanctions = (m.sanctions||[]).filter(function(s){return s.type&&s.type.indexOf('✅')<0;}).length;
+    var activeSanctions = (m.sanctions||[]).filter(function(s){return s.type&&s.type.indexOf('✅')<0;}).length;
     var inAbsence = d.absenceTo && new Date(d.absenceTo) >= new Date();
     var scoreColor = score>=50?'#66bb6a':score>=0?'var(--tx2)':'var(--red3)';
+    var lvlColor = m.playerLevel>0&&m.playerLevel<200?'var(--red3)':'var(--tx2)';
+    var borderLeft = inAbsence?'border-left:3px solid #f9a825;':activeSanctions>0?'border-left:3px solid var(--red3);':'border-left:3px solid transparent;';
 
-    var discordHtml = '<select onchange="setRHFieldW(this,\''+m.id+'\',\'discord\')" style="background:var(--bg2);border:1px solid var(--b1);color:var(--tx1);border-radius:3px;padding:2px 4px;font-size:10px">'
-      +'<option value="null"'+(d.discord===null?' selected':'')+'>—</option>'
-      +'<option value="true"'+(d.discord===true?' selected':'')+'>✅ Présent</option>'
-      +'<option value="false"'+(d.discord===false?' selected':'')+'>❌ Absent</option>'
+    var discordSel = '<select onchange="setRHFieldW(this,\''+m.id+'\',\'discord\')" style="flex:1;min-width:0;background:var(--bg2);border:1px solid var(--b1);color:var(--tx1);border-radius:3px;padding:3px 4px;font-size:11px">'
+      +'<option value="null"'+(d.discord===null?' selected':'')+'>— Discord</option>'
+      +'<option value="true"'+(d.discord===true?' selected':'')+'>✅ Discord OK</option>'
+      +'<option value="false"'+(d.discord===false?' selected':'')+'>❌ Sans Discord</option>'
       +'</select>';
 
-    var contactHtml = '<select onchange="setRHFieldW(this,\''+m.id+'\',\'contact\')" style="background:var(--bg2);border:1px solid var(--b1);color:var(--tx1);border-radius:3px;padding:2px 4px;font-size:10px">'
-      +'<option value=""'+(d.contact===''?' selected':'')+'>—</option>'
+    var contactSel = '<select onchange="setRHFieldW(this,\''+m.id+'\',\'contact\')" style="flex:1;min-width:0;background:var(--bg2);border:1px solid var(--b1);color:var(--tx1);border-radius:3px;padding:3px 4px;font-size:11px">'
+      +'<option value=""'+(d.contact===''?' selected':'')+'>— Contact</option>'
       +'<option value="à contacter"'+(d.contact==='à contacter'?' selected':'')+'>📩 À contacter</option>'
       +'<option value="message envoyé"'+(d.contact==='message envoyé'?' selected':'')+'>✉️ Msg envoyé</option>'
       +'<option value="en attente"'+(d.contact==='en attente'?' selected':'')+'>⏳ En attente</option>'
       +'<option value="réglé"'+(d.contact==='réglé'?' selected':'')+'>✅ Réglé</option>'
       +'</select>';
 
-    var absenceHtml = inAbsence
-      ? '<span style="font-size:10px;color:#f9a825">🏥 jusqu\'au '+fmtDate(d.absenceTo)+'</span>'
-      : '<span style="font-size:10px;color:var(--tx3)">—</span>';
+    h += '<div style="background:var(--bg1);'+borderLeft+'border:1px solid var(--b1);border-radius:4px;padding:10px 12px;">';
 
-    h += '<tr style="border-bottom:1px solid var(--b1);'+(inAbsence?'opacity:0.7':'')+'">'
-      +'<td style="padding:8px 10px;white-space:nowrap">'+avaHTML(m,22)+' <span style="font-weight:700">'+esc(m.username)+'</span>'
-      +(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')
-      +'</td>'
-      +'<td style="text-align:center;padding:6px;color:'+(m.playerLevel<200&&m.playerLevel>0?'var(--red3)':'var(--tx2)');'">'+((m.playerLevel||0)||'—')+'</td>'
-      +'<td style="text-align:center;padding:6px;color:'+scoreColor+';font-weight:700">'+score+'</td>'
-      +'<td style="padding:6px;color:'+ws.color+'">'+ws.label+'</td>'
-      +'<td style="text-align:center;padding:6px">'+discordHtml+'</td>'
-      +'<td style="padding:6px">'+contactHtml+'</td>'
-      +'<td style="padding:6px">'+absenceHtml+'</td>'
-      +'<td style="text-align:center;padding:6px">'+(sanctions>0?'<span style="color:var(--red3);font-weight:700">'+sanctions+'</span>':'—')+'</td>'
-      +'<td style="text-align:center;padding:6px;white-space:nowrap">'
-      +'<button class="btn bol bsm" style="font-size:9px" onclick="openRHMemberW(\''+m.id+'\')">📋</button>'
-      +'</td>'
-      +'</tr>';
+    h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+    h += avaHTML(m,28);
+    h += '<div style="flex:1;min-width:0">';
+    h += '<div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(m.username)
+      +(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+'</div>';
+    h += '<div style="font-size:11px;color:'+ws.color+'">'+ws.label+'</div>';
+    h += '</div>';
+    h += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">';
+    h += '<span style="font-size:12px;font-weight:700;color:'+scoreColor+'">⚔️ '+score+'</span>';
+    h += '<span style="font-size:11px;color:'+lvlColor+'">Niv.'+((m.playerLevel||0)||'—')+'</span>';
+    h += '</div></div>';
+
+    h += '<div style="display:flex;gap:6px;margin-bottom:6px">'+discordSel+contactSel+'</div>';
+
+    if(inAbsence){
+      h += '<div style="font-size:11px;color:#f9a825;margin-bottom:6px">🏥 Absent jusqu\'au '+fmtDate(d.absenceTo)+'</div>';
+    }
+
+    h += '<div style="display:flex;align-items:center;justify-content:space-between">';
+    h += activeSanctions>0
+      ? '<span style="font-size:11px;color:var(--red3);font-weight:700">⚠️ '+activeSanctions+' sanction'+(activeSanctions>1?'s':'')+'</span>'
+      : '<span style="font-size:11px;color:var(--tx4)">—</span>';
+    h += '<button class="btn bol bsm" style="font-size:11px" onclick="openRHMemberW(\''+m.id+'\')">📋 Fiche</button>';
+    h += '</div></div>';
   });
 
-  h += '</tbody></table></div></div>';
+  h += '</div></div>';
   return h;
 }
 
@@ -5528,7 +5524,8 @@ function sbMemberToLocal(r){
     sanguin:r.sanguin||false, chefGroupe:r.chef_groupe||false, grandChampion:r.grand_champion||false,
     joinDate:r.joined_at||'', note:r.note||'', units:r.units||[], avatar:r.avatar||'',
     classe:r.classe||'', classes:r.classes||[],
-    playerLevel:r.player_level||0, influenceLevel:r.influence_level||0
+    playerLevel:r.player_level||0, influenceLevel:r.influence_level||0,
+    sanctions:r.sanctions||[]
   };
 }
 function localMemberToSb(m){
@@ -5539,7 +5536,8 @@ function localMemberToSb(m){
     joined_at:m.joinDate||m.date||'',
     note:m.note||m.message||'', units:m.units||[], avatar:m.avatar||'',
     classe:m.classe||'', classes:m.classes||[],
-    player_level:m.playerLevel||0, influence_level:m.influenceLevel||0
+    player_level:m.playerLevel||0, influence_level:m.influenceLevel||0,
+    sanctions:m.sanctions||[]
   };
 }
 function sbGroupToLocal(r){
