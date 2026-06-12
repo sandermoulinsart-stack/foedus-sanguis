@@ -3470,7 +3470,7 @@ function renderThread(t){
       var canEditReply=CU&&(r.author.toLowerCase()===CU.username.toLowerCase()||HR('officier')||HR('chef_groupe'));
       var html='<div class="card" style="margin-bottom:10px">';
       html+='<div class="fbt mb12"><span class="cin fw7" style="font-size:12px">'+esc(r.author)+'</span><span class="td txs">'+esc(r.date)+'</span>';
-      if(canEditReply) html+='<button class="btn bol bsm" style="font-size:10px;margin-left:auto" onclick="editReplyW(this)" data-tid="'+t.id+'" data-ri="'+ri+'">\u270f\ufe0f</button>';
+      if(canEditReply) html+='<button class="btn bol bsm" style="font-size:10px;margin-left:auto" onclick="editReplyW(this)" data-tid="'+t.id+'" data-ri="'+ri+'">\u270f\ufe0f</button>'        +'<button class="btn bred bsm" style="font-size:10px;margin-left:4px" onclick="delReplyW(this)" data-tid="'+t.id+'" data-ri="'+ri+'">\u2715</button>';
       html+='</div>';
       if(r.image) html+='<div style="max-width:280px;height:160px;border-radius:3px;overflow:hidden;cursor:zoom-in;margin-bottom:8px" data-img="'+esc(r.image)+'" onclick="showImg(this)"><img src="'+esc(r.image)+'" style="width:100%;height:100%;object-fit:cover"></div>';
       html+='<div style="font-size:13.5px;line-height:1.7;clear:both">'+esc(r.content)+'</div>';
@@ -3483,6 +3483,21 @@ function renderThread(t){
     +'<div class="fg"><label class="fl">Image (optionnel)</label>'+imgPickerHTML('rep-img','')+'</div>'
     +'<button class="btn bg bsm" onclick="postReplyW(this)" data-id="'+t.id+'">Envoyer</button></div></div>';
 }
+function delReplyW(btn){
+  var tid=btn.dataset.tid, ri=parseInt(btn.dataset.ri);
+  var t=(DB.forumThreads||[]).find(function(x){return x.id===tid;});
+  if(!t||!t.replies[ri]) return;
+  if(!confirm('Supprimer cette réponse ?')) return;
+  t.replies.splice(ri,1);
+  CT=t;
+  sbSaveThread(t).then(function(){
+    sbLoad().then(function(){
+      go(CT&&typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(CT.tag)>=0?'form':'for');
+    });
+  }).catch(function(e){console.warn('[delReply]',e);});
+}
+
+
 function editReplyW(btn){
   var tid=btn.dataset.tid, ri=parseInt(btn.dataset.ri);
   var t=(DB.forumThreads||[]).find(function(x){return x.id===tid;});
