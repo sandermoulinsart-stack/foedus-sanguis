@@ -2305,6 +2305,7 @@ function pgMbr(){
 
   var activeFilter=window._mbrFilter||'tous';
   var activeSearch=window._mbrSearch||'';
+  var compact=window._mbrCompact!==false;
 
   var filters=[
     {k:'tous',   label:'Tous ('+members.length+')'},
@@ -2334,12 +2335,35 @@ function pgMbr(){
     return true;
   });
 
+  var toggleBtn='<button onclick="setMbrCompact('+(!compact)+')" class="btn bol bsm" style="font-size:10px">'+(compact?'☰ Détails':'⊟ Compact')+'</button>';
+
   var html='<div class="pan"><div class="ph"><span class="ptl">Combattants de la Maison</span>'
-    +'<span style="margin-left:auto;font-size:11px;color:var(--tx3)">'+filtered.length+'/'+members.length+' membre(s)</span></div>'
+    +'<span style="font-size:11px;color:var(--tx3);margin-left:8px">'+filtered.length+'/'+members.length+'</span>'
+    +toggleBtn+'</div>'
     +'<div class="pb">'+filterBar+searchBar+'</div><div>';
 
   if(!filtered.length){
     html+='<div class="td ta-c" style="padding:24px;color:var(--tx3)">Aucun membre correspondant.</div>';
+  } else if(compact){
+    html+=filtered.map(function(m){
+      var isMe=m.id===CU.id;
+      var sanctions=(m.sanctions||[]).filter(function(s){return s.type&&s.type.indexOf('✅')<0;}).length;
+      return'<div style="padding:7px 16px;border-bottom:1px solid var(--b1);cursor:pointer;display:flex;align-items:center;gap:10px;'+(isMe?'background:rgba(201,162,39,.05)':'')+'"'
+        +' onclick="openMbrProfileW(this)" data-id="'+m.id+'">'
+        +avaHTML(m,28)
+        +'<div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+        +'<span style="font-size:13px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+'</span>'
+        +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'" style="font-size:9px">'+esc(m.status)+'</span>'
+        +rb(m)
+        +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️</span>':'')
+        +'</div>'
+        +'<div style="display:flex;gap:4px;flex-shrink:0">'
+        +(HR('officier')?'<button class="btn bol bsm" onclick="editMbrW(this);event.stopPropagation()" data-id="'+m.id+'" style="font-size:10px">✏️</button>':'')
+        +(HR('officier')&&m.id!==CU.id?'<button class="btn bred bsm" onclick="delMbrW(this);event.stopPropagation()" data-id="'+m.id+'" style="font-size:10px">✕</button>':'')
+        +'<span style="font-size:12px;color:var(--tx3)">›</span>'
+        +'</div>'
+        +'</div>';
+    }).join('');
   } else {
     html+=filtered.map(function(m){
       var isMe=m.id===CU.id;
@@ -2347,7 +2371,7 @@ function pgMbr(){
       var maxMastery=(m.units||[]).reduce(function(a,u){return Math.max(a,u.mastery||0);},0);
       return'<div style="padding:12px 16px;border-bottom:1px solid var(--b1);cursor:pointer;'+(isMe?'background:rgba(201,162,39,.05)':'')+'"'
         +' onclick="openMbrProfileW(this)" data-id="'+m.id+'">'
-        +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+        +'<div style="display:flex;align-items:center;gap:10px">'
         +avaHTML(m,38)
         +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:14px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+'</div>'
@@ -2356,15 +2380,13 @@ function pgMbr(){
         +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️ '+sanctions+'</span>':'')
         +'</div>'
         +(m.classes&&m.classes.length?'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">'+memberClassBadges(m)+'</div>':'')
+        +'<div style="font-size:10px;color:var(--tx3);margin-top:4px">🛡️ '+(m.units&&m.units.length?m.units.length+' unité(s) · max '+maxMastery+'★':'Aucune unité')+'</div>'
         +'</div>'
         +'<div style="display:flex;gap:6px;flex-shrink:0;align-items:center">'
         +(HR('officier')?'<button class="btn bol bsm" onclick="editMbrW(this);event.stopPropagation()" data-id="'+m.id+'">✏️</button>':'')
         +(HR('officier')&&m.id!==CU.id?'<button class="btn bred bsm" onclick="delMbrW(this);event.stopPropagation()" data-id="'+m.id+'">✕</button>':'')
         +'<span style="font-size:12px;color:var(--tx3)">›</span>'
-        +'</div></div>'
-        +'<div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--tx3)">'
-        +'<span>🛡️ '+(m.units&&m.units.length?m.units.length+' unité(s) · max '+maxMastery+'★':'Aucune unité')+'</span>'
-        +(m.joinDate?'<span>Depuis '+fmtDate(m.joinDate.slice(0,10))+'</span>':'')
+        +'</div>'
         +'</div>'
         +'</div>';
     }).join('');
@@ -2372,6 +2394,8 @@ function pgMbr(){
   html+='</div></div>';
   return html;
 }
+
+function setMbrCompact(v){ window._mbrCompact=v; var el=document.getElementById('content'); if(el){var s=el.scrollTop;el.innerHTML=pgMbr();el.scrollTop=s;} }
 
 function setMbrFilter(btn){ window._mbrFilter=btn.dataset.f; var el=document.getElementById('content'); if(el){var s=el.scrollTop;el.innerHTML=pgMbr();el.scrollTop=s;} }
 function setMbrSearch(v){ window._mbrSearch=v; var el=document.getElementById('content'); if(el){var s=el.scrollTop;el.innerHTML=pgMbr();el.scrollTop=s;} }
