@@ -122,11 +122,11 @@ function localThreadToSb(t){
 }
 function sbFormationToLocal(r){
   return {id:r.id,title:r.title,icon:r.icon||'📖',desc:r.description||'',
-    image:r.image||'',thumbnail:r.thumbnail||'',content:r.content||'',createdBy:r.created_by||'',featured:r.featured||false};
+    image:r.image||'',thumbnail:r.thumbnail||'',content:r.content||'',comments:r.comments||[],createdBy:r.created_by||'',featured:r.featured||false};
 }
 function localFormationToSb(f){
   return {id:f.id,title:f.title,icon:f.icon||'📖',description:f.desc||'',
-    image:f.image||'',thumbnail:f.thumbnail||'',content:f.content||'',created_by:f.createdBy||CU.username||'',featured:f.featured||false};
+    image:f.image||'',thumbnail:f.thumbnail||'',content:f.content||'',comments:f.comments||[],created_by:f.createdBy||CU.username||'',featured:f.featured||false};
 }
 function sbEventToLocal(r){
   return {id:r.id,title:r.title,date:r.date||'',time:r.time||'',description:r.description||'',image:r.image||'',featured:r.featured||false,votes:r.votes||{},voteOpen:r.vote_open||false};
@@ -3785,8 +3785,74 @@ function renderFormation(f){
     +(f.image?'<div style="width:100%;border-radius:3px;margin-bottom:16px"><img src="'+esc(f.image)+'" style="width:100%;height:auto;display:block;border-radius:3px"></div>':'')
     +'<div class="div"></div>'
     +'<div style="font-size:15px;line-height:1.9;white-space:pre-line">'+esc(f.content)+'</div>'
+    +'</div></div>'
+    // Section commentaires
+    +'<div class="pan" style="margin-top:12px"><div class="ph"><span class="ptl">💬 Commentaires ('+(f.comments||[]).length+')</span></div><div class="pb">'
+    +((f.comments||[]).length===0?'<div class="td tsm" style="padding:8px 0;color:var(--tx3)">Aucun commentaire.</div>':'')
+    +(f.comments||[]).map(function(cm,ci){
+      var canEdit=CU&&(cm.author.toLowerCase()===CU.username.toLowerCase()||HR('officier'));
+      var html='<div class="card" style="margin-bottom:10px">';
+      html+='<div class="fbt mb12"><span class="cin fw7" style="font-size:12px">'+esc(cm.author)+'</span><span class="td txs">'+esc(cm.date)+'</span>';
+      if(canEdit) html+='<button class="btn bol bsm" style="font-size:10px;margin-left:auto" onclick="editFormationComment(this)" data-fid="'+f.id+'" data-ci="'+ci+'">✏️</button>'
+        +'<button class="btn bred bsm" style="font-size:10px;margin-left:4px" onclick="delFormationComment(this)" data-fid="'+f.id+'" data-ci="'+ci+'">✕</button>';
+      html+='</div>';
+      html+='<div style="font-size:13.5px;line-height:1.7">'+esc(cm.content)+'</div>';
+      html+=reactionsHTML(cm.reactions, f.id+'-c'+ci);
+      html+='</div>';
+      return html;
+    }).join('')
+    +'<div class="fg" style="margin-top:12px"><textarea class="ft" id="fc-txt-'+f.id+'" placeholder="Ajouter un commentaire..."></textarea></div>'
+    +'<button class="btn bg bsm" onclick="postFormationComment(this)" data-fid="'+f.id+'">Envoyer</button>'
     +'</div></div>';
 }
+// ── Commentaires des fiches de formation ─────────────────────
+function postFormationComment(btn){
+  var fid=btn.dataset.fid;
+  var f=(DB.formations||[]).find(function(x){return x.id===fid;});
+  if(!f) return;
+  var txt=document.getElementById('fc-txt-'+fid);
+  if(!txt||!txt.value.trim()) return;
+  f.comments=f.comments||[];
+  f.comments.push({author:CU.username, date:nowDate(), content:txt.value.trim(), reactions:{}});
+  txt.value='';
+  sbSaveFormation(f).then(function(){
+    CFm=f;
+    var el=document.getElementById('content');
+    if(el){var s=el.scrollTop;el.innerHTML=renderFormation(f);el.scrollTop=s;}
+  }).catch(function(e){console.warn('[formComment]',e);});
+}
+
+function editFormationComment(btn){
+  var fid=btn.dataset.fid, ci=parseInt(btn.dataset.ci);
+  var f=(DB.formations||[]).find(function(x){return x.id===fid;});
+  if(!f||!f.comments[ci]) return;
+  var cm=f.comments[ci];
+  OM('Modifier le commentaire',
+    '<div class="fg"><textarea class="ft" id="ec-txt" style="min-height:80px">'+esc(cm.content)+'</textarea></div>',
+    [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
+      cm.content=document.getElementById('ec-txt').value.trim()||cm.content;
+      sbSaveFormation(f).then(function(){
+        CFm=f; CM();
+        var el=document.getElementById('content');
+        if(el){el.innerHTML=renderFormation(f);}
+      }).catch(function(e){console.warn('[editFormComment]',e);});
+    }}]);
+}
+
+function delFormationComment(btn){
+  var fid=btn.dataset.fid, ci=parseInt(btn.dataset.ci);
+  if(!confirm('Supprimer ce commentaire ?')) return;
+  var f=(DB.formations||[]).find(function(x){return x.id===fid;});
+  if(!f) return;
+  f.comments.splice(ci,1);
+  sbSaveFormation(f).then(function(){
+    CFm=f;
+    var el=document.getElementById('content');
+    if(el){el.innerHTML=renderFormation(f);}
+  }).catch(function(e){console.warn('[delFormComment]',e);});
+}
+
+
 function viewFormation(id){CFm=(DB.formations||[]).find(function(f){return f.id===id;});FmV='detail';go('form');}
 function delFormationW(el){
   if(!(HR('officier')||HR('formation')))return;
