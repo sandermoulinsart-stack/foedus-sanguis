@@ -1467,6 +1467,52 @@ function delHierNode(id){
 // SECTION RH — Gestion des membres
 // ════════════════════════════════════════════════════════════════
 
+function openRHRulesW(){
+  var html = '<div style="font-size:13px;line-height:1.7;color:var(--tx2)">'
+
+    // Statuts guerres
+    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">STATUT GUERRES (automatique)</div>'
+    +'<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">'
+    +'<div style="display:flex;align-items:center;gap:10px"><span style="color:#66bb6a;font-size:16px">✅</span><div><div style="font-weight:700;font-size:12px">Présent régulier</div><div style="font-size:11px;color:var(--tx3)">A voté "présent" à toutes les guerres récentes, avant l\'heure.</div></div></div>'
+    +'<div style="display:flex;align-items:center;gap:10px"><span style="color:var(--red3);font-size:16px">❌</span><div><div style="font-weight:700;font-size:12px">Absent régulier</div><div style="font-size:11px;color:var(--tx3)">A voté "absent" à toutes les guerres récentes.</div></div></div>'
+    +'<div style="display:flex;align-items:center;gap:10px"><span style="color:#f9a825;font-size:16px">⏰</span><div><div style="font-weight:700;font-size:12px">Toujours en retard</div><div style="font-size:11px;color:var(--tx3)">Vote présent uniquement après l\'heure de début de guerre.</div></div></div>'
+    +'<div style="display:flex;align-items:center;gap:10px"><span style="color:#64b5f6;font-size:16px">〜</span><div><div style="font-weight:700;font-size:12px">Irrégulier</div><div style="font-size:11px;color:var(--tx3)">Participation variable — présent parfois, absent d\'autres fois.</div></div></div>'
+    +'<div style="display:flex;align-items:center;gap:10px"><span style="color:var(--tx3);font-size:16px">⏳</span><div><div style="font-weight:700;font-size:12px">Ne vote pas</div><div style="font-size:11px;color:var(--tx3)">Aucun vote enregistré sur les guerres récentes.</div></div></div>'
+    +'</div>'
+
+    // Score
+    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">SCORE ⚔️ (automatique)</div>'
+    +'<div style="background:var(--bg1);border-radius:4px;padding:10px 12px;margin-bottom:16px;font-size:12px">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">'
+    +'<div><span style="color:#66bb6a;font-weight:700">+5</span> Vote présent (à l\'heure)</div>'
+    +'<div><span style="color:#f9a825;font-weight:700">+3</span> Vote présent (en retard)</div>'
+    +'<div><span style="color:var(--tx2);font-weight:700">+3</span> Vote absent</div>'
+    +'<div><span style="color:var(--red3);font-weight:700">−1</span> Aucun vote</div>'
+    +'</div></div>'
+
+    // Champs manuels
+    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">CHAMPS MANUELS</div>'
+    +'<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">'
+    +'<div style="font-size:12px"><span style="font-weight:700">Discord</span> — Indiquer si le membre est présent sur le serveur Discord.</div>'
+    +'<div style="font-size:12px"><span style="font-weight:700">Contact</span> — Suivre l\'état des démarches : à contacter → message envoyé → en attente → réglé.</div>'
+    +'</div>'
+
+    // Fiche membre
+    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">FICHE MEMBRE 📋</div>'
+    +'<div style="font-size:12px;margin-bottom:16px">Accessible via le bouton <strong>📋 Fiche</strong>. Permet d\'ajouter des <span style="color:var(--red3)">sanctions</span>, de déclarer une <span style="color:#f9a825">absence</span> avec dates, et de rédiger des <strong>notes internes</strong> visibles uniquement par l\'équipe RH.</div>'
+
+    // Bordures colorées
+    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">INDICATEURS VISUELS</div>'
+    +'<div style="display:flex;flex-direction:column;gap:6px">'
+    +'<div style="display:flex;align-items:center;gap:10px"><div style="width:4px;height:32px;background:#f9a825;border-radius:2px;flex-shrink:0"></div><div style="font-size:12px">Membre en <strong>absence déclarée</strong> (dates renseignées dans la fiche).</div></div>'
+    +'<div style="display:flex;align-items:center;gap:10px"><div style="width:4px;height:32px;background:var(--red3);border-radius:2px;flex-shrink:0"></div><div style="font-size:12px">Membre avec une ou plusieurs <strong>sanctions actives</strong> (non résolues).</div></div>'
+    +'</div>'
+
+    +'</div>';
+
+  OM('📖 Règles — Gestion RH', html, [{lbl:'Fermer', cls:'bol', fn:CM}]);
+}
+
 function isRH(){
   if(!CU) return false;
   if(HR('admin')) return true;
@@ -1519,9 +1565,9 @@ function getMemberWarStatus(m, wars){
 function pgRH(){
   if(!isRH()) return '<div class="td ta-c" style="padding:60px">⛔ Accès réservé.</div>';
 
-  document.getElementById('tact').innerHTML = HR('admin')
-    ? '<button class="btn bol bsm" onclick="openRHUsersW()">👥 Accès RH</button>'
-    : '';
+  document.getElementById('tact').innerHTML =
+    '<button class="btn bol bsm" onclick="openRHRulesW()" style="margin-right:4px">📖 Règles</button>'
+    + (HR('admin') ? '<button class="btn bol bsm" onclick="openRHUsersW()">👥 Accès RH</button>' : '');
 
   var members = DB.members.filter(function(m){return m.status!=='attente';})
     .sort(function(a,b){return a.username.localeCompare(b.username);});
