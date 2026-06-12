@@ -1513,6 +1513,122 @@ function openRHRulesW(){
   OM('📖 Règles — Gestion RH', html, [{lbl:'Fermer', cls:'bol', fn:CM}]);
 }
 
+function openRHOverviewW(){
+  var members = DB.members.filter(function(m){return m.status!=='attente';})
+    .sort(function(a,b){return a.username.localeCompare(b.username);});
+  var wars = (DB.voteWars||[]).filter(function(w){return w.status==='closed';})
+    .sort(function(a,b){return a.date.localeCompare(b.date)||a.time.localeCompare(b.time);}).slice(-10);
+  var today = new Date();
+
+  // ── Compteurs globaux ────────────────────────────
+  var cPresent=0, cAbsent=0, cIrreg=0, cNoVote=0, cLate=0, cDeclared=0;
+  members.forEach(function(m){
+    var ws = getMemberWarStatus(m, wars);
+    var d  = getRHMemberData(m.id);
+    if(ws.label.indexOf('Présent régulier')>=0)       cPresent++;
+    else if(ws.label.indexOf('Absent régulier')>=0)   cAbsent++;
+    else if(ws.label.indexOf('en retard')>=0)         cLate++;
+    else if(ws.label.indexOf('Irrégulier')>=0)        cIrreg++;
+    else if(ws.label.indexOf('Ne vote pas')>=0)       cNoVote++;
+    if(d.absenceTo && new Date(d.absenceTo)>=today)   cDeclared++;
+  });
+
+  // ── Légende couleurs ────────────────────────────
+  var legend = '<div style="display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:14px;font-size:11px">'
+    +'<span><span style="display:inline-block;width:12px;height:12px;background:#2e7d32;border-radius:2px;vertical-align:middle;margin-right:4px"></span>Présent</span>'
+    +'<span><span style="display:inline-block;width:12px;height:12px;background:#f9a825;border-radius:2px;vertical-align:middle;margin-right:4px"></span>Retard</span>'
+    +'<span><span style="display:inline-block;width:12px;height:12px;background:#b71c1c;border-radius:2px;vertical-align:middle;margin-right:4px"></span>Absent</span>'
+    +'<span><span style="display:inline-block;width:12px;height:12px;background:#37474f;border-radius:2px;vertical-align:middle;margin-right:4px"></span>Pas de vote</span>'
+    +'<span><span style="display:inline-block;width:12px;height:12px;background:#4a148c;border-radius:2px;border:1px solid #7b1fa2;vertical-align:middle;margin-right:4px"></span>Absence déclarée</span>'
+    +'</div>';
+
+  // ── Résumé compteurs ────────────────────────────
+  var stats = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">'
+    +_rhStat('✅ Réguliers',cPresent,'#2e7d32')
+    +_rhStat('❌ Absents',cAbsent,'#b71c1c')
+    +_rhStat('⏰ Retards',cLate,'#f9a825')
+    +_rhStat('〜 Irréguliers',cIrreg,'#64b5f6')
+    +_rhStat('⏳ Ne votent pas',cNoVote,'var(--tx3)')
+    +_rhStat('🏥 Absences décl.',cDeclared,'#7b1fa2')
+    +'</div>';
+
+  // ── Timeline grille ────────────────────────────
+  var warCols = wars.map(function(w){
+    var dt = w.date ? w.date.slice(5).replace('-','/') : '—';
+    return '<th style="text-align:center;padding:4px 6px;font-size:9px;color:var(--tx3);font-weight:600;white-space:nowrap;min-width:36px">'+dt+'</th>';
+  }).join('');
+
+  var rows = members.map(function(m){
+    var d = getRHMemberData(m.id);
+    var inAbsence = d.absenceTo && new Date(d.absenceTo) >= today;
+    var activeSanctions = (m.sanctions||[]).filter(function(s){return s.type&&s.type.indexOf('✅')<0;}).length;
+
+    var nameStyle = 'font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px;color:var(--tx1)';
+    if(inAbsence) nameStyle += ';color:#ce93d8';
+
+    var cells = wars.map(function(w){
+      var v = (w.votes||{})[m.id];
+      var warT = parseLocalDateTime(w.date, w.time);
+
+      // Absence déclarée sur cette période ?
+      var warDate = w.date;
+      var declaredThisDay = d.absenceFrom && d.absenceTo && warDate >= d.absenceFrom && warDate <= d.absenceTo;
+
+      var bg, title;
+      if(declaredThisDay && (!v || v.vote==='absent')){
+        bg='#4a148c'; title='Absence déclarée';
+      } else if(!v){
+        bg='#37474f'; title='Pas de vote';
+      } else if(v.vote==='present'){
+        var voteT = v.updatedAt ? new Date(v.updatedAt).getTime() : 0;
+        var late = warT && voteT > warT;
+        bg = late ? '#f9a825' : '#2e7d32';
+        title = late ? 'Présent (retard)' : 'Présent';
+      } else {
+        bg='#b71c1c'; title='Absent';
+      }
+      return '<td style="text-align:center;padding:3px 2px"><div title="'+title+'" style="width:28px;height:18px;background:'+bg+';border-radius:2px;margin:0 auto"></div></td>';
+    }).join('');
+
+    var sanctionBadge = activeSanctions > 0
+      ? '<span style="font-size:9px;color:var(--red3);margin-left:4px">⚠️</span>' : '';
+
+    return '<tr style="border-bottom:1px solid rgba(255,255,255,0.04)">'
+      +'<td style="padding:4px 8px 4px 0">'+avaHTML(m,18)+'</td>'
+      +'<td style="padding:4px 6px 4px 4px"><span style="'+nameStyle+'">'+esc(m.username)+sanctionBadge+'</span></td>'
+      +cells
+      +'</tr>';
+  }).join('');
+
+  var timeline = '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">'
+    +'<table style="border-collapse:collapse;width:100%">'
+    +'<thead><tr>'
+    +'<th colspan="2" style="text-align:left;padding:4px 8px 4px 0;font-size:10px;color:var(--tx3)">MEMBRE</th>'
+    +warCols
+    +'</tr></thead>'
+    +'<tbody>'+rows+'</tbody>'
+    +'</table></div>';
+
+  var noWars = wars.length === 0
+    ? '<div style="color:var(--tx3);font-size:12px;text-align:center;padding:20px">Aucune guerre clôturée.</div>'
+    : '';
+
+  var html = '<div style="font-size:13px">'
+    + stats
+    + legend
+    + (noWars || timeline)
+    + '</div>';
+
+  OM('📊 Vue d\'ensemble RH', html, [{lbl:'Fermer', cls:'bol', fn:CM}]);
+}
+
+function _rhStat(label, count, color){
+  return '<div style="background:var(--bg1);border-radius:4px;padding:8px 10px;border-left:3px solid '+color+'">'
+    +'<div style="font-size:18px;font-weight:700;color:'+color+'">'+count+'</div>'
+    +'<div style="font-size:10px;color:var(--tx3)">'+label+'</div>'
+    +'</div>';
+}
+
 function isRH(){
   if(!CU) return false;
   if(HR('admin')) return true;
@@ -1566,7 +1682,8 @@ function pgRH(){
   if(!isRH()) return '<div class="td ta-c" style="padding:60px">⛔ Accès réservé.</div>';
 
   document.getElementById('tact').innerHTML =
-    '<button class="btn bol bsm" onclick="openRHRulesW()" style="margin-right:4px">📖 Règles</button>'
+    '<button class="btn bol bsm" onclick="openRHOverviewW()" style="margin-right:4px">📊 Vue</button>'
+    + '<button class="btn bol bsm" onclick="openRHRulesW()" style="margin-right:4px">📖 Règles</button>'
     + (HR('admin') ? '<button class="btn bol bsm" onclick="openRHUsersW()">👥 Accès RH</button>' : '');
 
   var members = DB.members.filter(function(m){return m.status!=='attente';})
