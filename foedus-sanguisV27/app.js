@@ -616,8 +616,8 @@ function sDB(){
 var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{}}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
-var RL={admin:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
-var RN={admin:'Admin',baron:'Baron',officier:'Officier',evenement:'Resp. Événements',recrutement:'Resp. Recrutement',formation:'Resp. Formation',garde_sanguin:'Garde Sanguin',membre:'Membre',recrue:'Recrue'};
+var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
+var RN={admin:'Admin',admin_assistant:'Admin Assistant',baron:'Baron',officier:'Officier',evenement:'Resp. Événements',recrutement:'Resp. Recrutement',formation:'Resp. Formation',garde_sanguin:'Garde Sanguin',membre:'Membre',recrue:'Recrue'};
 var MO=['','Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
 
 
@@ -631,6 +631,7 @@ function HR(r){
   if(!CU)return false;
   var role=_HR_ROLE||CU.role;
   if(role==='admin')return true;
+  if(role==='admin_assistant'&&r!=='admin')return true;
   return(RL[role]||0)>=(RL[r]||0);
 }
 function _setHRRole(role){_HR_ROLE=role;} // Appelé uniquement au login
@@ -649,7 +650,7 @@ function st(n,mx){
   return h;
 }
 function rb(m){
-  var cls={admin:'badm',baron:'bc',officier:'bo',evenement:'bev',recrutement:'bre',formation:'bfo',garde_sanguin:'bgs',membre:'bmb',recrue:'brc'};
+  var cls={admin:'badm',admin_assistant:'badm',baron:'bc',officier:'bo',evenement:'bev',recrutement:'bre',formation:'bfo',garde_sanguin:'bgs',membre:'bmb',recrue:'brc'};
   return '<span class="badge '+(cls[m.role]||'bmb')+'">'+(RN[m.role]||m.role)+'</span>';
 }
 function avaHTML(m,sz){
@@ -2940,25 +2941,51 @@ function openAddMbr(){
 }
 function editMbr(id){
   var m=gM(id);if(!m)return;
+  var myRole=_HR_ROLE||CU.role;
+
+  // Bloquer modification d'un admin par non-admin_assistant/admin
+  if(m.role==='admin'&&myRole!=='admin'&&myRole!=='admin_assistant'){
+    return alert('Seul un Admin Assistant ou Admin peut modifier le profil d\'un Admin.');
+  }
+  // Bloquer modification d'un admin_assistant par baron et en dessous
+  if(m.role==='admin_assistant'&&myRole!=='admin'&&myRole!=='admin_assistant'){
+    return alert('Seul un Admin Assistant ou Admin peut modifier le profil d\'un Admin Assistant.');
+  }
+
+  // Filtrer les rôles disponibles selon le rôle de l'éditeur
+  var allowedRoles = Object.entries(RN).filter(function(e){
+    var rk = e[0];
+    // admin : seul admin peut l'attribuer
+    if(rk==='admin') return myRole==='admin';
+    // admin_assistant : admin, admin_assistant ou baron peuvent l'attribuer
+    if(rk==='admin_assistant') return myRole==='admin'||myRole==='admin_assistant'||myRole==='baron';
+    return true;
+  });
+
   OM('Modifier le membre',
     '<div class="fg"><label class="fl">Pseudo</label><input class="fi" id="em-u" value="'+esc(m.username)+'"></div>'
-    +'<div class="fr2"><div class="fg"><label class="fl">Rôle</label><select class="fs" id="em-r">'+Object.entries(RN).map(function(e){return'<option value="'+e[0]+'"'+(m.role===e[0]?' selected':'')+'>'+e[1]+'</option>';}).join('')+'</select></div>'
+    +'<div class="fr2"><div class="fg"><label class="fl">Rôle</label><select class="fs" id="em-r">'+allowedRoles.map(function(e){return'<option value="'+e[0]+'"'+(m.role===e[0]?' selected':'')+'>'+e[1]+'</option>';}).join('')+'</select></div>'
     +'<div class="fg"><label class="fl">Statut</label><select class="fs" id="em-s"><option value="actif"'+(m.status==='actif'?' selected':'')+'>Actif</option><option value="inactif"'+(m.status==='inactif'?' selected':'')+'>Inactif</option></select></div></div>'
     +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-sg"'+(m.sanguin?' checked':'')+'>Garde Sanguin 🩸</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-cg"'+(m.chefGroupe?' checked':'')+'>Chef de Groupe 🗡️</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-gc"'+(m.grandChampion?' checked':'')+'>Grand Champion 🏆</label></div>'
     +'<div class="fg"><label class="fl">Note</label><input class="fi" id="em-n" value="'+esc(m.note||'')+'"></div>'
     +'<div class="fg"><label class="fl">Nouveau PIN (vide = inchangé)</label><input class="fi" type="password" id="em-p"></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
+      var newRole=gVal('em-r');
+      // Vérif finale côté client : officier ne peut pas attribuer admin ou admin_assistant
+      if((newRole==='admin'&&myRole!=='admin')||(newRole==='admin_assistant'&&myRole!=='admin'&&myRole!=='admin_assistant'&&myRole!=='baron')){
+        return alert('Vous n\'avez pas les droits pour attribuer ce rôle.');
+      }
       m.username=sanitize(gVal('em-u'),50)||m.username;
-      m.role=gVal('em-r');m.status=gVal('em-s');
+      m.role=newRole;m.status=gVal('em-s');
       m.sanguin=gChk('em-sg');m.chefGroupe=gChk('em-cg');m.grandChampion=gChk('em-gc');m.note=gVal('em-n');
       var np=gVal('em-p');
       function save(){
-  if(m.id===CU.id)CU=m;
-  var idx=DB.members.findIndex(function(x){return x.id===m.id;});
-  if(idx>=0)DB.members[idx]=m;
-  CM();go('mbr');
-  sbSaveMember(m).catch(function(e){console.warn('[editMbr]',e);});
-}
+        if(m.id===CU.id)CU=m;
+        var idx=DB.members.findIndex(function(x){return x.id===m.id;});
+        if(idx>=0)DB.members[idx]=m;
+        CM();go('mbr');
+        sbSaveMember(m).catch(function(e){console.warn('[editMbr]',e);});
+      }
       if(np){sha256(np).then(function(h){m.pin=h;save();});}else save();
     }}]);
 }
