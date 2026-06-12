@@ -2403,6 +2403,12 @@ function openMbrProfile(id){
   if(m.grandChampion) html+='<span class="badge" style="background:rgba(201,162,39,.15);color:var(--gold)">🏆 Grand Champion</span>';
   html+='</div>';
   if(m.joinDate) html+='<div style="font-size:11px;color:var(--tx3);margin-top:6px">Membre depuis '+fmtDate(m.joinDate.slice(0,10))+'</div>';
+  if(m.playerLevel||m.influenceLevel){
+    html+='<div style="display:flex;justify-content:center;gap:12px;margin-top:8px">';
+    if(m.playerLevel) html+='<div style="background:var(--bg1);border:1px solid var(--golddim);border-radius:3px;padding:4px 12px;font-size:11px;color:var(--gold)">⚔️ Niveau joueur : <strong>'+m.playerLevel+'</strong></div>';
+    if(m.influenceLevel) html+='<div style="background:var(--bg1);border:1px solid rgba(100,181,246,.4);border-radius:3px;padding:4px 12px;font-size:11px;color:#64b5f6">👑 Influence : <strong>'+m.influenceLevel+'</strong></div>';
+    html+='</div>';
+  }
   html+='</div>';
 
   if(m.classes&&m.classes.length){
@@ -4918,6 +4924,11 @@ function postProfil(){
   h+='<div class="td tsm mt8">'+rb(CU)+'</div>';
   h+='<div class="td txs mt8">Membre depuis '+fmtDate(CU.joinDate)+'</div></div></div>';
   h+='<div class="div"></div>';
+  h+='<div class="fr2">';
+  h+='<div class="fg"><label class="fl">⚔️ Niveau joueur</label><input class="fi" type="number" id="prof-lvl" value="'+(CU.playerLevel||'')+'" min="0" placeholder="ex: 45" style="max-width:120px"></div>';
+  h+='<div class="fg"><label class="fl">👑 Niveau d\'influence</label><input class="fi" type="number" id="prof-inf" value="'+(CU.influenceLevel||'')+'" min="0" placeholder="ex: 12" style="max-width:120px"></div>';
+  h+='</div>';
+  h+='<div class="div"></div>';
   h+='<div class="fg"><label class="fl">⚔️ Mes classes &amp; maîtrise</label>';
   h+='<div style="font-size:11px;color:var(--tx3);margin-bottom:10px">Coche les classes que tu maîtrises et clique les ★ pour indiquer ton niveau (1 à 5)</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-bottom:12px">';
@@ -4960,6 +4971,11 @@ function postProfil(){
 function updateClassPicker(){}
 
 function saveClasses(){
+  // Sauvegarder niveau joueur et influence
+  var lvlEl=document.getElementById('prof-lvl');
+  var infEl=document.getElementById('prof-inf');
+  if(lvlEl) CU.playerLevel=parseInt(lvlEl.value)||0;
+  if(infEl) CU.influenceLevel=parseInt(infEl.value)||0;
   var classes = [];
   document.querySelectorAll('.cp-check:checked').forEach(function(chk){
     var c = chk.dataset.class;
@@ -5168,7 +5184,8 @@ function sbMemberToLocal(r){
     role:r.role||'recrue', status:r.status||'actif',
     sanguin:r.sanguin||false, chefGroupe:r.chef_groupe||false, grandChampion:r.grand_champion||false,
     joinDate:r.joined_at||'', note:r.note||'', units:r.units||[], avatar:r.avatar||'',
-    classe:r.classe||'', classes:r.classes||[]
+    classe:r.classe||'', classes:r.classes||[],
+    playerLevel:r.player_level||0, influenceLevel:r.influence_level||0
   };
 }
 function localMemberToSb(m){
@@ -5178,7 +5195,8 @@ function localMemberToSb(m){
     sanguin:m.sanguin||false, chef_groupe:m.chefGroupe||false, grand_champion:m.grandChampion||false,
     joined_at:m.joinDate||m.date||'',
     note:m.note||m.message||'', units:m.units||[], avatar:m.avatar||'',
-    classe:m.classe||'', classes:m.classes||[]
+    classe:m.classe||'', classes:m.classes||[],
+    player_level:m.playerLevel||0, influence_level:m.influenceLevel||0
   };
 }
 function sbGroupToLocal(r){
