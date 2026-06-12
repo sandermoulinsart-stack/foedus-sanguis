@@ -108,6 +108,23 @@ function sbStatus(msg, color) {
   if(el) { el.textContent = msg; el.style.color = color||'var(--gold)'; }
 }
 
+function sbAuditLog(action, targetId, targetName, detail){
+  if(!CU) return;
+  var entry = {
+    action: action,
+    by_id: CU.id,
+    by_name: CU.username,
+    target_id: targetId||'',
+    target_name: targetName||'',
+    detail: detail||''
+  };
+  fetch(SB_URL+'/rest/v1/audit_log', {
+    method: 'POST',
+    headers: Object.assign({}, SB._headers, {'Prefer':'return=minimal'}),
+    body: JSON.stringify([entry])
+  }).catch(function(e){console.warn('[audit]',e);});
+}
+
 // ── Load ALL data from Supabase into DB
 
 function sbThreadToLocal(r){
@@ -2979,12 +2996,16 @@ function editMbr(id){
       m.role=newRole;m.status=gVal('em-s');
       m.sanguin=gChk('em-sg');m.chefGroupe=gChk('em-cg');m.grandChampion=gChk('em-gc');m.note=gVal('em-n');
       var np=gVal('em-p');
+      var oldRole = m.role;
       function save(){
         if(m.id===CU.id)CU=m;
         var idx=DB.members.findIndex(function(x){return x.id===m.id;});
         if(idx>=0)DB.members[idx]=m;
         CM();go('mbr');
         sbSaveMember(m).catch(function(e){console.warn('[editMbr]',e);});
+        if(m.role !== oldRole){
+          sbAuditLog('role_change', m.id, m.username, (RN[oldRole]||oldRole)+' → '+(RN[m.role]||m.role));
+        }
       }
       if(np){sha256(np).then(function(h){m.pin=h;save();});}else save();
     }}]);
@@ -5414,12 +5435,54 @@ function pgParam(){
       diagBlock='<div class="pan" style="border-left:3px solid #66bb6a"><div class="ph"><span class="ptl" style="color:#66bb6a">✅ Aucun vote orphelin</span></div></div>';
     }
   }
-  return diagBlock
+  var auditBlock = HR('admin')
+    ? '<div class="pan"><div class="ph"><span class="ptl">🔍 Journal d\'audit</span>'
+      +'<button class="btn bol bsm" onclick="openAuditLogW()">Consulter</button>'
+      +'</div><div class="pb"><p class="td tsm">Historique des changements de rôles et actions sensibles.</p></div></div>'
+    : '';
+
+  return diagBlock + auditBlock
     +'<div class="pan"><div class="ph"><span class="ptl">⚙️ Configuration</span></div><div class="pb">'
     +'<div class="fg"><label class="fl">Nom de la Maison</label><input class="fi" id="p-name" value="'+esc(DB.houseName)+'" style="max-width:300px"></div>'
     +'<div class="fg"><label class="fl">Maîtrise minimum par défaut</label><select class="fs" id="p-mas" style="max-width:200px">'+[1,2,3,4,5].map(function(n){return'<option value="'+n+'"'+(n===DB.minMastery?' selected':'')+'>'+n+'★</option>';}).join('')+'</select></div>'
     +'<button class="btn bg" onclick="saveParams()">Sauvegarder</button></div></div>'
     +'<div class="pan"><div class="ph"><span class="ptl">🚪 Session</span></div><div class="pb"><p class="td tsm" style="margin-bottom:16px">Connecté: <strong>'+esc(CU.username)+'</strong></p><button class="btn bol" onclick="doLogout()">Se déconnecter</button></div></div>';
+}
+
+function openAuditLogW(){
+  if(!HR('admin')) return;
+  var modal = document.getElementById('mbdy');
+  if(modal) modal.innerHTML = '<div style="text-align:center;padding:20px;color:var(--tx3)">⟳ Chargement...</div>';
+  OM('🔍 Journal d\'audit', '<div id="audit-content" style="font-size:12px"><div style="text-align:center;padding:20px;color:var(--tx3)">⟳ Chargement...</div></div>', [{lbl:'Fermer', cls:'bol', fn:CM}]);
+
+  fetch(SB_URL+'/rest/v1/audit_log?select=*&order=created_at.desc&limit=100', {
+    headers: SB._headers
+  }).then(function(r){return r.json();}).then(function(logs){
+    var el = document.getElementById('audit-content');
+    if(!el) return;
+    if(!logs||!logs.length){
+      el.innerHTML = '<div style="color:var(--tx3);text-align:center;padding:20px">Aucune entrée dans le journal.</div>';
+      return;
+    }
+    var icons = {role_change:'👑'};
+    var html = '<div style="display:flex;flex-direction:column;gap:6px">';
+    logs.forEach(function(l){
+      var dt = l.created_at ? new Date(l.created_at).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
+      var icon = icons[l.action]||'📝';
+      html += '<div style="background:var(--bg1);border-radius:4px;padding:8px 12px;border-left:3px solid var(--golddim)">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">'
+        +'<span style="font-weight:700;color:var(--tx1)">'+icon+' '+esc(l.by_name||'—')+'</span>'
+        +'<span style="font-size:10px;color:var(--tx3)">'+dt+'</span>'
+        +'</div>'
+        +'<div style="color:var(--tx2)">→ <strong>'+esc(l.target_name||'—')+'</strong> : '+esc(l.detail||'—')+'</div>'
+        +'</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  }).catch(function(e){
+    var el = document.getElementById('audit-content');
+    if(el) el.innerHTML = '<div style="color:var(--red3);padding:12px">Erreur de chargement : '+esc(String(e))+'</div>';
+  });
 }
 
 function applyFixVoteKey(oldId){
