@@ -3467,7 +3467,7 @@ function renderThread(t){
     +'</div></div>'
     +(t.replies||[]).map(function(r){
       var ri=(t.replies||[]).indexOf(r);
-      var canEditReply=(r.author===CU.username)||(HR('officier'));
+      var canEditReply=CU&&(r.author.toLowerCase()===CU.username.toLowerCase()||HR('officier')||HR('chef_groupe'));
       var html='<div class="card" style="margin-bottom:10px">';
       html+='<div class="fbt mb12"><span class="cin fw7" style="font-size:12px">'+esc(r.author)+'</span><span class="td txs">'+esc(r.date)+'</span>';
       if(canEditReply) html+='<button class="btn bol bsm" style="font-size:10px;margin-left:auto" onclick="editReplyW(this)" data-tid="'+t.id+'" data-ri="'+ri+'">\u270f\ufe0f</button>';
