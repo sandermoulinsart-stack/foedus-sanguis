@@ -311,7 +311,7 @@ function sbLoad(){
   sbStatus('⟳ Synchronisation...','var(--tx3)');
   return Promise.all([
     SB.from('house_settings').get(),
-    SB.from('membres_public').get(), // Vue sans PIN pour sécurité
+    SB.from('membres').get(),
     SB.from('groupes').get(),
     SB.from('vote_wars').get(),
     SB.from('group_sessions').get(),
@@ -687,55 +687,39 @@ function doLogin(){
   if(!u||!p){showLoginError('Pseudo et PIN requis.');return;}
   showLoginError('Connexion en cours...');
   document.getElementById('lerr').style.color='var(--teal2)';
-
-  sha256(p).then(function(hash){
-    // 1. Vérifier PIN directement en base (jamais exposé dans membres_public)
-    fetch(SB_URL+'/rest/v1/membres?username=eq.'+encodeURIComponent(u)+'&select=id,pin,status&limit=1',{
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
-    }).then(function(r){return r.json();}).then(function(rows){
-      var row=rows&&rows[0];
-      if(!row){
-        // Vérifier si candidature en attente
-        sbLoad().then(function(){
-          var pm=(DB.pendingMembers||[]).find(function(x){return x.username.toLowerCase()===u.toLowerCase();});
-          document.getElementById('lerr').style.color='var(--red3)';
-          showLoginError(pm?'Candidature en attente d\'approbation.':'Pseudo ou PIN incorrect.');
-        });
-        return;
-      }
-      if(!(row.pin===hash||row.pin===p)){
-        document.getElementById('lerr').style.color='var(--red3)';
-        showLoginError('Pseudo ou PIN incorrect.');
-        return;
-      }
-      if(row.status==='attente'){
-        document.getElementById('lerr').style.color='var(--red3)';
-        showLoginError('Candidature en attente d\'approbation.');
-        return;
-      }
-      // 2. Charger toutes les données (membres_public, pas de PINs)
-      sbLoad().then(function(){
-        var m=DB.members.find(function(m){return m.id===row.id;});
-        if(!m){showLoginError('Erreur lors de la connexion.');return;}
-        m.pin=row.pin; // Stocker uniquement son propre PIN
-        CU=m;
-        try{sessionStorage.setItem('fs_session', JSON.stringify({username:m.username, pin:p}));localStorage.setItem('fs_session_backup', JSON.stringify({username:m.username, pin:p}));}catch(e){}
-        document.getElementById('ls').style.display='none';
-        document.getElementById('app').style.display='flex';
-        if(typeof applyMobileLayout!=='undefined')applyMobileLayout();
-        updSB();
-        if(CU&&CU.theme&&typeof applyTheme!=='undefined')applyTheme(CU.theme);
-        addNavBadge('nav-for','badge-forum');addNavBadge('nav-form','badge-form');addNavBadge('nav-vote','badge-vote');addNavBadge('nav-grp','badge-grp');addNavBadge('nav-cal','badge-cal');addNavBadge('nav-home','badge-home');
-        go('home');
-        startRealtime();
-        initServiceWorker();
-        setTimeout(subscribePush, 3000);
-        startPresence();
-      });
-    }).catch(function(){
-      showLoginError('Serveur inaccessible. Vérifiez votre connexion.');
+  sbLoad().then(function(){
+    if(!DB.members.length){
+      showLoginError('Erreur serveur. Réessayez dans quelques secondes.');
       document.getElementById('lerr').style.color='var(--red3)';
+      return;
+    }
+    sha256(p).then(function(hash){
+      var m=DB.members.find(function(m){
+        return m.username.toLowerCase()===u.toLowerCase()&&(m.pin===hash||m.pin===p);
+      });
+      if(!m){
+        var pm=(DB.pendingMembers||[]).find(function(x){return x.username.toLowerCase()===u.toLowerCase()});
+        document.getElementById('lerr').style.color='var(--red3)';
+        showLoginError(pm?'Candidature en attente d\'approbation.':'Pseudo ou PIN incorrect.');
+        return;
+      }
+      CU=m;
+      try{sessionStorage.setItem('fs_session', JSON.stringify({username:m.username, pin:p}));localStorage.setItem('fs_session_backup', JSON.stringify({username:m.username, pin:p}));}catch(e){}
+      document.getElementById('ls').style.display='none';
+      document.getElementById('app').style.display='flex';
+      if(typeof applyMobileLayout!=='undefined')applyMobileLayout();
+      updSB();
+      if(CU&&CU.theme&&typeof applyTheme!=='undefined')applyTheme(CU.theme);
+      addNavBadge('nav-for','badge-forum');addNavBadge('nav-form','badge-form');addNavBadge('nav-vote','badge-vote');addNavBadge('nav-grp','badge-grp');addNavBadge('nav-cal','badge-cal');addNavBadge('nav-home','badge-home');
+      go('home');
+      startRealtime();
+      initServiceWorker();
+      setTimeout(subscribePush, 3000);
+      startPresence(); // Demander après 3s pour ne pas être intrusif
     });
+  }).catch(function(){
+    showLoginError('Serveur inaccessible. Vérifiez votre connexion.');
+    document.getElementById('lerr').style.color='var(--red3)';
   });
 }
 function doRegister(){
@@ -5102,34 +5086,28 @@ document.addEventListener('click', function(e){
       if(CU){go(CP);return;}
       // Tentative de reconnexion automatique
       if(_sess){
-        // Vérifier le PIN directement en base (membres_public ne contient pas les PINs)
         sha256(_sess.pin).then(function(hash){
-          fetch(SB_URL+'/rest/v1/membres?username=eq.'+encodeURIComponent(_sess.username)+'&select=id,pin,status&limit=1',{
-            headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
-          }).then(function(r){return r.json();}).then(function(rows){
-            var row=rows&&rows[0];
-            var m=DB.members.find(function(m){return row&&m.id===row.id;});
-            var isPending=(DB.pendingMembers||[]).find(function(p){
-              return p.username.toLowerCase()===_sess.username.toLowerCase();
-            });
-            if(row&&(row.pin===hash||row.pin===_sess.pin)&&m&&!isPending&&m.status!=='attente'){
-              m.pin=row.pin;
-              CU=m;
-              document.getElementById('ls').style.display='none';
-              document.getElementById('app').style.display='flex';
-              if(typeof applyMobileLayout!=='undefined')applyMobileLayout();
-              updSB();
-              if(CU&&CU.theme&&typeof applyTheme!=='undefined')applyTheme(CU.theme);
-              go(CP||'home');
-              startRealtime();
-              startPresence();
-            } else {
-              try{sessionStorage.removeItem('fs_session');localStorage.removeItem('fs_session_backup');}catch(e){}
-              if(isPending) showLoginError('Candidature en attente d\'approbation.');
-            }
-          }).catch(function(){
-            try{sessionStorage.removeItem('fs_session');localStorage.removeItem('fs_session_backup');}catch(e){}
+          var m=DB.members.find(function(m){
+            return m.username.toLowerCase()===_sess.username.toLowerCase()&&(m.pin===hash||m.pin===_sess.pin);
           });
+          // Vérifier que le membre n'est pas en attente d'approbation
+          var isPending=(DB.pendingMembers||[]).find(function(p){
+            return p.username.toLowerCase()===_sess.username.toLowerCase();
+          });
+          if(m&&!isPending&&m.status!=='attente'){
+            CU=m;
+            document.getElementById('ls').style.display='none';
+            document.getElementById('app').style.display='flex';
+            if(typeof applyMobileLayout!=='undefined')applyMobileLayout();
+            updSB();
+            if(CU&&CU.theme&&typeof applyTheme!=='undefined')applyTheme(CU.theme);
+            go(CP||'home'); // CP already restored from sessionStorage
+            startRealtime();
+          } else {
+            // Nettoyer la session invalide ou en attente
+            try{sessionStorage.removeItem('fs_session');localStorage.removeItem('fs_session_backup');}catch(e){}
+            if(isPending) showLoginError('Candidature en attente d\'approbation.');
+          }
         });
       }
     }).catch(function(e){
