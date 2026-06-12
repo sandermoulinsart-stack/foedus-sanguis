@@ -122,11 +122,11 @@ function localThreadToSb(t){
 }
 function sbFormationToLocal(r){
   return {id:r.id,title:r.title,icon:r.icon||'📖',desc:r.description||'',
-    image:r.image||'',content:r.content||'',createdBy:r.created_by||'',featured:r.featured||false};
+    image:r.image||'',thumbnail:r.thumbnail||'',content:r.content||'',createdBy:r.created_by||'',featured:r.featured||false};
 }
 function localFormationToSb(f){
   return {id:f.id,title:f.title,icon:f.icon||'📖',description:f.desc||'',
-    image:f.image||'',content:f.content||'',created_by:f.createdBy||CU.username||'',featured:f.featured||false};
+    image:f.image||'',thumbnail:f.thumbnail||'',content:f.content||'',created_by:f.createdBy||CU.username||'',featured:f.featured||false};
 }
 function sbEventToLocal(r){
   return {id:r.id,title:r.title,date:r.date||'',time:r.time||'',description:r.description||'',image:r.image||'',featured:r.featured||false,votes:r.votes||{},voteOpen:r.vote_open||false};
@@ -3601,31 +3601,31 @@ function openEditFormation(id){
   OM('Modifier la fiche',
     '<div class="fr2"><div class="fg"><label class="fl">Icône</label><input class="fi" id="ef-i" value="'+esc(f.icon||'📖')+'" style="max-width:60px"></div><div class="fg"><label class="fl">Titre</label><input class="fi" id="ef-t" value="'+esc(f.title)+'"></div></div>'
     +'<div class="fg"><label class="fl">Description courte</label><input class="fi" id="ef-d" value="'+esc(f.desc||'')+'"></div>'
-    +'<div class="fg"><label class="fl">Image</label>'+imgPickerHTML('ef-img', f.image||'')+'</div>'
+    +'<div class="fg"><label class="fl">Thumbnail (carte liste)</label>'+imgPickerHTML('ef-thumb', f.thumbnail||'')+'</div>'
+    +'<div class="fg"><label class="fl">Image principale (fiche ouverte)</label>'+imgPickerHTML('ef-img', f.image||'')+'</div>'
     +'<div class="fg"><label class="fl">Contenu</label><textarea class="ft" id="ef-c" style="min-height:150px">'+esc(f.content||'')+'</textarea></div>'
     +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="ef-feat"'+(f.featured?' checked':'')+'>📌 À la une sur l\'accueil</label></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
-      var inp=document.getElementById('ef-img');
-      var hasNew=inp&&inp.files&&inp.files[0];
-      function save(imgUrl){
+      var inpImg=document.getElementById('ef-img');
+      var inpThumb=document.getElementById('ef-thumb');
+      var hasNewImg=inpImg&&inpImg.files&&inpImg.files[0];
+      var hasNewThumb=inpThumb&&inpThumb.files&&inpThumb.files[0];
+      function save(imgUrl,thumbUrl){
         f.title=gVal('ef-t')||f.title;
         f.icon=gVal('ef-i')||'📖';
         f.desc=gVal('ef-d');
         f.content=gVal('ef-c');
         f.featured=document.getElementById('ef-feat').checked;
         if(imgUrl!==undefined)f.image=imgUrl;
+        if(thumbUrl!==undefined)f.thumbnail=thumbUrl;
         var idx=DB.formations.findIndex(function(x){return x.id===f.id;});
         if(idx>=0)DB.formations[idx]=f;
         sbSaveFormation(f).catch(function(e){console.warn('[editFormation]',e);});
         CM();go('form');
       }
-      if(hasNew){
-        getImgUrl('ef-img').then(save);
-      } else if(isImgCleared('ef-img')){
-        save('');
-      } else {
-        save(undefined);
-      }
+      var imgProm=hasNewImg?getImgUrl('ef-img'):(isImgCleared('ef-img')?Promise.resolve(''):Promise.resolve(undefined));
+      var thumbProm=hasNewThumb?getImgUrl('ef-thumb'):(isImgCleared('ef-thumb')?Promise.resolve(''):Promise.resolve(undefined));
+      Promise.all([imgProm,thumbProm]).then(function(res){save(res[0],res[1]);});
     }}]);
 }
 
@@ -3723,7 +3723,8 @@ function pgForm(){
         h+='<div class="form-card" onclick="viewFormationW(this)" data-id="'+f.id+'">';
         h+='<div style="width:100%;padding-top:100%;position:relative;background:var(--bg1)">';
         if(f.featured) h+='<div style="position:absolute;top:4px;right:4px;z-index:2;background:var(--gold);color:#000;border-radius:2px;font-size:7px;font-weight:900;padding:1px 4px">📌</div>';
-        if(f.image) h+='<img src="'+esc(f.image)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">';
+        var thumbSrc=f.thumbnail||f.image;
+        if(thumbSrc) h+='<img src="'+esc(thumbSrc)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">';
         else h+='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:32px">'+esc(f.icon||'📖')+'</div>';
         h+='</div>';
         h+='<div style="padding:6px 8px">';
@@ -3781,7 +3782,7 @@ function renderFormation(f){
     +'<div class="pan"><div class="ph"><span style="font-size:22px;margin-right:10px">'+esc(f.icon||'📖')+'</span><span class="ptl" style="font-size:16px">'+esc(f.title)+'</span></div>'
     +'<div class="pb">'
     +(f.desc?'<div class="td tsm mb12" style="font-style:italic;font-size:14px">'+esc(f.desc)+'</div>':'')
-    +(f.image?'<div style="width:100%;height:350px;border-radius:3px;margin-bottom:16px;overflow:hidden"><img src="'+esc(f.image)+'" style="width:100%;height:100%;object-fit:cover;object-position:center top"></div>':'')
+    +(f.image?'<div style="width:100%;border-radius:3px;margin-bottom:16px"><img src="'+esc(f.image)+'" style="width:100%;height:auto;display:block;border-radius:3px"></div>':'')
     +'<div class="div"></div>'
     +'<div style="font-size:15px;line-height:1.9;white-space:pre-line">'+esc(f.content)+'</div>'
     +'</div></div>';
@@ -3799,16 +3800,19 @@ function openNewFormation(){
   OM('Nouveau guide / fiche unité',
     '<div class="fr2"><div class="fg"><label class="fl">Icône</label><input class="fi" id="nfo-i" value="📖" style="max-width:60px"></div><div class="fg"><label class="fl">Titre</label><input class="fi" id="nfo-t"></div></div>'
     +'<div class="fg"><label class="fl">Description courte</label><input class="fi" id="nfo-d" placeholder="Sous-titre ou résumé..."></div>'
-    +'<div class="fg"><label class="fl">Image (optionnel)</label>'+ imgPickerHTML('nfo-img', '', 'Aucune image') +'</div>'
+    +'<div class="fg"><label class="fl">Thumbnail (carte liste)</label>'+ imgPickerHTML('nfo-thumb', '', 'Aucune image') +'</div>'
+    +'<div class="fg"><label class="fl">Image principale (fiche ouverte)</label>'+ imgPickerHTML('nfo-img', '', 'Aucune image') +'</div>'
     +'<div class="fg"><label class="fl">Contenu / Tactiques</label><textarea class="ft" id="nfo-c" style="min-height:150px" placeholder="Décrivez les tactiques, formations, conseils..."></textarea></div>'
     +(HR('formation')||HR('officier')?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nfo-feat"> 📌 Mettre à la une sur l\'accueil</label></div>':'<input type="hidden" id="nfo-feat" value="false">'),
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Publier',cls:'btn bg',fn:function(){
       var t=gVal('nfo-t').trim();if(!t)return alert('Titre requis');
+      getImgUrl('nfo-thumb').then(function(thumbUrl){
       getImgUrl('nfo-img').then(function(imgUrl){
-        var f={id:'fo'+Date.now(),title:t,icon:gVal('nfo-i')||'📖',desc:gVal('nfo-d'),image:imgUrl||'',content:gVal('nfo-c'),createdBy:CU.username,featured:gChk('nfo-feat')};
+        var f={id:'fo'+Date.now(),title:t,icon:gVal('nfo-i')||'📖',desc:gVal('nfo-d'),image:imgUrl||'',thumbnail:thumbUrl||'',content:gVal('nfo-c'),createdBy:CU.username,featured:gChk('nfo-feat')};
         sbSaveFormation(f).then(function(){
           sbLoad().then(function(){CM();go('form');});
         }).catch(function(e){console.warn('[formation]',e);});
+      });
       });
     }}]);
 }
