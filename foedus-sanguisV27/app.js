@@ -3466,18 +3466,47 @@ function renderThread(t){
     +reactionsHTML(t.reactions, t.id)
     +'</div></div>'
     +(t.replies||[]).map(function(r){
-      return'<div class="card" style="margin-bottom:10px">'
-        +'<div class="fbt mb12"><span class="cin fw7" style="font-size:12px">'+esc(r.author)+'</span><span class="td txs">'+esc(r.date)+'</span></div>'
-        +(r.image?'<div style="max-width:280px;height:160px;border-radius:3px;overflow:hidden;cursor:zoom-in;margin-bottom:8px" data-img="'+esc(r.image)+'" onclick="showImg(this)"><img src="'+esc(r.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')
-        +'<div style="font-size:13.5px;line-height:1.7;clear:both">'+esc(r.content)+'</div>'
-        +reactionsHTML(r.reactions, t.id, (t.replies||[]).indexOf(r))
-        +'</div>';
+      var ri=(t.replies||[]).indexOf(r);
+      var canEditReply=CU&&(r.author.toLowerCase()===CU.username.toLowerCase()||HR('officier')||HR('chef_groupe'));
+      var html='<div class="card" style="margin-bottom:10px">';
+      html+='<div class="fbt mb12"><span class="cin fw7" style="font-size:12px">'+esc(r.author)+'</span><span class="td txs">'+esc(r.date)+'</span>';
+      if(canEditReply) html+='<button class="btn bol bsm" style="font-size:10px;margin-left:auto" onclick="editReplyW(this)" data-tid="'+t.id+'" data-ri="'+ri+'">\u270f\ufe0f</button>';
+      html+='</div>';
+      if(r.image) html+='<div style="max-width:280px;height:160px;border-radius:3px;overflow:hidden;cursor:zoom-in;margin-bottom:8px" data-img="'+esc(r.image)+'" onclick="showImg(this)"><img src="'+esc(r.image)+'" style="width:100%;height:100%;object-fit:cover"></div>';
+      html+='<div style="font-size:13.5px;line-height:1.7;clear:both">'+esc(r.content)+'</div>';
+      html+=reactionsHTML(r.reactions, t.id, ri);
+      html+='</div>';
+      return html;
     }).join('')
     +'<div class="pan"><div class="ph"><span class="ptl">Répondre</span></div><div class="pb">'
     +'<div class="fg"><textarea class="ft" id="rep-txt" placeholder="Votre réponse..."></textarea></div>'
     +'<div class="fg"><label class="fl">Image (optionnel)</label>'+imgPickerHTML('rep-img','')+'</div>'
     +'<button class="btn bg bsm" onclick="postReplyW(this)" data-id="'+t.id+'">Envoyer</button></div></div>';
 }
+function editReplyW(btn){
+  var tid=btn.dataset.tid, ri=parseInt(btn.dataset.ri);
+  var t=(DB.forumThreads||[]).find(function(x){return x.id===tid;});
+  if(!t||!t.replies[ri]) return;
+  var r=t.replies[ri];
+  OM('Modifier la réponse',
+    '<div class="fg"><label class="fl">Contenu</label><textarea class="ft" id="er-c" style="min-height:100px">'+esc(r.content)+'</textarea></div>'
+    +'<div class="fg"><label class="fl">Image</label>'+imgPickerHTML('er-img', r.image||'')+'</div>',
+    [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
+      var inp=document.getElementById('er-img');
+      var hasNew=inp&&inp.files&&inp.files[0];
+      function save(imgUrl){
+        r.content=gVal('er-c')||r.content;
+        if(imgUrl!==undefined) r.image=imgUrl;
+        CT=t;
+        sbSaveThread(t).then(function(){CM();sbLoad().then(function(){go(CT&&Object.keys(TAG_LBL_FORM||{}).indexOf(CT.tag)>=0?'form':'for');});}).catch(function(e){console.warn('[editReply]',e);});
+      }
+      if(hasNew) getImgUrl('er-img').then(function(url){save(url!==null?url:r.image);});
+      else if(typeof isImgCleared!=='undefined'&&isImgCleared('er-img')) save('');
+      else save(undefined);
+    }}]);
+}
+
+
 function viewThr(id){CT=(DB.forumThreads||[]).find(function(t){return t.id===id;});FV='thread';go('for');}
 function backForum(){
   var wasFormation=CT&&typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(CT.tag)>=0;
