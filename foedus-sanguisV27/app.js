@@ -351,6 +351,10 @@ function sbLoad(){
     DB.presence       = (res[11]||[]);
     var settingsRow=(res[12]||[]).find(function(r){return r.key==='meta_units';});
     DB.metaUnits      = settingsRow ? (settingsRow.value||[]) : [];
+    var rhRow=(res[12]||[]).find(function(r){return r.key==='rh_users';});
+    DB.rhUsers        = rhRow ? (rhRow.value||[]) : [];
+    var rhDataRow=(res[12]||[]).find(function(r){return r.key==='rh_data';});
+    DB.rhData         = rhDataRow ? (rhDataRow.value||{}) : {};
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
     console.log('[SB] Chargé: '+DB.members.length+' membres, '+(DB.pendingMembers||[]).length+' en attente');
@@ -609,7 +613,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings().catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[]}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{}}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -923,7 +927,7 @@ function _rerender(){
   if(POLL_SKIP_PAGES.indexOf(CP)>=0)return;
   var fns={home:pgHome,mbr:pgMbr,unit:pgUnit,grp:pgGrp,vote:pgVote,
            for:pgFor,form:pgForm,cal:pgCal,rec:pgRec,param:pgParam,
-           profil:pgProfil,stats:pgStats,rank:pgRank,planning:pgPlanning,hier:pgHierarchy};
+           profil:pgProfil,stats:pgStats,rank:pgRank,planning:pgPlanning,hier:pgHierarchy,rh:pgRH};
   var fn=fns[CP];
   if(fn){
     var content=document.getElementById('content');
@@ -1458,6 +1462,288 @@ function delHierNode(id){
   sbDeleteHierarchyNode(id).then(function(){go('hier');}).catch(function(e){console.warn('[hier]',e);});
 }
 
+
+// ════════════════════════════════════════════════════════════════
+// SECTION RH — Gestion des membres
+// ════════════════════════════════════════════════════════════════
+
+function isRH(){
+  if(!CU) return false;
+  if(HR('admin')) return true;
+  return (DB.rhUsers||[]).indexOf(CU.id) >= 0;
+}
+
+function saveRHData(){
+  SB.from('house_settings').upsert({key:'rh_data', value:DB.rhData})
+    .catch(function(e){console.warn('[RH]',e);});
+}
+
+function saveRHUsers(){
+  SB.from('house_settings').upsert({key:'rh_users', value:DB.rhUsers})
+    .catch(function(e){console.warn('[RH users]',e);});
+}
+
+function getRHMemberData(id){
+  return DB.rhData[id] || {discord:null, contact:'', absenceFrom:'', absenceTo:'', notes:''};
+}
+
+function setRHField(id, field, value){
+  if(!DB.rhData[id]) DB.rhData[id]={};
+  DB.rhData[id][field]=value;
+  saveRHData();
+}
+
+// Calculer statut guerre d'un membre sur les N dernières guerres
+function getMemberWarStatus(m, wars){
+  if(!wars.length) return {label:'—', color:'var(--tx3)'};
+  var present=0, absent=0, novote=0, latePresent=0, votedAbsentCame=0, votedPresentMissed=0;
+  wars.forEach(function(w){
+    var v=(w.votes||{})[m.id];
+    var warT=parseLocalDateTime(w.date,w.time);
+    if(!v){ novote++; return; }
+    if(v.vote==='present'){
+      var voteT=v.updatedAt?new Date(v.updatedAt).getTime():0;
+      if(warT&&voteT>warT) latePresent++;
+      else present++;
+    } else if(v.vote==='absent'){
+      absent++;
+    }
+  });
+  if(novote===wars.length) return {label:'⏳ Ne vote pas', color:'var(--tx3)'};
+  if(absent===wars.length) return {label:'❌ Absent régulier', color:'var(--red3)'};
+  if(present+latePresent===wars.length) return {label:'✅ Présent régulier', color:'#66bb6a'};
+  if(latePresent>0&&present===0) return {label:'⏰ Toujours en retard', color:'#f9a825'};
+  return {label:'〜 Irrégulier', color:'#64b5f6'};
+}
+
+function pgRH(){
+  if(!isRH()) return '<div class="td ta-c" style="padding:60px">⛔ Accès réservé.</div>';
+
+  document.getElementById('tact').innerHTML = HR('admin')
+    ? '<button class="btn bol bsm" onclick="openRHUsersW()">👥 Accès RH</button>'
+    : '';
+
+  var members = DB.members.filter(function(m){return m.status!=='attente';})
+    .sort(function(a,b){return a.username.localeCompare(b.username);});
+  var wars = (DB.voteWars||[]).filter(function(w){return w.status==='closed';})
+    .sort(function(a,b){return b.date.localeCompare(a.date);}).slice(0,10);
+
+  var activeFilter = window._rhFilter||'tous';
+  var filters = [
+    {k:'tous', label:'Tous ('+members.length+')'},
+    {k:'surveiller', label:'⚠️ À surveiller'},
+    {k:'contacter', label:'📩 À contacter'},
+    {k:'discord', label:'🚫 Sans Discord'},
+    {k:'absence', label:'🏥 En absence'},
+    {k:'bas', label:'📉 Niveau <200'}
+  ];
+
+  var filterBar = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">'
+    +filters.map(function(f){
+      return '<button onclick="setRHFilter(this)" data-f="'+f.k+'" class="btn '+(activeFilter===f.k?'bg':'bol')+' bsm" style="font-size:10px">'+f.label+'</button>';
+    }).join('')+'</div>';
+
+  // Filtrer
+  var filtered = members.filter(function(m){
+    var d = getRHMemberData(m.id);
+    var ws = getMemberWarStatus(m, wars);
+    if(activeFilter==='surveiller') return ws.label.indexOf('Absent régulier')>=0||ws.label.indexOf('Ne vote pas')>=0;
+    if(activeFilter==='contacter') return d.contact==='à contacter'||d.contact==='message envoyé';
+    if(activeFilter==='discord') return d.discord===false;
+    if(activeFilter==='absence') return d.absenceTo&&new Date(d.absenceTo)>=new Date();
+    if(activeFilter==='bas') return (m.playerLevel||0)<200&&(m.playerLevel||0)>0;
+    return true;
+  });
+
+  var h = '<div class="pan"><div class="ph"><span class="ptl">👥 Gestion RH</span>'
+    +'<span style="font-size:11px;color:var(--tx3);margin-left:8px">'+filtered.length+'/'+members.length+' membres · '+wars.length+' dernières guerres</span>'
+    +'</div><div class="pb">'+filterBar+'</div>'
+    +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+    +'<thead><tr style="border-bottom:2px solid var(--b1);color:var(--tx3);font-size:10px;text-transform:uppercase;letter-spacing:1px">'
+    +'<th style="text-align:left;padding:8px 10px;white-space:nowrap">Membre</th>'
+    +'<th style="text-align:center;padding:8px 6px;white-space:nowrap">Niv.</th>'
+    +'<th style="text-align:center;padding:8px 6px;white-space:nowrap">Score</th>'
+    +'<th style="text-align:left;padding:8px 6px;white-space:nowrap">Statut guerres</th>'
+    +'<th style="text-align:center;padding:8px 6px;white-space:nowrap">Discord</th>'
+    +'<th style="text-align:left;padding:8px 6px;white-space:nowrap">Contact</th>'
+    +'<th style="text-align:left;padding:8px 6px;white-space:nowrap">Absence</th>'
+    +'<th style="text-align:center;padding:8px 6px;white-space:nowrap">⚠️</th>'
+    +'<th style="text-align:center;padding:8px 6px;white-space:nowrap">Actions</th>'
+    +'</tr></thead><tbody>';
+
+  filtered.forEach(function(m){
+    var d = getRHMemberData(m.id);
+    var ws = getMemberWarStatus(m, wars);
+    var score = calcMemberScore(m);
+    var sanctions = (m.sanctions||[]).filter(function(s){return s.type&&s.type.indexOf('✅')<0;}).length;
+    var inAbsence = d.absenceTo && new Date(d.absenceTo) >= new Date();
+    var scoreColor = score>=50?'#66bb6a':score>=0?'var(--tx2)':'var(--red3)';
+
+    var discordHtml = '<select onchange="setRHFieldW(this,\''+m.id+'\',\'discord\')" style="background:var(--bg2);border:1px solid var(--b1);color:var(--tx1);border-radius:3px;padding:2px 4px;font-size:10px">'
+      +'<option value="null"'+(d.discord===null?' selected':'')+'>—</option>'
+      +'<option value="true"'+(d.discord===true?' selected':'')+'>✅ Présent</option>'
+      +'<option value="false"'+(d.discord===false?' selected':'')+'>❌ Absent</option>'
+      +'</select>';
+
+    var contactHtml = '<select onchange="setRHFieldW(this,\''+m.id+'\',\'contact\')" style="background:var(--bg2);border:1px solid var(--b1);color:var(--tx1);border-radius:3px;padding:2px 4px;font-size:10px">'
+      +'<option value=""'+(d.contact===''?' selected':'')+'>—</option>'
+      +'<option value="à contacter"'+(d.contact==='à contacter'?' selected':'')+'>📩 À contacter</option>'
+      +'<option value="message envoyé"'+(d.contact==='message envoyé'?' selected':'')+'>✉️ Msg envoyé</option>'
+      +'<option value="en attente"'+(d.contact==='en attente'?' selected':'')+'>⏳ En attente</option>'
+      +'<option value="réglé"'+(d.contact==='réglé'?' selected':'')+'>✅ Réglé</option>'
+      +'</select>';
+
+    var absenceHtml = inAbsence
+      ? '<span style="font-size:10px;color:#f9a825">🏥 jusqu\'au '+fmtDate(d.absenceTo)+'</span>'
+      : '<span style="font-size:10px;color:var(--tx3)">—</span>';
+
+    h += '<tr style="border-bottom:1px solid var(--b1);'+(inAbsence?'opacity:0.7':'')+'">'
+      +'<td style="padding:8px 10px;white-space:nowrap">'+avaHTML(m,22)+' <span style="font-weight:700">'+esc(m.username)+'</span>'
+      +(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')
+      +'</td>'
+      +'<td style="text-align:center;padding:6px;color:'+(m.playerLevel<200&&m.playerLevel>0?'var(--red3)':'var(--tx2)');'">'+((m.playerLevel||0)||'—')+'</td>'
+      +'<td style="text-align:center;padding:6px;color:'+scoreColor+';font-weight:700">'+score+'</td>'
+      +'<td style="padding:6px;color:'+ws.color+'">'+ws.label+'</td>'
+      +'<td style="text-align:center;padding:6px">'+discordHtml+'</td>'
+      +'<td style="padding:6px">'+contactHtml+'</td>'
+      +'<td style="padding:6px">'+absenceHtml+'</td>'
+      +'<td style="text-align:center;padding:6px">'+(sanctions>0?'<span style="color:var(--red3);font-weight:700">'+sanctions+'</span>':'—')+'</td>'
+      +'<td style="text-align:center;padding:6px;white-space:nowrap">'
+      +'<button class="btn bol bsm" style="font-size:9px" onclick="openRHMemberW(\''+m.id+'\')">📋</button>'
+      +'</td>'
+      +'</tr>';
+  });
+
+  h += '</tbody></table></div></div>';
+  return h;
+}
+
+function setRHFilter(btn){ window._rhFilter=btn.dataset.f; var el=document.getElementById('content'); if(el){var s=el.scrollTop;el.innerHTML=pgRH();el.scrollTop=s;} }
+
+function setRHFieldW(sel, id, field){
+  var val = sel.value;
+  if(val==='true') val=true;
+  else if(val==='false') val=false;
+  else if(val==='null') val=null;
+  setRHField(id, field, val);
+}
+
+function calcMemberScore(m){
+  var wars=(DB.voteWars||[]).filter(function(w){return w.status==='closed';});
+  var score=0;
+  wars.forEach(function(w){
+    var v=(w.votes||{})[m.id];
+    if(!v){ score-=1; return; }
+    if(v.vote==='present'){
+      var warT=parseLocalDateTime(w.date,w.time);
+      var voteT=v.updatedAt?new Date(v.updatedAt).getTime():0;
+      score+=(warT&&voteT>warT)?3:5;
+    } else { score+=3; }
+  });
+  return score;
+}
+
+function openRHMemberW(id){
+  var m=DB.members.find(function(x){return x.id===id;});if(!m)return;
+  var d=getRHMemberData(id);
+  var sanctions=m.sanctions||[];
+
+  var sanctionsList = sanctions.length
+    ? sanctions.map(function(s,i){
+        return '<div style="background:var(--bg1);border-radius:3px;padding:8px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px">'
+          +'<span style="font-size:18px">'+esc(s.type)+'</span>'
+          +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+esc(s.type)+'</div>'
+          +'<div style="font-size:11px;color:var(--tx3)">'+esc(s.note)+'</div>'
+          +'<div style="font-size:10px;color:var(--tx3)">par '+esc(s.by||'—')+' · '+esc(s.date||'')+'</div></div>'
+          +'<button class="btn bol bsm" style="font-size:9px" onclick="resolveRHSanction(\''+id+'\','+i+')">✅</button>'
+          +'</div>';
+      }).join('')
+    : '<div style="color:var(--tx3);font-size:12px">Aucune sanction active.</div>';
+
+  var html = '<div style="margin-bottom:14px">'
+    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">SANCTIONS</div>'
+    +sanctionsList
+    +'<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
+    +'<button class="btn bol bsm" onclick="addRHSanction(\''+id+'\',\'1ère sanction ⚠️\')">+ 1ère sanction</button>'
+    +'<button class="btn bol bsm" onclick="addRHSanction(\''+id+'\',\'2ème sanction ⚠️⚠️\')">+ 2ème sanction</button>'
+    +'<button class="btn bred bsm" onclick="addRHSanction(\''+id+'\',\'3ème sanction ❌\')">+ 3ème sanction</button>'
+    +'</div></div>'
+    +'<div style="margin-bottom:14px">'
+    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">ABSENCE DÉCLARÉE</div>'
+    +'<div class="fr2">'
+    +'<div class="fg"><label class="fl">Du</label><input class="fi" type="date" id="rh-abs-from" value="'+(d.absenceFrom||'')+'"></div>'
+    +'<div class="fg"><label class="fl">Au</label><input class="fi" type="date" id="rh-abs-to" value="'+(d.absenceTo||'')+'"></div>'
+    +'</div></div>'
+    +'<div class="fg"><label class="fl">Notes internes (officiers uniquement)</label>'
+    +'<textarea class="ft" id="rh-notes" style="min-height:80px">'+esc(d.notes||'')+'</textarea></div>';
+
+  OM('📋 RH — '+esc(m.username), html, [
+    {lbl:'Fermer', cls:'bol', fn:CM},
+    {lbl:'💾 Sauvegarder', cls:'btn bg', fn:function(){
+      setRHField(id,'absenceFrom',document.getElementById('rh-abs-from').value);
+      setRHField(id,'absenceTo',document.getElementById('rh-abs-to').value);
+      setRHField(id,'notes',document.getElementById('rh-notes').value);
+      CM();
+      var el=document.getElementById('content');
+      if(el){el.innerHTML=pgRH();}
+    }}
+  ]);
+}
+
+function addRHSanction(id, type){
+  var note=prompt('Note pour la sanction :');
+  if(note===null) return;
+  var m=DB.members.find(function(x){return x.id===id;});if(!m)return;
+  m.sanctions=m.sanctions||[];
+  m.sanctions.push({type:type, note:note, by:CU.username, date:nowDate()});
+  sbSaveMember(m).then(function(){
+    CM();
+    openRHMemberW(id);
+  }).catch(function(e){console.warn('[RH sanction]',e);});
+}
+
+function resolveRHSanction(id, idx){
+  if(!confirm('Marquer cette sanction comme résolue ?')) return;
+  var m=DB.members.find(function(x){return x.id===id;});if(!m)return;
+  m.sanctions[idx].type='✅ '+m.sanctions[idx].type;
+  sbSaveMember(m).then(function(){
+    CM();
+    openRHMemberW(id);
+  }).catch(function(e){console.warn('[RH resolve]',e);});
+}
+
+function openRHUsersW(){
+  if(!HR('admin')) return;
+  var currentRH = DB.rhUsers||[];
+  var opts = DB.members.filter(function(m){return m.status!=='attente';})
+    .sort(function(a,b){return a.username.localeCompare(b.username);});
+
+  var html = '<div style="font-size:12px;color:var(--tx3);margin-bottom:12px">Sélectionnez les membres ayant accès à la section RH :</div>'
+    +'<div style="display:flex;flex-direction:column;gap:6px">'
+    +opts.map(function(m){
+      var checked=currentRH.indexOf(m.id)>=0;
+      return '<label style="display:flex;align-items:center;gap:10px;padding:6px;background:var(--bg1);border-radius:3px;cursor:pointer">'
+        +avaHTML(m,24)
+        +'<span style="font-size:13px;flex:1">'+esc(m.username)+'</span>'
+        +'<input type="checkbox" data-id="'+m.id+'" '+(checked?'checked':'')+'>'
+        +'</label>';
+    }).join('')
+    +'</div>';
+
+  OM('👥 Accès RH', html, [
+    {lbl:'Annuler', cls:'bol', fn:CM},
+    {lbl:'Sauvegarder', cls:'btn bg', fn:function(){
+      var selected=[];
+      document.querySelectorAll('#mbdy input[type=checkbox]:checked').forEach(function(cb){
+        selected.push(cb.dataset.id);
+      });
+      DB.rhUsers=selected;
+      saveRHUsers();
+      CM();
+    }}
+  ]);
+}
+
 function pgPlanning(){
   var now=new Date();
   var startOfWeek=new Date(now);
@@ -1661,7 +1947,8 @@ var PG={
   rec:['Recrutement','Gestion des candidatures'],
   param:['Paramètres','Configuration'],
   profil:['Mon Profil','Mes informations'],
-  hier:['Hiérarchie','Organisation de la Maison']
+  hier:['Hiérarchie','Organisation de la Maison'],
+  rh:['Gestion RH','Suivi et sanctions des membres']
 };
 
 
@@ -1828,7 +2115,7 @@ function go(p){
   if(p==='grp')markSeen('grp');
   if(p==='cal'){markSeen('cal');}
   if(p==='home')markSeen('banner');
-  var fns={home:pgHome,mbr:pgMbr,unit:pgUnit,grp:pgGrp,vote:pgVote,for:pgFor,form:pgForm,cal:pgCal,rec:pgRec,param:pgParam,profil:pgProfil,stats:pgStats,rank:pgRank,planning:pgPlanning,hier:pgHierarchy};
+  var fns={home:pgHome,mbr:pgMbr,unit:pgUnit,grp:pgGrp,vote:pgVote,for:pgFor,form:pgForm,cal:pgCal,rec:pgRec,param:pgParam,profil:pgProfil,stats:pgStats,rank:pgRank,planning:pgPlanning,hier:pgHierarchy,rh:pgRH};
   document.getElementById('content').innerHTML=(fns[p]||pgHome)();
   postGo(p);
 }
