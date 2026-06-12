@@ -3627,7 +3627,7 @@ function openEditFormation(id){
   OM('Modifier la fiche',
     '<div class="fr2"><div class="fg"><label class="fl">Icône</label><input class="fi" id="ef-i" value="'+esc(f.icon||'📖')+'" style="max-width:60px"></div><div class="fg"><label class="fl">Titre</label><input class="fi" id="ef-t" value="'+esc(f.title)+'"></div></div>'
     +'<div class="fg"><label class="fl">Description courte</label><input class="fi" id="ef-d" value="'+esc(f.desc||'')+'"></div>'
-    +(!isClass?'<div class="fg"><label class="fl">Catégorie</label><select class="fs" id="nfo-cat"><option value="">— Choisir une catégorie —</option><option value="Arquebusiers">Arquebusiers</option><option value="Archers">Archers</option><option value="Arbalétriers">Arbalétriers</option><option value="Boucliers">Boucliers</option><option value="Lanciers">Lanciers</option><option value="Anti Cavaleries Pushers">Anti Cavaleries Pushers</option><option value="Cavaleries">Cavaleries</option><option value="Exotiques">Exotiques</option></select></div>':'')
+    +(!isClass?'<div class="fg"><label class="fl">Catégorie</label><select class="fs" id="nfo-cat"><option value="">— Choisir une catégorie —</option><option value="Arquebusiers">Arquebusiers</option><option value="Archers">Archers</option><option value="Arbalétriers">Arbalétriers</option><option value="Boucliers">Boucliers</option><option value="Lanciers">Lanciers</option><option value="Anti Cavaleries">Anti Cavaleries</option><option value="Pushers">Pushers</option><option value="Cavaleries">Cavaleries</option><option value="Exotiques">Exotiques</option></select></div>':'')
     +'<div class="fg"><label class="fl">Catégorie</label><select class="fs" id="ef-cat"><option value=""></option>'
     +'<option value="">— Choisir une catégorie —</option>'
     +'<option value="Arquebusiers"'+(f.category==='Arquebusiers'?' selected':'')+'>Arquebusiers</option>'
@@ -3635,7 +3635,7 @@ function openEditFormation(id){
     +'<option value="Arbalétriers"'+(f.category==='Arbalétriers'?' selected':'')+'>Arbalétriers</option>'
     +'<option value="Boucliers"'+(f.category==='Boucliers'?' selected':'')+'>Boucliers</option>'
     +'<option value="Lanciers"'+(f.category==='Lanciers'?' selected':'')+'>Lanciers</option>'
-    +'<option value="Anti Cavaleries Pushers"'+(f.category==='Anti Cavaleries Pushers'?' selected':'')+'>Anti Cavaleries Pushers</option>'
+    +'<option value="Anti Cavaleries"'+(f.category==='Anti Cavaleries'?' selected':'')+'>Anti Cavaleries</option>'
     +'<option value="Cavaleries"'+(f.category==='Cavaleries'?' selected':'')+'>Cavaleries</option>'
     +'<option value="Exotiques"'+(f.category==='Exotiques'?' selected':'')+'>Exotiques</option>'
     +'</select></div>'
@@ -3794,7 +3794,8 @@ function pgForm(){
     h+='<button onclick="setFormCat(\'Arbalétriers\')" class="btn '+(activeFormCat==='Arbalétriers'?'bg':'bol')+' bsm" style="font-size:10px">Arbalétriers</button>';
     h+='<button onclick="setFormCat(\'Boucliers\')" class="btn '+(activeFormCat==='Boucliers'?'bg':'bol')+' bsm" style="font-size:10px">Boucliers</button>';
     h+='<button onclick="setFormCat(\'Lanciers\')" class="btn '+(activeFormCat==='Lanciers'?'bg':'bol')+' bsm" style="font-size:10px">Lanciers</button>';
-    h+='<button onclick="setFormCat(\'Anti Cavaleries Pushers\')" class="btn '+(activeFormCat==='Anti Cavaleries Pushers'?'bg':'bol')+' bsm" style="font-size:10px">Anti Cavaleries Pushers</button>';
+    h+='<button onclick="setFormCat(\'Anti Cavaleries\')" class="btn '+(activeFormCat==='Anti Cavaleries'?'bg':'bol')+' bsm" style="font-size:10px">Anti Cavaleries</button>';
+    h+='<button onclick="setFormCat(\'Pushers\')" class="btn '+(activeFormCat==='Pushers'?'bg':'bol')+' bsm" style="font-size:10px">Pushers</button>';
     h+='<button onclick="setFormCat(\'Cavaleries\')" class="btn '+(activeFormCat==='Cavaleries'?'bg':'bol')+' bsm" style="font-size:10px">Cavaleries</button>';
     h+='<button onclick="setFormCat(\'Exotiques\')" class="btn '+(activeFormCat==='Exotiques'?'bg':'bol')+' bsm" style="font-size:10px">Exotiques</button>';
     h+='</div>';
@@ -3964,7 +3965,7 @@ function openNewFormation(type){
   OM(isClass?'Nouvelle fiche classe':'Nouvelle fiche unité',
     '<div class="fr2"><div class="fg"><label class="fl">Icône</label><input class="fi" id="nfo-i" value="📖" style="max-width:60px"></div><div class="fg"><label class="fl">Titre</label><input class="fi" id="nfo-t"></div></div>'
     +'<div class="fg"><label class="fl">Description courte</label><input class="fi" id="nfo-d" placeholder="Sous-titre ou résumé..."></div>'
-    +(!isClass?'<div class="fg"><label class="fl">Catégorie</label><select class="fs" id="nfo-cat"><option value="">— Choisir une catégorie —</option><option value="Arquebusiers">Arquebusiers</option><option value="Archers">Archers</option><option value="Arbalétriers">Arbalétriers</option><option value="Boucliers">Boucliers</option><option value="Lanciers">Lanciers</option><option value="Anti Cavaleries Pushers">Anti Cavaleries Pushers</option><option value="Cavaleries">Cavaleries</option><option value="Exotiques">Exotiques</option></select></div>':'')
+    +(!isClass?'<div class="fg"><label class="fl">Catégorie</label><select class="fs" id="nfo-cat"><option value="">— Choisir une catégorie —</option><option value="Arquebusiers">Arquebusiers</option><option value="Archers">Archers</option><option value="Arbalétriers">Arbalétriers</option><option value="Boucliers">Boucliers</option><option value="Lanciers">Lanciers</option><option value="Anti Cavaleries">Anti Cavaleries</option><option value="Pushers">Pushers</option><option value="Cavaleries">Cavaleries</option><option value="Exotiques">Exotiques</option></select></div>':'')
     +'<div class="fg"><label class="fl">Thumbnail (carte liste)</label>'+ imgPickerHTML('nfo-thumb', '', 'Aucune image') +'</div>'
     +'<div class="fg"><label class="fl">Image principale (fiche ouverte)</label>'+ imgPickerHTML('nfo-img', '', 'Aucune image') +'</div>'
     +'<div class="fg"><label class="fl">Contenu / Tactiques</label><textarea class="ft" id="nfo-c" style="min-height:150px" placeholder="Décrivez les tactiques, formations, conseils..."></textarea></div>'
