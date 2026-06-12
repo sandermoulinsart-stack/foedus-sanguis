@@ -2489,7 +2489,7 @@ function saveMetaUnits(){
 }
 
 function toggleMetaUnit(name){
-  if(!HR('formation')&&!HR('officier')) return;
+  if(!HR('formation')&&!HR('officier')&&!HR('admin')) return;
   DB.metaUnits=DB.metaUnits||[];
   var idx=DB.metaUnits.indexOf(name);
   if(idx>=0) DB.metaUnits.splice(idx,1);
@@ -2562,7 +2562,7 @@ function pgUnit(){
           +' style="border-color:'+(isMeta?'#c9a227':rs2.border)+';background:'+(sel?rs2.bg.replace(',.12',',0.25'):rs2.bg)+';color:'+(sel?rs2.color:'var(--tx2)')+';">'
           +(isMeta?'<span style="font-size:8px;font-weight:700;background:#c9a227;color:#000;padding:1px 4px;border-radius:2px;margin-right:4px;vertical-align:middle">META</span>':'')
           +(sel?'✓ ':'')+esc(u)
-          +((HR('formation')||HR('officier'))?'<span onclick="toggleMetaUnit(this.dataset.u);event.stopPropagation()" data-u="'+esc(u)+'" title="'+(isMeta?'Retirer META':'Marquer META')+'" style="margin-left:5px;font-size:10px;cursor:pointer;opacity:0.6;vertical-align:middle">'+(isMeta?'★':'☆')+'</span>':'')
+          +((HR('formation')||HR('officier')||HR('admin'))?'<span onclick="toggleMetaUnit(this.dataset.u);event.stopPropagation()" data-u="'+esc(u)+'" title="'+(isMeta?'Retirer META':'Marquer META')+'" style="margin-left:5px;font-size:10px;cursor:pointer;opacity:0.6;vertical-align:middle">'+(isMeta?'★':'☆')+'</span>':'')
           +'</div>';
       }).join('')
       +'</div></div>';
