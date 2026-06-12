@@ -2082,7 +2082,7 @@ function toggleBanner(id){
 }
 function delBannerW(el){delBanner(el.dataset.id);}
 function delBanner(id){
-  if(!confirm('Supprimer ?'))return;
+  if(!confirm('Supprimer cette bannière définitivement ?'))return;
   DB.banners=DB.banners.filter(function(b){return b.id!==id;});
   sbDeleteBanner(id);
   OM('Gérer les bannières',bannerMgrHTML(),[{lbl:'Fermer',cls:'bol',fn:CM}]);
@@ -2459,7 +2459,7 @@ function editMbr(id){
     }}]);
 }
 function delMbr(id){
-  if(!confirm('Supprimer ce membre ?'))return;
+  if(!confirm('Supprimer ce membre définitivement ? Cette action est irréversible.'))return;
   sbDeleteMember(id).then(function(){
     // Also remove from all groups
     var grpSaves=[];
@@ -3031,7 +3031,7 @@ function editGrp(id){
 }
 
 function delGrp(id){
-  if(!confirm('Supprimer ce groupe ?'))return;
+  if(!confirm('Supprimer ce groupe de combat définitivement ?'))return;
   DB.groups=DB.groups.filter(function(g){return g.id!==id});
   DB._deleted=DB._deleted||{};
   DB._deleted['grp_'+id]=true;
@@ -3315,7 +3315,7 @@ function toggleVoteWar(id){
 }
 
 function delVoteWar(id){
-  if(!confirm('Supprimer cette guerre ?'))return;
+  if(!confirm('Supprimer ce vote de guerre définitivement ? Tous les votes seront perdus.'))return;
   sbDeleteWar(id).then(function(){
     sbLoad().then(function(){go('vote');});
   }).catch(function(e){console.warn('[delWar]',e);alert('Erreur suppression.');});
@@ -3530,7 +3530,7 @@ function backForum(){
   else go('for');
 }
 function delThread(id){
-  if(!confirm('Supprimer ?'))return;
+  if(!confirm('Supprimer ce sujet définitivement ? Toutes les réponses seront perdues.'))return;
   var wasFormation=CT&&typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(CT.tag)>=0;
   sbDeleteThread(id).then(function(){
     sbLoad().then(function(){
@@ -4229,6 +4229,7 @@ function addParticipantW(tid){
 }
 
 function removeParticipantW(tid,mid){
+  if(!confirm('Retirer ce participant du tournoi ?')) return;
   var t=(DB.tournaments||[]).find(function(x){return x.id===tid;});
   if(!t||!confirm('Retirer ce participant ?')) return;
   t.participants=(t.participants||[]).filter(function(p){return p.memberId!==mid;});
@@ -4604,7 +4605,7 @@ function editEvent(id){
     }}]);
 }
 function delEvent(id){
-  if(!confirm('Supprimer ?'))return;
+  if(!confirm('Supprimer cet événement définitivement ?'))return;
   sbDeleteEvent(id).then(function(){sbLoad().then(function(){go('cal');});});
 }
 
