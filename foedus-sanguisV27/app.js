@@ -321,7 +321,8 @@ function sbLoad(){
     SB.from('events').get(),
     SB.from('tournaments').get().catch(function(e){console.warn('[SB] tournaments:',e);return[];}),
     SB.from('hierarchy').get().catch(function(e){console.warn('[SB] hierarchy:',e);return[];}),
-    SB.from('presence').get().catch(function(e){console.warn('[SB] presence:',e);return[];})
+    SB.from('presence').get().catch(function(e){console.warn('[SB] presence:',e);return[];}),
+    SB.from('house_settings').get().catch(function(e){console.warn('[SB] settings:',e);return[];})
   ]).then(function(res){
     var settings=res[0][0]||{};
     var membres=res[1]||[];
@@ -348,6 +349,8 @@ function sbLoad(){
     DB.tournaments    = tournaments.map(sbTournamentToLocal);
     DB.hierarchy      = (res[10]||[]);
     DB.presence       = (res[11]||[]);
+    var settingsRow=(res[12]||[]).find(function(r){return r.key==='meta_units';});
+    DB.metaUnits      = settingsRow ? (settingsRow.value||[]) : [];
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
     console.log('[SB] Chargé: '+DB.members.length+' membres, '+(DB.pendingMembers||[]).length+' en attente');
@@ -606,7 +609,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings().catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[]}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[]}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -2478,6 +2481,24 @@ function delMbr(id){
 // ════════════════════════════════════════
 // PAGE: UNITÉS
 // ════════════════════════════════════════
+// ── Gestion unités META ──────────────────────────────────────
+function saveMetaUnits(){
+  var existing=(DB.metaUnits||[]);
+  SB.from('house_settings').upsert({key:'meta_units',value:existing})
+    .catch(function(e){console.warn('[meta]',e);});
+}
+
+function toggleMetaUnit(name){
+  if(!HR('formation')&&!HR('officier')) return;
+  DB.metaUnits=DB.metaUnits||[];
+  var idx=DB.metaUnits.indexOf(name);
+  if(idx>=0) DB.metaUnits.splice(idx,1);
+  else DB.metaUnits.push(name);
+  saveMetaUnits();
+  _rerenderUnit();
+}
+
+
 function pgUnit(){
   var myU=CU.units||[];
   var myN=myU.map(function(u){return u.name;});
@@ -2503,7 +2524,7 @@ function pgUnit(){
     +myU.map(function(u,i){
       var rs=unitRarityStyle(u.name);
       return'<tr>'
-        +'<td style="font-size:12px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+rs.border+';margin-right:6px"></span>'+esc(u.name)+'</td>'
+        +(function(){var im=(DB.metaUnits||[]).indexOf(u.name)>=0; return'<td style="font-size:12px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+rs.border+';margin-right:6px"></span>'+esc(u.name)+(im?'<span style="font-size:8px;font-weight:700;background:#c9a227;color:#000;padding:1px 4px;border-radius:2px;margin-left:4px">META</span>':'')+'</td>';})() +''
         +'<td><div style="display:flex;gap:2px">'+[1,2,3,4,5].map(function(n){return'<span style="font-size:16px;cursor:pointer;color:'+(u.mastery>=n?'var(--gold)':'var(--tx3)')+'" onclick="setM('+i+','+n+')">'+(u.mastery>=n?'★':'☆')+'</span>';}).join('')+'</div></td>'
         +'<td><button class="btn bred bsm" onclick="remU('+i+')">✕</button></td>'
         +'</tr>';
@@ -2536,9 +2557,13 @@ function pgUnit(){
       +filtered.map(function(u){
         var sel=myN.indexOf(u)>=0;
         var rs2=unitRarityStyle(u);
+        var isMeta=(DB.metaUnits||[]).indexOf(u)>=0;
         return'<div class="uchip'+(sel?' sel':'')+'" onclick="togUnitW(this)" data-u="'+esc(u)+'"'
-          +' style="border-color:'+rs2.border+';background:'+(sel?rs2.bg.replace(',.12',',0.25'):rs2.bg)+';color:'+(sel?rs2.color:'var(--tx2)')+';">'
-          +(sel?'✓ ':'')+esc(u)+'</div>';
+          +' style="border-color:'+(isMeta?'#c9a227':rs2.border)+';background:'+(sel?rs2.bg.replace(',.12',',0.25'):rs2.bg)+';color:'+(sel?rs2.color:'var(--tx2)')+';">'
+          +(isMeta?'<span style="font-size:8px;font-weight:700;background:#c9a227;color:#000;padding:1px 4px;border-radius:2px;margin-right:4px;vertical-align:middle">META</span>':'')
+          +(sel?'✓ ':'')+esc(u)
+          +((HR('formation')||HR('officier'))?'<span onclick="toggleMetaUnit(this.dataset.u);event.stopPropagation()" data-u="'+esc(u)+'" title="'+(isMeta?'Retirer META':'Marquer META')+'" style="margin-left:5px;font-size:10px;cursor:pointer;opacity:0.6;vertical-align:middle">'+(isMeta?'★':'☆')+'</span>':'')
+          +'</div>';
       }).join('')
       +'</div></div>';
   });
