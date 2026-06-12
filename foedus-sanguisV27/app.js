@@ -292,29 +292,18 @@ function seedRemove(idx){
 function repairOrphanVotes(){
   var memberIds={};
   DB.members.forEach(function(m){ memberIds[m.id]=true; });
-  var orphans={}; // orphanId -> {count, wars, votes}
+  var warsToFix=[];
   (DB.voteWars||[]).forEach(function(w){
-    Object.keys(w.votes||{}).forEach(function(vid){
-      if(!memberIds[vid]){
-        if(!orphans[vid]) orphans[vid]={count:0,wars:[],sample:w.votes[vid]};
-        orphans[vid].count++;
-        orphans[vid].wars.push(w.title);
-      }
-    });
-  });
-  var keys=Object.keys(orphans);
-  if(!keys.length) return;
-  // Si un seul membre non-admin existe, c'est probablement lui
-  var nonAdminMembers=DB.members.filter(function(m){return m.role!=='admin'&&m.status!=='attente';});
-  keys.forEach(function(oid){
-    var info=orphans[oid];
-    console.warn('[Votes orphelins] ID: '+oid+' | '+info.count+' vote(s) | Guerres: '+info.wars.join(', '));
-    // Auto-fix si un seul membre non-admin et un seul orphelin
-    if(keys.length===1&&nonAdminMembers.length===1){
-      var target=nonAdminMembers[0];
-      console.warn('[Auto-fix] Tentative: '+oid+' -> '+target.id+' ('+target.username+')');
-      fixVoteKeys(oid, target.id);
+    var orphanKeys=Object.keys(w.votes||{}).filter(function(vid){ return !memberIds[vid]; });
+    if(orphanKeys.length){
+      orphanKeys.forEach(function(oid){ delete w.votes[oid]; });
+      warsToFix.push(w);
+      console.log('[Votes orphelins] Nettoyé '+orphanKeys.length+' vote(s) dans: '+w.title);
     }
+  });
+  // Sauvegarder en base les guerres corrigées
+  warsToFix.forEach(function(w){
+    sbSaveWar(w).catch(function(e){ console.warn('[repairOrphan] save err:', e); });
   });
 }
 
@@ -596,7 +585,13 @@ function getImgUrl(inputId, maxW, maxH) {
     if(typeof isImgCleared!=='undefined'&&isImgCleared(inputId)){ resolve(''); return; }
     var inp = document.getElementById(inputId);
     if(!inp || !inp.files || !inp.files[0]) { resolve(null); return; }
-    resizeImage(inp.files[0], maxW, maxH).then(function(resized){
+    var file = inp.files[0];
+    // GIF : pas de compression — uploader tel quel pour préserver l'animation
+    if(file.type==='image/gif'||file.name.toLowerCase().endsWith('.gif')){
+      uploadImage(file, resolve, function(){ resolve(null); });
+      return;
+    }
+    resizeImage(file, maxW, maxH).then(function(resized){
       uploadImage(resized, resolve, function(){ resolve(null); });
     });
   });
