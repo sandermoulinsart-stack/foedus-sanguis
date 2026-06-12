@@ -3623,6 +3623,7 @@ function openEditThread(id){
 
 function openEditFormation(id){
   var f=(DB.formations||[]).find(function(x){return x.id===id;});if(!f)return;
+  var isClass=(f.formType==='class');
   OM('Modifier la fiche',
     '<div class="fr2"><div class="fg"><label class="fl">Icône</label><input class="fi" id="ef-i" value="'+esc(f.icon||'📖')+'" style="max-width:60px"></div><div class="fg"><label class="fl">Titre</label><input class="fi" id="ef-t" value="'+esc(f.title)+'"></div></div>'
     +'<div class="fg"><label class="fl">Description courte</label><input class="fi" id="ef-d" value="'+esc(f.desc||'')+'"></div>'
