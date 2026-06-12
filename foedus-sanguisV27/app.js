@@ -122,11 +122,11 @@ function localThreadToSb(t){
 }
 function sbFormationToLocal(r){
   return {id:r.id,title:r.title,icon:r.icon||'📖',desc:r.description||'',
-    image:r.image||'',thumbnail:r.thumbnail||'',content:r.content||'',comments:r.comments||[],isMeta:r.is_meta||false,createdBy:r.created_by||'',featured:r.featured||false};
+    image:r.image||'',thumbnail:r.thumbnail||'',content:r.content||'',comments:r.comments||[],isMeta:r.is_meta||false,category:r.category||'',createdBy:r.created_by||'',featured:r.featured||false};
 }
 function localFormationToSb(f){
   return {id:f.id,title:f.title,icon:f.icon||'📖',description:f.desc||'',
-    image:f.image||'',thumbnail:f.thumbnail||'',content:f.content||'',comments:f.comments||[],is_meta:f.isMeta||false,created_by:f.createdBy||CU.username||'',featured:f.featured||false};
+    image:f.image||'',thumbnail:f.thumbnail||'',content:f.content||'',comments:f.comments||[],is_meta:f.isMeta||false,category:f.category||'',created_by:f.createdBy||CU.username||'',featured:f.featured||false};
 }
 function sbEventToLocal(r){
   return {id:r.id,title:r.title,date:r.date||'',time:r.time||'',description:r.description||'',image:r.image||'',featured:r.featured||false,votes:r.votes||{},voteOpen:r.vote_open||false};
@@ -3626,6 +3626,18 @@ function openEditFormation(id){
   OM('Modifier la fiche',
     '<div class="fr2"><div class="fg"><label class="fl">Icône</label><input class="fi" id="ef-i" value="'+esc(f.icon||'📖')+'" style="max-width:60px"></div><div class="fg"><label class="fl">Titre</label><input class="fi" id="ef-t" value="'+esc(f.title)+'"></div></div>'
     +'<div class="fg"><label class="fl">Description courte</label><input class="fi" id="ef-d" value="'+esc(f.desc||'')+'"></div>'
+    +'<div class="fg"><label class="fl">Catégorie</label><select class="fs" id="nfo-cat"><option value="">— Choisir une catégorie —</option><option value="Arquebusiers">Arquebusiers</option><option value="Archers">Archers</option><option value="Arbalétriers">Arbalétriers</option><option value="Boucliers">Boucliers</option><option value="Lanciers">Lanciers</option><option value="Anti Cavaleries Pushers">Anti Cavaleries Pushers</option><option value="Cavaleries">Cavaleries</option><option value="Exotiques">Exotiques</option></select></div>'
+    +'<div class="fg"><label class="fl">Catégorie</label><select class="fs" id="ef-cat"><option value=""></option>'
+    +'<option value="">— Choisir une catégorie —</option>'
+    +'<option value="Arquebusiers"'+(f.category==='Arquebusiers'?' selected':'')+'>Arquebusiers</option>'
+    +'<option value="Archers"'+(f.category==='Archers'?' selected':'')+'>Archers</option>'
+    +'<option value="Arbalétriers"'+(f.category==='Arbalétriers'?' selected':'')+'>Arbalétriers</option>'
+    +'<option value="Boucliers"'+(f.category==='Boucliers'?' selected':'')+'>Boucliers</option>'
+    +'<option value="Lanciers"'+(f.category==='Lanciers'?' selected':'')+'>Lanciers</option>'
+    +'<option value="Anti Cavaleries Pushers"'+(f.category==='Anti Cavaleries Pushers'?' selected':'')+'>Anti Cavaleries Pushers</option>'
+    +'<option value="Cavaleries"'+(f.category==='Cavaleries'?' selected':'')+'>Cavaleries</option>'
+    +'<option value="Exotiques"'+(f.category==='Exotiques'?' selected':'')+'>Exotiques</option>'
+    +'</select></div>'
     +'<div class="fg"><label class="fl">Thumbnail (carte liste)</label>'+imgPickerHTML('ef-thumb', f.thumbnail||'')+'</div>'
     +'<div class="fg"><label class="fl">Image principale (fiche ouverte)</label>'+imgPickerHTML('ef-img', f.image||'')+'</div>'
     +'<div class="fg"><label class="fl">Contenu</label><textarea class="ft" id="ef-c" style="min-height:150px">'+esc(f.content||'')+'</textarea></div>'
@@ -3642,6 +3654,7 @@ function openEditFormation(id){
         f.content=gVal('ef-c');
         f.featured=document.getElementById('ef-feat').checked;
         var metaEl=document.getElementById('ef-meta'); if(metaEl) f.isMeta=metaEl.checked;
+        var catEl=document.getElementById('ef-cat'); if(catEl) f.category=catEl.value;
         if(imgUrl!==undefined)f.image=imgUrl;
         if(thumbUrl!==undefined)f.thumbnail=thumbUrl;
         var idx=DB.formations.findIndex(function(x){return x.id===f.id;});
@@ -3740,11 +3753,26 @@ function pgForm(){
     +'</div>';
 
   if(tab==='fiches'){
-    if(!fiches.length){
-      h+='<div class="td ta-c" style="padding:40px">Aucune fiche. Les formateurs peuvent en créer.</div>';
+    var activeFormCat=window._formCat||'';
+    // Filtres catégories
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
+    h+='<button onclick="setFormCat(\'\')" class="btn '+(activeFormCat===''?'bg':'bol')+' bsm" style="font-size:10px">Toutes</button>';
+    h+='<button onclick="setFormCat(\'META\')" class="btn '+(activeFormCat==='META'?'btn bg':'bol')+' bsm" style="font-size:10px;background:'+(activeFormCat==='META'?'#c9a227':'')+';">⭐ META</button>';
+    h+='<button onclick="setFormCat(\'Arquebusiers\')" class="btn '+(activeFormCat==='Arquebusiers'?'bg':'bol')+' bsm" style="font-size:10px">Arquebusiers</button>';
+    h+='<button onclick="setFormCat(\'Archers\')" class="btn '+(activeFormCat==='Archers'?'bg':'bol')+' bsm" style="font-size:10px">Archers</button>';
+    h+='<button onclick="setFormCat(\'Arbalétriers\')" class="btn '+(activeFormCat==='Arbalétriers'?'bg':'bol')+' bsm" style="font-size:10px">Arbalétriers</button>';
+    h+='<button onclick="setFormCat(\'Boucliers\')" class="btn '+(activeFormCat==='Boucliers'?'bg':'bol')+' bsm" style="font-size:10px">Boucliers</button>';
+    h+='<button onclick="setFormCat(\'Lanciers\')" class="btn '+(activeFormCat==='Lanciers'?'bg':'bol')+' bsm" style="font-size:10px">Lanciers</button>';
+    h+='<button onclick="setFormCat(\'Anti Cavaleries Pushers\')" class="btn '+(activeFormCat==='Anti Cavaleries Pushers'?'bg':'bol')+' bsm" style="font-size:10px">Anti Cavaleries Pushers</button>';
+    h+='<button onclick="setFormCat(\'Cavaleries\')" class="btn '+(activeFormCat==='Cavaleries'?'bg':'bol')+' bsm" style="font-size:10px">Cavaleries</button>';
+    h+='<button onclick="setFormCat(\'Exotiques\')" class="btn '+(activeFormCat==='Exotiques'?'bg':'bol')+' bsm" style="font-size:10px">Exotiques</button>';
+    h+='</div>';
+    var filteredFiches=activeFormCat===''?fiches:activeFormCat==='META'?fiches.filter(function(f){return f.isMeta;}):fiches.filter(function(f){return f.category===activeFormCat;});
+    if(!filteredFiches.length){
+      h+='<div class="td ta-c" style="padding:40px">Aucune fiche dans cette catégorie.</div>';
     } else {
       h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">';
-      fiches.forEach(function(f){
+      filteredFiches.forEach(function(f){
         var canEdit=HR('officier')||HR('formation');
         h+='<div class="form-card" onclick="viewFormationW(this)" data-id="'+f.id+'"'+(f.isMeta?' style="border-color:#c9a227"':'')+'>';
         h+='<div style="width:100%;padding-top:100%;position:relative;background:var(--bg1)">';
@@ -3756,6 +3784,8 @@ function pgForm(){
         h+='<div style="padding:6px 8px">';
         h+='<div style="font-size:11px;font-weight:700;color:var(--tx1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(f.title)+'</div>';
         if(f.desc) h+='<div style="font-size:9px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+esc(f.desc)+'</div>';
+        if(f.category) h+='<div style="font-size:8px;font-weight:700;color:#64b5f6;margin-top:2px">'+esc(f.category)+'</div>';
+        if(f.isMeta) h+='<span style="font-size:7px;font-weight:700;background:#c9a227;color:#000;padding:1px 4px;border-radius:2px;display:inline-block;margin-top:2px">META</span>';
         if(canEdit){
           h+='<div style="display:flex;gap:3px;margin-top:5px">';
           h+='<button class="btn bol" style="font-size:8px;padding:2px 5px;flex:1" data-id="'+f.id+'" onclick="openEditFormationW(this);event.stopPropagation()">✏️</button>';
@@ -3807,6 +3837,10 @@ function renderFormation(f){
     +((HR('officier')||HR('formation'))?'<button class="btn bred bsm" style="margin-left:8px" onclick="delFormationW(this)" data-id="'+f.id+'">Supprimer</button>':'')+'</div>'
     +'<div class="pan"><div class="ph"><span style="font-size:22px;margin-right:10px">'+esc(f.icon||'📖')+'</span><span class="ptl" style="font-size:16px">'+esc(f.title)+'</span>'+(f.isMeta?'<span style="font-size:10px;font-weight:700;background:#c9a227;color:#000;padding:2px 8px;border-radius:3px;margin-left:auto">META</span>':'')+'</div>'
     +'<div class="pb">'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
+    +(f.category?'<span style="font-size:11px;font-weight:700;background:rgba(100,181,246,.15);color:#64b5f6;border:1px solid #64b5f6;padding:2px 10px;border-radius:20px">'+esc(f.category)+'</span>':'')
+    +(f.isMeta?'<span style="font-size:11px;font-weight:700;background:#c9a227;color:#000;padding:2px 10px;border-radius:20px">⭐ META</span>':'')
+    +'</div>'
     +(f.desc?'<div class="td tsm mb12" style="font-style:italic;font-size:14px">'+esc(f.desc)+'</div>':'')
     +(f.image?'<div style="width:100%;border-radius:3px;margin-bottom:16px"><img src="'+esc(f.image)+'" style="width:100%;height:auto;display:block;border-radius:3px"></div>':'')
     +'<div class="div"></div>'
@@ -3879,6 +3913,12 @@ function delFormationComment(btn){
 }
 
 
+function setFormCat(cat){
+  window._formCat=cat;
+  var el=document.getElementById('content');
+  if(el){var s=el.scrollTop;el.innerHTML=pgForm();el.scrollTop=s;}
+}
+
 function viewFormation(id){CFm=(DB.formations||[]).find(function(f){return f.id===id;});FmV='detail';go('form');}
 function delFormationW(el){
   if(!(HR('officier')||HR('formation')))return;
@@ -3892,6 +3932,7 @@ function openNewFormation(){
   OM('Nouveau guide / fiche unité',
     '<div class="fr2"><div class="fg"><label class="fl">Icône</label><input class="fi" id="nfo-i" value="📖" style="max-width:60px"></div><div class="fg"><label class="fl">Titre</label><input class="fi" id="nfo-t"></div></div>'
     +'<div class="fg"><label class="fl">Description courte</label><input class="fi" id="nfo-d" placeholder="Sous-titre ou résumé..."></div>'
+    +'<div class="fg"><label class="fl">Catégorie</label><select class="fs" id="nfo-cat"><option value="">— Choisir une catégorie —</option><option value="Arquebusiers">Arquebusiers</option><option value="Archers">Archers</option><option value="Arbalétriers">Arbalétriers</option><option value="Boucliers">Boucliers</option><option value="Lanciers">Lanciers</option><option value="Anti Cavaleries Pushers">Anti Cavaleries Pushers</option><option value="Cavaleries">Cavaleries</option><option value="Exotiques">Exotiques</option></select></div>'
     +'<div class="fg"><label class="fl">Thumbnail (carte liste)</label>'+ imgPickerHTML('nfo-thumb', '', 'Aucune image') +'</div>'
     +'<div class="fg"><label class="fl">Image principale (fiche ouverte)</label>'+ imgPickerHTML('nfo-img', '', 'Aucune image') +'</div>'
     +'<div class="fg"><label class="fl">Contenu / Tactiques</label><textarea class="ft" id="nfo-c" style="min-height:150px" placeholder="Décrivez les tactiques, formations, conseils..."></textarea></div>'
@@ -3900,7 +3941,7 @@ function openNewFormation(){
       var t=gVal('nfo-t').trim();if(!t)return alert('Titre requis');
       getImgUrl('nfo-thumb').then(function(thumbUrl){
       getImgUrl('nfo-img').then(function(imgUrl){
-        var f={id:'fo'+Date.now(),title:t,icon:gVal('nfo-i')||'📖',desc:gVal('nfo-d'),image:imgUrl||'',thumbnail:thumbUrl||'',content:gVal('nfo-c'),createdBy:CU.username,featured:gChk('nfo-feat'),isMeta:gChk('nfo-meta')};
+        var f={id:'fo'+Date.now(),title:t,icon:gVal('nfo-i')||'📖',desc:gVal('nfo-d'),image:imgUrl||'',thumbnail:thumbUrl||'',content:gVal('nfo-c'),createdBy:CU.username,featured:gChk('nfo-feat'),isMeta:gChk('nfo-meta'),category:gVal('nfo-cat')||''};
         sbSaveFormation(f).then(function(){
           sbLoad().then(function(){CM();go('form');});
         }).catch(function(e){console.warn('[formation]',e);});
