@@ -122,11 +122,11 @@ function localThreadToSb(t){
 }
 function sbFormationToLocal(r){
   return {id:r.id,title:r.title,icon:r.icon||'📖',desc:r.description||'',
-    image:r.image||'',thumbnail:r.thumbnail||'',content:r.content||'',comments:r.comments||[],createdBy:r.created_by||'',featured:r.featured||false};
+    image:r.image||'',thumbnail:r.thumbnail||'',content:r.content||'',comments:r.comments||[],isMeta:r.is_meta||false,createdBy:r.created_by||'',featured:r.featured||false};
 }
 function localFormationToSb(f){
   return {id:f.id,title:f.title,icon:f.icon||'📖',description:f.desc||'',
-    image:f.image||'',thumbnail:f.thumbnail||'',content:f.content||'',comments:f.comments||[],created_by:f.createdBy||CU.username||'',featured:f.featured||false};
+    image:f.image||'',thumbnail:f.thumbnail||'',content:f.content||'',comments:f.comments||[],is_meta:f.isMeta||false,created_by:f.createdBy||CU.username||'',featured:f.featured||false};
 }
 function sbEventToLocal(r){
   return {id:r.id,title:r.title,date:r.date||'',time:r.time||'',description:r.description||'',image:r.image||'',featured:r.featured||false,votes:r.votes||{},voteOpen:r.vote_open||false};
@@ -3629,7 +3629,7 @@ function openEditFormation(id){
     +'<div class="fg"><label class="fl">Thumbnail (carte liste)</label>'+imgPickerHTML('ef-thumb', f.thumbnail||'')+'</div>'
     +'<div class="fg"><label class="fl">Image principale (fiche ouverte)</label>'+imgPickerHTML('ef-img', f.image||'')+'</div>'
     +'<div class="fg"><label class="fl">Contenu</label><textarea class="ft" id="ef-c" style="min-height:150px">'+esc(f.content||'')+'</textarea></div>'
-    +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="ef-feat"'+(f.featured?' checked':'')+'>📌 À la une sur l\'accueil</label></div>',
+    +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="ef-meta"'+(f.isMeta?' checked':'')+'> <span style="font-size:10px;font-weight:700;background:#c9a227;color:#000;padding:1px 6px;border-radius:2px">META</span> Fiche unité méta</label></div>'    +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="ef-feat"'+(f.featured?' checked':'')+'>📌 À la une sur l\'accueil</label></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
       var inpImg=document.getElementById('ef-img');
       var inpThumb=document.getElementById('ef-thumb');
@@ -3641,6 +3641,7 @@ function openEditFormation(id){
         f.desc=gVal('ef-d');
         f.content=gVal('ef-c');
         f.featured=document.getElementById('ef-feat').checked;
+        var metaEl=document.getElementById('ef-meta'); if(metaEl) f.isMeta=metaEl.checked;
         if(imgUrl!==undefined)f.image=imgUrl;
         if(thumbUrl!==undefined)f.thumbnail=thumbUrl;
         var idx=DB.formations.findIndex(function(x){return x.id===f.id;});
@@ -3745,7 +3746,7 @@ function pgForm(){
       h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">';
       fiches.forEach(function(f){
         var canEdit=HR('officier')||HR('formation');
-        h+='<div class="form-card" onclick="viewFormationW(this)" data-id="'+f.id+'">';
+        h+='<div class="form-card" onclick="viewFormationW(this)" data-id="'+f.id+'"'+(f.isMeta?' style="border-color:#c9a227"':'')+'>';
         h+='<div style="width:100%;padding-top:100%;position:relative;background:var(--bg1)">';
         if(f.featured) h+='<div style="position:absolute;top:4px;right:4px;z-index:2;background:var(--gold);color:#000;border-radius:2px;font-size:7px;font-weight:900;padding:1px 4px">📌</div>';
         var thumbSrc=f.thumbnail||f.image;
@@ -3804,7 +3805,7 @@ function renderFormation(f){
   return'<div style="margin-bottom:12px"><button class="btn bol bsm" onclick="backFormation()">← Retour</button>'
     +((HR('officier')||HR('formation'))?'<button class="btn ol bsm" style="margin-left:8px" data-id="'+f.id+'" onclick="openEditFormationW(this)">Éditer</button>':'')
     +((HR('officier')||HR('formation'))?'<button class="btn bred bsm" style="margin-left:8px" onclick="delFormationW(this)" data-id="'+f.id+'">Supprimer</button>':'')+'</div>'
-    +'<div class="pan"><div class="ph"><span style="font-size:22px;margin-right:10px">'+esc(f.icon||'📖')+'</span><span class="ptl" style="font-size:16px">'+esc(f.title)+'</span></div>'
+    +'<div class="pan"><div class="ph"><span style="font-size:22px;margin-right:10px">'+esc(f.icon||'📖')+'</span><span class="ptl" style="font-size:16px">'+esc(f.title)+'</span>'+(f.isMeta?'<span style="font-size:10px;font-weight:700;background:#c9a227;color:#000;padding:2px 8px;border-radius:3px;margin-left:auto">META</span>':'')+'</div>'
     +'<div class="pb">'
     +(f.desc?'<div class="td tsm mb12" style="font-style:italic;font-size:14px">'+esc(f.desc)+'</div>':'')
     +(f.image?'<div style="width:100%;border-radius:3px;margin-bottom:16px"><img src="'+esc(f.image)+'" style="width:100%;height:auto;display:block;border-radius:3px"></div>':'')
@@ -3894,12 +3895,12 @@ function openNewFormation(){
     +'<div class="fg"><label class="fl">Thumbnail (carte liste)</label>'+ imgPickerHTML('nfo-thumb', '', 'Aucune image') +'</div>'
     +'<div class="fg"><label class="fl">Image principale (fiche ouverte)</label>'+ imgPickerHTML('nfo-img', '', 'Aucune image') +'</div>'
     +'<div class="fg"><label class="fl">Contenu / Tactiques</label><textarea class="ft" id="nfo-c" style="min-height:150px" placeholder="Décrivez les tactiques, formations, conseils..."></textarea></div>'
-    +(HR('formation')||HR('officier')?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nfo-feat"> 📌 Mettre à la une sur l\'accueil</label></div>':'<input type="hidden" id="nfo-feat" value="false">'),
+    +(HR('formation')||HR('officier')||HR('admin')?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nfo-meta"> <span style="font-size:10px;font-weight:700;background:#c9a227;color:#000;padding:1px 6px;border-radius:2px">META</span> Fiche unité méta</label></div>':'')    +(HR('formation')||HR('officier')?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nfo-feat"> 📌 Mettre à la une sur l\'accueil</label></div>':'<input type="hidden" id="nfo-feat" value="false">'),
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Publier',cls:'btn bg',fn:function(){
       var t=gVal('nfo-t').trim();if(!t)return alert('Titre requis');
       getImgUrl('nfo-thumb').then(function(thumbUrl){
       getImgUrl('nfo-img').then(function(imgUrl){
-        var f={id:'fo'+Date.now(),title:t,icon:gVal('nfo-i')||'📖',desc:gVal('nfo-d'),image:imgUrl||'',thumbnail:thumbUrl||'',content:gVal('nfo-c'),createdBy:CU.username,featured:gChk('nfo-feat')};
+        var f={id:'fo'+Date.now(),title:t,icon:gVal('nfo-i')||'📖',desc:gVal('nfo-d'),image:imgUrl||'',thumbnail:thumbUrl||'',content:gVal('nfo-c'),createdBy:CU.username,featured:gChk('nfo-feat'),isMeta:gChk('nfo-meta')};
         sbSaveFormation(f).then(function(){
           sbLoad().then(function(){CM();go('form');});
         }).catch(function(e){console.warn('[formation]',e);});
