@@ -122,11 +122,11 @@ function localThreadToSb(t){
 }
 function sbFormationToLocal(r){
   return {id:r.id,title:r.title,icon:r.icon||'📖',desc:r.description||'',
-    image:r.image||'',thumbnail:r.thumbnail||'',content:r.content||'',comments:r.comments||[],isMeta:r.is_meta||false,category:r.category||'',createdBy:r.created_by||'',featured:r.featured||false};
+    image:r.image||'',thumbnail:r.thumbnail||'',content:r.content||'',comments:r.comments||[],isMeta:r.is_meta||false,category:r.category||'',formType:r.form_type||'unit',createdBy:r.created_by||'',featured:r.featured||false};
 }
 function localFormationToSb(f){
   return {id:f.id,title:f.title,icon:f.icon||'📖',description:f.desc||'',
-    image:f.image||'',thumbnail:f.thumbnail||'',content:f.content||'',comments:f.comments||[],is_meta:f.isMeta||false,category:f.category||'',created_by:f.createdBy||CU.username||'',featured:f.featured||false};
+    image:f.image||'',thumbnail:f.thumbnail||'',content:f.content||'',comments:f.comments||[],is_meta:f.isMeta||false,category:f.category||'',form_type:f.formType||'unit',created_by:f.createdBy||CU.username||'',featured:f.featured||false};
 }
 function sbEventToLocal(r){
   return {id:r.id,title:r.title,date:r.date||'',time:r.time||'',description:r.description||'',image:r.image||'',featured:r.featured||false,votes:r.votes||{},voteOpen:r.vote_open||false};
@@ -3737,22 +3737,52 @@ function openNewThread(){
 function setFmTab(el){FmTab=typeof el==='string'?el:el.dataset.t;go('form');}
 function pgForm(){
   if(HR('officier')||HR('formation'))
-    document.getElementById('tact').innerHTML='<button class="btn bg bsm" onclick="openNewFormation()">+ Nouvelle fiche</button>';
+    (function(){var tabNow=window._formTab||'classes';if(tabNow==='classes')document.getElementById('tact').innerHTML='<button class="btn bg bsm" onclick="openNewFormation(\'class\')">+ Nouvelle fiche classe</button>';else if(tabNow==='fiches')document.getElementById('tact').innerHTML='<button class="btn bg bsm" onclick="openNewFormation(\'unit\')">+ Nouvelle fiche unité</button>';else document.getElementById('tact').innerHTML='';})();
   if(FmV==='detail'&&CFm) return renderFormation(CFm);
   if(FV==='thread'&&CT) return renderThread(CT);
 
-  var tab=window._formTab||'fiches';
-  var fiches=(DB.formations||[]);
+  var tab=window._formTab||'classes';
+  var classes=(DB.formations||[]).filter(function(f){return f.formType==='class';});
+  var ficheUnits=(DB.formations||[]).filter(function(f){return f.formType!=='class';});
+  var fiches=ficheUnits;
   var threads=(DB.forumThreads||[]).filter(function(t){
     return typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(t.tag)>=0;
   });
 
   var h='<div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--b1)">'
-    +'<button onclick="setFormTab(0)" class="ftab'+(tab==='fiches'?' ftab-a':'')+'">📋 Fiches ('+fiches.length+')</button>'
-    +'<button onclick="setFormTab(1)" class="ftab'+(tab==='discussions'?' ftab-a':'')+'">💬 Discussions ('+threads.length+')</button>'
+    +'<button onclick="setFormTab(0)" class="ftab'+(tab==='classes'?' ftab-a':'')+'">⚔️ Classes CB ('+classes.length+')</button>'
+    +'<button onclick="setFormTab(1)" class="ftab'+(tab==='fiches'?' ftab-a':'')+'">📋 Fiches Unités ('+ficheUnits.length+')</button>'
+    +'<button onclick="setFormTab(2)" class="ftab'+(tab==='discussions'?' ftab-a':'')+'">💬 Discussions ('+threads.length+')</button>'
     +'</div>';
 
-  if(tab==='fiches'){
+  if(tab==='classes'){
+    if(!classes.length){
+      h+='<div class="td ta-c" style="padding:40px">Aucune fiche de classe.</div>';
+    } else {
+      h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">';
+      classes.forEach(function(f){
+        var canEdit=HR('officier')||HR('formation')||HR('admin');
+        h+='<div class="form-card" onclick="viewFormationW(this)" data-id="'+f.id+'">';
+        h+='<div style="width:100%;padding-top:100%;position:relative;background:var(--bg1)">';
+        if(f.featured) h+='<div style="position:absolute;top:4px;right:4px;z-index:2;background:var(--gold);color:#000;border-radius:2px;font-size:7px;font-weight:900;padding:1px 4px">📌</div>';
+        var thumbSrc=f.thumbnail||f.image;
+        if(thumbSrc) h+='<img src="'+esc(thumbSrc)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">';
+        else h+='<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:32px">'+esc(f.icon||'⚔️')+'</div>';
+        h+='</div>';
+        h+='<div style="padding:6px 8px">';
+        h+='<div style="font-size:11px;font-weight:700;color:var(--tx1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(f.title)+'</div>';
+        if(f.desc) h+='<div style="font-size:9px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+esc(f.desc)+'</div>';
+        if(canEdit){
+          h+='<div style="display:flex;gap:3px;margin-top:5px">';
+          h+='<button class="btn bol" style="font-size:8px;padding:2px 5px;flex:1" data-id="'+f.id+'" onclick="openEditFormationW(this);event.stopPropagation()">✏️</button>';
+          h+='<button class="btn bred" style="font-size:8px;padding:2px 5px" data-id="'+f.id+'" onclick="delFormationW(this);event.stopPropagation()">✕</button>';
+          h+='</div>';
+        }
+        h+='</div></div>';
+      });
+      h+='</div>';
+    }
+  } else if(tab==='fiches'){
     var activeFormCat=window._formCat||'';
     // Filtres catégories
     h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">';
@@ -3819,7 +3849,7 @@ function pgForm(){
 }
 
 function setFormTab(t){
-  window._formTab=t===0?'fiches':'discussions';
+  window._formTab=t===0?'classes':t===1?'fiches':'discussions';
   FmV='list';FV='list';
   go('form');
 }
@@ -3928,22 +3958,23 @@ function delFormationW(el){
   }).catch(function(e){console.warn('[delFormation]',e);});
 }
 function backFormation(){FmV='list';CFm=null;go('form');}
-function openNewFormation(){
-  OM('Nouveau guide / fiche unité',
+function openNewFormation(type){
+  var isClass=(type==='class');
+  OM(isClass?'Nouvelle fiche classe':'Nouvelle fiche unité',
     '<div class="fr2"><div class="fg"><label class="fl">Icône</label><input class="fi" id="nfo-i" value="📖" style="max-width:60px"></div><div class="fg"><label class="fl">Titre</label><input class="fi" id="nfo-t"></div></div>'
     +'<div class="fg"><label class="fl">Description courte</label><input class="fi" id="nfo-d" placeholder="Sous-titre ou résumé..."></div>'
     +'<div class="fg"><label class="fl">Catégorie</label><select class="fs" id="nfo-cat"><option value="">— Choisir une catégorie —</option><option value="Arquebusiers">Arquebusiers</option><option value="Archers">Archers</option><option value="Arbalétriers">Arbalétriers</option><option value="Boucliers">Boucliers</option><option value="Lanciers">Lanciers</option><option value="Anti Cavaleries Pushers">Anti Cavaleries Pushers</option><option value="Cavaleries">Cavaleries</option><option value="Exotiques">Exotiques</option></select></div>'
     +'<div class="fg"><label class="fl">Thumbnail (carte liste)</label>'+ imgPickerHTML('nfo-thumb', '', 'Aucune image') +'</div>'
     +'<div class="fg"><label class="fl">Image principale (fiche ouverte)</label>'+ imgPickerHTML('nfo-img', '', 'Aucune image') +'</div>'
     +'<div class="fg"><label class="fl">Contenu / Tactiques</label><textarea class="ft" id="nfo-c" style="min-height:150px" placeholder="Décrivez les tactiques, formations, conseils..."></textarea></div>'
-    +(HR('formation')||HR('officier')||HR('admin')?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nfo-meta"> <span style="font-size:10px;font-weight:700;background:#c9a227;color:#000;padding:1px 6px;border-radius:2px">META</span> Fiche unité méta</label></div>':'')    +(HR('formation')||HR('officier')?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nfo-feat"> 📌 Mettre à la une sur l\'accueil</label></div>':'<input type="hidden" id="nfo-feat" value="false">'),
+    +(!isClass&&(HR('formation')||HR('officier')||HR('admin'))?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nfo-meta"> <span style="font-size:10px;font-weight:700;background:#c9a227;color:#000;padding:1px 6px;border-radius:2px">META</span> Fiche unité méta</label></div>':'')    +(HR('formation')||HR('officier')?'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="nfo-feat"> 📌 Mettre à la une sur l\'accueil</label></div>':'<input type="hidden" id="nfo-feat" value="false">'),
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Publier',cls:'btn bg',fn:function(){
       var t=gVal('nfo-t').trim();if(!t)return alert('Titre requis');
       getImgUrl('nfo-thumb').then(function(thumbUrl){
       getImgUrl('nfo-img').then(function(imgUrl){
-        var f={id:'fo'+Date.now(),title:t,icon:gVal('nfo-i')||'📖',desc:gVal('nfo-d'),image:imgUrl||'',thumbnail:thumbUrl||'',content:gVal('nfo-c'),createdBy:CU.username,featured:gChk('nfo-feat'),isMeta:gChk('nfo-meta'),category:gVal('nfo-cat')||''};
+        var f={id:'fo'+Date.now(),title:t,icon:gVal('nfo-i')||isClass?'⚔️':'📖',desc:gVal('nfo-d'),image:imgUrl||'',thumbnail:thumbUrl||'',content:gVal('nfo-c'),createdBy:CU.username,featured:gChk('nfo-feat'),isMeta:isClass?false:gChk('nfo-meta'),category:isClass?'':gVal('nfo-cat')||'',formType:isClass?'class':'unit'};
         sbSaveFormation(f).then(function(){
-          sbLoad().then(function(){CM();go('form');});
+          sbLoad().then(function(){CM();window._formTab=isClass?'classes':'fiches';go('form');});
         }).catch(function(e){console.warn('[formation]',e);});
       });
       });
