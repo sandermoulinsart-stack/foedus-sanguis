@@ -396,7 +396,10 @@ function sbLoad(){
 
 
 function sbSaveMember(m) {
-  return SB.from('membres').upsert(localMemberToSb(m));
+  var data = localMemberToSb(m);
+  // Ne jamais écraser le PIN avec une valeur vide — seulement si explicitement défini
+  if(!data.pin) delete data.pin;
+  return SB.from('membres').upsert(data);
 }
 function sbDeleteMember(id) {
   return SB.from('membres').delete('id', id);
@@ -3011,6 +3014,18 @@ function editMbr(id){
     }}]);
 }
 function delMbr(id){
+  var m=gM(id);if(!m)return;
+  var myRole=_HR_ROLE||CU.role;
+  // Protéger AdminFS et les rôles admin/admin_assistant
+  if(m.username.toLowerCase()==='adminfs'){
+    return alert('Le compte AdminFS ne peut pas être supprimé.');
+  }
+  if(m.role==='admin'&&myRole!=='admin'){
+    return alert('Seul un Admin peut supprimer un compte Admin.');
+  }
+  if(m.role==='admin_assistant'&&myRole!=='admin'&&myRole!=='admin_assistant'){
+    return alert('Seul un Admin ou Admin Assistant peut supprimer un compte Admin Assistant.');
+  }
   if(!confirm('Supprimer ce membre définitivement ? Cette action est irréversible.'))return;
   sbDeleteMember(id).then(function(){
     // Also remove from all groups
@@ -5783,7 +5798,7 @@ function sbMemberToLocal(r){
 }
 function localMemberToSb(m){
   return {
-    id:m.id, username:m.username, pin:m.pin||'',
+    id:m.id, username:m.username, pin:m.pin||null,
     role:m.role||'recrue', status:m.status||'actif',
     sanguin:m.sanguin||false, chef_groupe:m.chefGroupe||false, grand_champion:m.grandChampion||false,
     joined_at:m.joinDate||m.date||'',
