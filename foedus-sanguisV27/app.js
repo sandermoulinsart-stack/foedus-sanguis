@@ -5435,7 +5435,7 @@ function pgParam(){
       diagBlock='<div class="pan" style="border-left:3px solid #66bb6a"><div class="ph"><span class="ptl" style="color:#66bb6a">✅ Aucun vote orphelin</span></div></div>';
     }
   }
-  var auditBlock = HR('admin')
+  var auditBlock = HR('admin_assistant')
     ? '<div class="pan"><div class="ph"><span class="ptl">🔍 Journal d\'audit</span>'
       +'<button class="btn bol bsm" onclick="openAuditLogW()">Consulter</button>'
       +'</div><div class="pb"><p class="td tsm">Historique des changements de rôles et actions sensibles.</p></div></div>'
@@ -5450,7 +5450,7 @@ function pgParam(){
 }
 
 function openAuditLogW(){
-  if(!HR('admin')) return;
+  if(!HR('admin_assistant')) return;
   var modal = document.getElementById('mbdy');
   if(modal) modal.innerHTML = '<div style="text-align:center;padding:20px;color:var(--tx3)">⟳ Chargement...</div>';
   OM('🔍 Journal d\'audit', '<div id="audit-content" style="font-size:12px"><div style="text-align:center;padding:20px;color:var(--tx3)">⟳ Chargement...</div></div>', [{lbl:'Fermer', cls:'bol', fn:CM}]);
