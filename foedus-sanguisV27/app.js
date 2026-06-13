@@ -2575,76 +2575,101 @@ function hillHTML(){
   var h=DB.hillKing||{};
   var now=Date.now();
   var isKing=h.kingId===CU.id;
-  var cooldownLeft=h.claimedAt?(Math.max(0,15000-(now-h.claimedAt))):0;
-  var canClaim=cooldownLeft===0&&!isKing;
-  var bg=h.bgImage?'background-image:url('+h.bgImage+');background-size:cover;background-position:center;':'background:linear-gradient(135deg,#1a0a0a,#2d1a00);';
+  var cooldownLeft=h.claimedAt?Math.max(0,15000-(now-h.claimedAt)):0;
+  var occupied=cooldownLeft>0;
+  var bg=h.bgImage
+    ?'background-image:url('+h.bgImage+');background-size:cover;background-position:center;min-height:280px;'
+    :'background:linear-gradient(135deg,#1a0a0a 0%,#2d1a00 50%,#0a0a1a 100%);min-height:240px;';
+  var overlay=h.bgImage?'rgba(0,0,0,0.58)':'rgba(0,0,0,0.25)';
 
-  var out='<div id="hill-widget" style="margin-top:18px;border-radius:6px;overflow:hidden;border:2px solid var(--golddim);position:relative;min-height:180px;'+bg+'">'
-    +'<div style="position:absolute;inset:0;background:rgba(0,0,0,'+(h.bgImage?'0.55':'0.3')+')"></div>'
-    +'<div style="position:relative;z-index:1;padding:18px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px">'
-    +'<div style="font-family:Cinzel,serif;font-size:16px;font-weight:700;color:var(--gold);letter-spacing:2px;text-shadow:0 2px 8px rgba(0,0,0,.8)">⛰️ ROI DE LA COLLINE</div>';
+  var out='<div id="hill-widget" style="margin-top:18px;border-radius:6px;overflow:hidden;border:2px solid var(--golddim);position:relative;'+bg+'">';
+  out+='<div style="position:absolute;inset:0;background:'+overlay+'"></div>';
+  out+='<div style="position:relative;z-index:1;padding:32px 20px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px">';
+
+  out+='<div style="font-family:Cinzel,serif;font-size:15px;font-weight:700;color:var(--gold);letter-spacing:3px;text-shadow:0 2px 10px rgba(0,0,0,1)">⛰️ ROI DE LA COLLINE</div>';
 
   if(h.kingId&&h.kingName){
-    out+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px">'
-      +'<div style="font-size:22px;font-weight:700;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.9);font-family:Cinzel,serif">👑 '+esc(h.kingName)+'</div>';
+    out+='<div style="font-size:28px;font-weight:700;color:#fff;text-shadow:0 2px 20px rgba(0,0,0,1);font-family:Cinzel,serif;line-height:1.1">👑 '+esc(h.kingName)+'</div>';
     if(h.message){
-      out+='<div style="font-size:13px;color:rgba(255,255,255,.9);font-style:italic;text-shadow:0 1px 6px rgba(0,0,0,.8);max-width:320px">"'+esc(h.message)+'"</div>';
+      out+='<div style="font-size:14px;color:rgba(255,255,255,.95);font-style:italic;text-shadow:0 1px 8px rgba(0,0,0,1);max-width:360px;line-height:1.6">"'+esc(h.message)+'"</div>';
     }
-    if(cooldownLeft>0){
-      out+='<div id="hill-timer" style="font-size:11px;color:var(--gold);margin-top:4px">🛡️ Protégé encore <span id="hill-seconds">'+Math.ceil(cooldownLeft/1000)+'</span>s</div>';
-    }
-    out+='</div>';
   } else {
-    out+='<div style="font-size:13px;color:rgba(255,255,255,.7)">La colline est vide... qui osera la prendre ?</div>';
+    out+='<div style="font-size:14px;color:rgba(255,255,255,.65);text-shadow:0 1px 6px rgba(0,0,0,.8)">La colline est vide… qui osera la prendre ?</div>';
   }
 
-  if(canClaim){
-    out+='<div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;max-width:320px">'
-      +'<input id="hill-msg" class="fi" placeholder="Votre cri de victoire... (optionnel)" maxlength="80" style="text-align:center;background:rgba(0,0,0,.5);border-color:var(--golddim);color:#fff">'
-      +'<button onclick="claimHill()" style="background:var(--gold);border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:13px;padding:10px 24px;border-radius:3px;cursor:pointer;letter-spacing:1px;width:100%">⚔️ À MOI LA COLLINE !</button>'
-      +'</div>';
-  } else if(isKing){
-    out+='<div style="font-size:11px;color:var(--gold);background:rgba(0,0,0,.4);padding:6px 14px;border-radius:3px">👑 Vous régnez sur la colline !</div>';
-  } else if(cooldownLeft>0){
-    out+='<div style="font-size:11px;color:rgba(255,255,255,.5)">Attendez que le roi soit vulnérable...</div>';
+  if(isKing&&occupied){
+    out+='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;max-width:360px">';
+    out+='<input id="hill-msg" class="fi" placeholder="Adressez la parole à vos sujets…" maxlength="100" style="text-align:center;background:rgba(0,0,0,.55);border-color:var(--golddim);color:#fff;font-style:italic" oninput="updateHillMsg()">';
+    out+='<div style="font-size:12px;color:var(--gold);text-shadow:0 1px 6px rgba(0,0,0,1)">🛡️ Vous régnez — <span id="hill-seconds">'+Math.ceil(cooldownLeft/1000)+'</span>s restantes</div>';
+    out+='</div>';
+  } else if(!occupied){
+    out+='<button onclick="claimHill()" style="background:var(--gold);border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:14px;padding:13px 36px;border-radius:3px;cursor:pointer;letter-spacing:2px;box-shadow:0 4px 24px rgba(201,162,39,.5)">⚔️ À MOI LA COLLINE !</button>';
+  } else {
+    out+='<button onclick="hillBlockedMsg()" style="background:rgba(40,40,40,.75);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.35);font-family:Cinzel,serif;font-weight:700;font-size:14px;padding:13px 36px;border-radius:3px;cursor:pointer;letter-spacing:2px">⚔️ À MOI LA COLLINE !</button>';
+    out+='<div style="font-size:11px;color:rgba(255,255,255,.4)">🛡️ Libre dans <span id="hill-seconds">'+Math.ceil(cooldownLeft/1000)+'</span>s</div>';
   }
 
-  // Bouton image (admin/officier)
   if(HR('officier')){
-    out+='<div style="position:absolute;top:8px;right:8px;z-index:2">'
-      +'<label style="cursor:pointer;background:rgba(0,0,0,.6);border:1px solid var(--golddim);color:var(--gold);font-size:10px;padding:4px 8px;border-radius:3px">🖼️ Fond<input type="file" accept="image/*" onchange="setHillBg(this)" style="display:none"></label>'
-      +'</div>';
+    out+='<div style="position:absolute;top:10px;right:10px;z-index:2">';
+    out+='<label style="cursor:pointer;background:rgba(0,0,0,.65);border:1px solid var(--golddim);color:var(--gold);font-size:10px;padding:5px 10px;border-radius:3px;display:block">🖼️ Fond<input type="file" accept="image/*" onchange="setHillBg(this)" style="display:none"></label>';
+    out+='</div>';
   }
 
   out+='</div></div>';
 
-  // Timer countdown
-  if(cooldownLeft>0){
+  if(occupied){
     setTimeout(function tick(){
       var left=Math.max(0,15000-(Date.now()-(DB.hillKing.claimedAt||0)));
-      var el=document.getElementById('hill-seconds');
-      var timerEl=document.getElementById('hill-timer');
-      if(!el)return;
+      var els=document.querySelectorAll('#hill-seconds');
+      if(!els.length)return;
       if(left<=0){
-        // Cooldown terminé — re-render
         var w=document.getElementById('hill-widget');
-        if(w) w.outerHTML=hillHTML();
+        if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
         return;
       }
-      el.textContent=Math.ceil(left/1000);
-      setTimeout(tick,500);
-    },500);
+      els.forEach(function(el){el.textContent=Math.ceil(left/1000);});
+      setTimeout(tick,250);
+    },250);
   }
 
   return out;
 }
 
 function claimHill(){
-  var msg=(document.getElementById('hill-msg')||{}).value||'';
-  DB.hillKing={kingId:CU.id,kingName:CU.username,message:msg.trim(),claimedAt:Date.now(),bgImage:DB.hillKing.bgImage||''};
+  DB.hillKing={kingId:CU.id,kingName:CU.username,message:'',claimedAt:Date.now(),bgImage:(DB.hillKing||{}).bgImage||''};
   saveHillKing();
   var w=document.getElementById('hill-widget');
-  if(w) w.outerHTML=hillHTML();
+  if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
+}
+
+function updateHillMsg(){
+  var el=document.getElementById('hill-msg');
+  if(!el||!DB.hillKing)return;
+  DB.hillKing.message=el.value.trim();
+  saveHillKing();
+}
+
+function hillBlockedMsg(){
+  var h=DB.hillKing||{};
+  var left=Math.ceil(Math.max(0,15000-(Date.now()-(h.claimedAt||0)))/1000);
+  var msgs=[
+    '⚔️ Reculez ! La colline appartient à '+esc(h.kingName||'un roi')+' ! Encore '+left+'s de règne.',
+    '🛡️ '+esc(h.kingName||'Le roi')+' n\'a pas encore dit son dernier mot ! Patientez '+left+'s.',
+    '👑 Insolent ! La colline est revendiquée. Attendez '+left+'s avant d\'oser défier le roi.',
+    '🏹 Vous ne passerez pas ! '+esc(h.kingName||'Le roi')+' règne encore '+left+'s.'
+  ];
+  var msg=msgs[Math.floor(Math.random()*msgs.length)];
+  var toast=document.getElementById('hill-toast');
+  if(!toast){
+    toast=document.createElement('div');
+    toast.id='hill-toast';
+    toast.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(20,10,0,.95);border:1px solid var(--golddim);color:var(--gold);padding:12px 20px;border-radius:4px;font-size:12px;z-index:9999;max-width:340px;text-align:center;font-style:italic;box-shadow:0 4px 24px rgba(0,0,0,.7);transition:opacity .4s;';
+    document.body.appendChild(toast);
+  }
+  toast.textContent=msg;
+  toast.style.opacity='1';
+  clearTimeout(window._hillToastT);
+  window._hillToastT=setTimeout(function(){toast.style.opacity='0';},3000);
 }
 
 function setHillBg(input){
