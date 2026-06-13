@@ -3391,7 +3391,7 @@ function warSummaryHTML(){
   var canOfficier=HR('officier');
   var rlHTML='';
   if(canOfficier||rlMembers.length){
-    rlHTML='<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--b1)">'
+    rlHTML='<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--b1)" id="rl-block-'+war.id+'">'
       +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">🎖️ RL DE GUERRE</div>'
       +'<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">'
       +rlMembers.map(function(m){
@@ -3426,20 +3426,53 @@ function warSummaryHTML(){
 }
 
 function addRLEl(sel){
-  var war=DB.voteWars.find(function(w){return w.id===sel.dataset.wid;});
+  var wid=sel.dataset.wid;
+  var war=DB.voteWars.find(function(w){return w.id===wid;});
   if(!war||!sel.value)return;
   war.rl=war.rl||[];
   if(war.rl.indexOf(sel.value)<0) war.rl.push(sel.value);
+  sel.value=''; // reset select sans re-render
   sbSaveWar(war);
-  reRenderGrpPage();
+  reRenderRLBlock(war);
 }
 
 function rmRLEl(el){
-  var war=DB.voteWars.find(function(w){return w.id===el.dataset.wid;});
+  var wid=el.dataset.wid;
+  var war=DB.voteWars.find(function(w){return w.id===wid;});
   if(!war)return;
   war.rl=(war.rl||[]).filter(function(id){return id!==el.dataset.mid;});
   sbSaveWar(war);
-  reRenderGrpPage();
+  reRenderRLBlock(war);
+}
+
+function reRenderRLBlock(war){
+  var container=document.getElementById('rl-block-'+war.id);
+  if(!container){reRenderGrpPage();return;}
+  var rlIds=war.rl||[];
+  var rlMembers=rlIds.map(function(id){return gM(id);}).filter(Boolean);
+  var canOfficier=HR('officier');
+
+  var html='<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">🎖️ RL DE GUERRE</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center" id="rl-list-'+war.id+'">'
+    +rlMembers.map(function(m){
+      return'<div style="display:flex;align-items:center;gap:5px;padding:4px 8px;background:var(--bg3);border:1px solid var(--golddim);border-radius:3px">'
+        +avaHTML(m,18)
+        +'<span style="font-size:11px;font-weight:700;color:var(--gold)">'+esc(m.username)+'</span>'
+        +(canOfficier?'<button onclick="rmRLEl(this)" data-wid="'+war.id+'" data-mid="'+m.id+'" style="background:none;border:none;color:var(--tx4);cursor:pointer;font-size:11px;padding:0 2px;margin-left:2px">✕</button>':'')
+        +'</div>';
+    }).join('')
+    +(canOfficier
+      ? '<select id="rl-add-sel-'+war.id+'" style="background:var(--bg2);border:1px solid var(--b1);color:var(--tx1);border-radius:3px;padding:3px 6px;font-size:11px" onchange="addRLEl(this)" data-wid="'+war.id+'">'
+        +'<option value="">+ Ajouter un RL...</option>'
+        +DB.members.filter(function(m){return rlIds.indexOf(m.id)<0&&m.status==='actif';})
+          .sort(function(a,b){return a.username.localeCompare(b.username);})
+          .map(function(m){return'<option value="'+m.id+'">'+esc(m.username)+'</option>';}).join('')
+        +'</select>'
+      : '')
+    +(rlMembers.length===0&&!canOfficier?'<span style="font-size:11px;color:var(--tx4)">Aucun RL désigné.</span>':'')
+    +'</div>';
+
+  container.innerHTML=html;
 }
 
 function selectGrpWar(warId){
@@ -3561,8 +3594,8 @@ function renderGroupCard(g, war){
     html+='<div style="border:1px solid '+(mb?'var(--b2)':'var(--b1)')+';border-radius:3px;background:'+(mb?'var(--bg3)':'var(--bg1)')+';padding:8px 6px;text-align:center;position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px">'
       +'<div style="font-size:8px;font-weight:700;color:var(--tx4);align-self:flex-start">'+(i===0&&isElite?'👑 ':''+(i+1))+'</div>'
       +(mb
-        ? avaHTML(mb,28)
-          +'<div style="font-size:9px;font-weight:700;color:var(--tx1);word-break:break-word;line-height:1.2">'+esc(mb.username)+(mb.chefGroupe?' 🗡️':'')+(mb.sanguin?' 🩸':'')+(mb.grandChampion?' 🏆':'')+'</div>'+mbClassSlotHTML(mb, g.id, mid, canEditSlots)
+        ? '<div onclick="openMbrProfile(\''+mid+'\')" style="cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px" title="Voir profil">'+avaHTML(mb,28)
+          +'<div style="font-size:9px;font-weight:700;color:var(--tx1);word-break:break-word;line-height:1.2;text-align:center">'+esc(mb.username)+(mb.chefGroupe?' 🗡️':'')+(mb.sanguin?' 🩸':'')+(mb.grandChampion?' 🏆':'')+'</div></div>'+mbClassSlotHTML(mb, g.id, mid, canEditSlots)
           +[0,1,2].map(function(ui){
             var u=units[ui]||'';
             if(canEditSlots){
@@ -3980,9 +4013,25 @@ function castVote(warId,voteVal){
   if(!w||w.status!=='open')return;
   if(!w.votes)w.votes={};
   var note=(w.votes[CU.id]&&w.votes[CU.id].note)||'';
+  var oldVote=w.votes[CU.id]&&w.votes[CU.id].vote;
   w.votes[CU.id]={vote:voteVal,note:note,updatedAt:new Date().toISOString()};
+
+  // Si le membre passe absent alors qu'il était présent → le retirer de son groupe lié à cette guerre
+  if(voteVal==='absent'&&oldVote==='present'){
+    var linkedGroups=DB.groups.filter(function(g){return g.warId===warId&&!g.archived&&(g.members||[]).indexOf(CU.id)>=0;});
+    if(linkedGroups.length){
+      linkedGroups.forEach(function(g){
+        g.members=g.members.filter(function(id){return id!==CU.id;});
+        // Si c'était le chef, on réassigne au premier membre restant
+        if(g.leaderId===CU.id) g.leaderId=g.members[0]||null;
+        sbSaveGroup(g);
+      });
+      var grpNames=linkedGroups.map(function(g){return g.name;}).join(', ');
+      alert('Vote mis à jour. Vous avez été retiré automatiquement de : '+grpNames+'.');
+    }
+  }
+
   sbSaveWar(w).then(function(){
-    // Recalculer le statut du votant — permet de repasser Actif si présent
     silentUpdateStatuses();
   }).catch(function(e){console.warn('[castVote]',e);});
   go('vote');
