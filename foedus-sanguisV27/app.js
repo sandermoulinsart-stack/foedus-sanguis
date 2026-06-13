@@ -2577,38 +2577,51 @@ function hillHTML(){
   var isKing=h.kingId===CU.id;
   var cooldownLeft=h.claimedAt?Math.max(0,15000-(now-h.claimedAt)):0;
   var occupied=cooldownLeft>0;
+  var validated=!!h.validated;
   var bg=h.bgImage
-    ?'background-image:url('+h.bgImage+');background-size:cover;background-position:center;min-height:280px;'
-    :'background:linear-gradient(135deg,#1a0a0a 0%,#2d1a00 50%,#0a0a1a 100%);min-height:240px;';
-  var overlay=h.bgImage?'rgba(0,0,0,0.58)':'rgba(0,0,0,0.25)';
+    ?'background-image:url('+h.bgImage+');background-size:cover;background-position:center;'
+    :'background:linear-gradient(135deg,#1a0a0a 0%,#2d1a00 50%,#0a0a1a 100%);';
+  var overlay=h.bgImage?'rgba(0,0,0,0.55)':'rgba(0,0,0,0.2)';
 
   var out='<div id="hill-widget" style="margin-top:18px;border-radius:6px;overflow:hidden;border:2px solid var(--golddim);position:relative;'+bg+'">';
+  // Overlay
   out+='<div style="position:absolute;inset:0;background:'+overlay+'"></div>';
-  out+='<div style="position:relative;z-index:1;padding:32px 20px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px">';
+  // Contenu centré verticalement et horizontalement
+  out+='<div style="position:relative;z-index:1;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:24px 20px">';
 
+  // Titre
   out+='<div style="font-family:Cinzel,serif;font-size:15px;font-weight:700;color:var(--gold);letter-spacing:3px;text-shadow:0 2px 10px rgba(0,0,0,1)">⛰️ ROI DE LA COLLINE</div>';
 
-  if(h.kingId&&h.kingName){
-    out+='<div style="font-size:28px;font-weight:700;color:#fff;text-shadow:0 2px 20px rgba(0,0,0,1);font-family:Cinzel,serif;line-height:1.1">👑 '+esc(h.kingName)+'</div>';
-    if(h.message){
-      out+='<div style="font-size:14px;color:rgba(255,255,255,.95);font-style:italic;text-shadow:0 1px 8px rgba(0,0,0,1);max-width:360px;line-height:1.6">"'+esc(h.message)+'"</div>';
+  // Roi + message
+  if(h.kingId&&h.kingName&&(occupied||validated)){
+    out+='<div style="font-size:28px;font-weight:700;color:#fff;text-shadow:0 2px 20px rgba(0,0,0,1);font-family:Cinzel,serif">👑 '+esc(h.kingName)+'</div>';
+    if(h.message&&validated){
+      out+='<div style="font-size:15px;color:rgba(255,255,255,.95);font-style:italic;text-shadow:0 1px 8px rgba(0,0,0,1);max-width:400px;line-height:1.6">"'+ esc(h.message)+'"</div>';
     }
-  } else {
+  } else if(!occupied&&!validated){
     out+='<div style="font-size:14px;color:rgba(255,255,255,.65);text-shadow:0 1px 6px rgba(0,0,0,.8)">La colline est vide… qui osera la prendre ?</div>';
   }
 
-  if(isKing&&occupied){
-    out+='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;max-width:360px">';
-    out+='<input id="hill-msg" class="fi" placeholder="Adressez la parole à vos sujets…" maxlength="100" style="text-align:center;background:rgba(0,0,0,.55);border-color:var(--golddim);color:#fff;font-style:italic" oninput="updateHillMsg()">';
-    out+='<div style="font-size:12px;color:var(--gold);text-shadow:0 1px 6px rgba(0,0,0,1)">🛡️ Vous régnez — <span id="hill-seconds">'+Math.ceil(cooldownLeft/1000)+'</span>s restantes</div>';
+  // Zone action
+  if(isKing&&occupied&&!validated){
+    // ROI — champ message + timer + bouton valider
+    out+='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;max-width:380px">';
+    out+='<input id="hill-msg" class="fi" placeholder="Adressez la parole à vos sujets…" maxlength="100" style="text-align:center;background:rgba(0,0,0,.6);border-color:var(--golddim);color:#fff;font-style:italic">';
+    out+='<div style="display:flex;gap:8px;width:100%">';
+    out+='<button onclick="validateHill()" style="flex:1;background:var(--gold);border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:13px;padding:11px 0;border-radius:3px;cursor:pointer;letter-spacing:1px">✅ Valider mon règne</button>';
     out+='</div>';
-  } else if(!occupied){
+    out+='<div style="font-size:12px;color:var(--gold);text-shadow:0 1px 6px rgba(0,0,0,1)">⏳ <span id="hill-seconds">'+Math.ceil(cooldownLeft/1000)+'</span>s pour valider sinon vous perdez la colline</div>';
+    out+='</div>';
+  } else if(!occupied||validated){
+    // LIBRE — bouton conquête
     out+='<button onclick="claimHill()" style="background:var(--gold);border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:14px;padding:13px 36px;border-radius:3px;cursor:pointer;letter-spacing:2px;box-shadow:0 4px 24px rgba(201,162,39,.5)">⚔️ À MOI LA COLLINE !</button>';
   } else {
+    // OCCUPÉE PAR UN AUTRE — bouton grisé + timer
     out+='<button onclick="hillBlockedMsg()" style="background:rgba(40,40,40,.75);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.35);font-family:Cinzel,serif;font-weight:700;font-size:14px;padding:13px 36px;border-radius:3px;cursor:pointer;letter-spacing:2px">⚔️ À MOI LA COLLINE !</button>';
-    out+='<div style="font-size:11px;color:rgba(255,255,255,.4)">🛡️ Libre dans <span id="hill-seconds">'+Math.ceil(cooldownLeft/1000)+'</span>s</div>';
+    out+='<div style="font-size:11px;color:rgba(255,255,255,.45)">🛡️ Libre dans <span id="hill-seconds">'+Math.ceil(cooldownLeft/1000)+'</span>s</div>';
   }
 
+  // Bouton image (officier+)
   if(HR('officier')){
     out+='<div style="position:absolute;top:10px;right:10px;z-index:2">';
     out+='<label style="cursor:pointer;background:rgba(0,0,0,.65);border:1px solid var(--golddim);color:var(--gold);font-size:10px;padding:5px 10px;border-radius:3px;display:block">🖼️ Fond<input type="file" accept="image/*" onchange="setHillBg(this)" style="display:none"></label>';
@@ -2617,43 +2630,93 @@ function hillHTML(){
 
   out+='</div></div>';
 
-  if(occupied){
-    setTimeout(function tick(){
-      var left=Math.max(0,15000-(Date.now()-(DB.hillKing.claimedAt||0)));
-      var els=document.querySelectorAll('#hill-seconds');
-      if(!els.length)return;
-      if(left<=0){
-        var w=document.getElementById('hill-widget');
-        if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
-        return;
-      }
-      els.forEach(function(el){el.textContent=Math.ceil(left/1000);});
-      setTimeout(tick,250);
-    },250);
-  }
+  // Timer live + polling temps réel
+  hillStartTimer();
 
   return out;
 }
 
+var _hillPollTimer=null;
+function hillStartTimer(){
+  // Stopper l'ancien timer
+  clearInterval(_hillPollTimer);
+  _hillPollTimer=null;
+
+  var h=DB.hillKing||{};
+  var occupied=h.claimedAt?Math.max(0,15000-(Date.now()-h.claimedAt))>0:false;
+  if(!occupied)return;
+
+  _hillPollTimer=setInterval(function(){
+    // Polling temps réel depuis Supabase
+    fetch(SB_URL+'/rest/v1/house_settings?key=eq.hill_king&select=value',{headers:SB._headers})
+      .then(function(r){return r.json();})
+      .then(function(rows){
+        if(!rows||!rows[0])return;
+        var remote=rows[0].value||{};
+        // Mettre à jour DB.hillKing si changé
+        var changed=JSON.stringify(remote)!==JSON.stringify(DB.hillKing);
+        if(changed){
+          DB.hillKing=remote;
+          var w=document.getElementById('hill-widget');
+          if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
+          return; // hillHTML() relance le timer
+        }
+        // Mise à jour timer local
+        var left=Math.max(0,15000-(Date.now()-(DB.hillKing.claimedAt||0)));
+        var els=document.querySelectorAll('#hill-seconds');
+        els.forEach(function(el){el.textContent=Math.ceil(left/1000);});
+        if(left<=0){
+          clearInterval(_hillPollTimer);
+          _hillPollTimer=null;
+          // Roi n'a pas validé — effacer le roi
+          if(DB.hillKing.kingId&&!DB.hillKing.validated){
+            DB.hillKing={bgImage:DB.hillKing.bgImage||''};
+            saveHillKing();
+          }
+          var w=document.getElementById('hill-widget');
+          if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
+        }
+      }).catch(function(){
+        // Fallback local si fetch échoue
+        var left=Math.max(0,15000-(Date.now()-(DB.hillKing.claimedAt||0)));
+        var els=document.querySelectorAll('#hill-seconds');
+        els.forEach(function(el){el.textContent=Math.ceil(left/1000);});
+        if(left<=0){
+          clearInterval(_hillPollTimer);
+          _hillPollTimer=null;
+          var w=document.getElementById('hill-widget');
+          if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
+        }
+      });
+  },1000);
+}
+
 function claimHill(){
-  DB.hillKing={kingId:CU.id,kingName:CU.username,message:'',claimedAt:Date.now(),bgImage:(DB.hillKing||{}).bgImage||''};
+  clearInterval(_hillPollTimer);_hillPollTimer=null;
+  DB.hillKing={kingId:CU.id,kingName:CU.username,message:'',claimedAt:Date.now(),validated:false,bgImage:(DB.hillKing||{}).bgImage||''};
   saveHillKing();
   var w=document.getElementById('hill-widget');
   if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
 }
 
-function updateHillMsg(){
+function validateHill(){
   var el=document.getElementById('hill-msg');
-  if(!el||!DB.hillKing)return;
-  DB.hillKing.message=el.value.trim();
+  var msg=el?el.value.trim():'';
+  var left=Math.max(0,15000-(Date.now()-(DB.hillKing.claimedAt||0)));
+  if(left<=0){alert('Trop tard ! La colline vous a échappé.');return;}
+  clearInterval(_hillPollTimer);_hillPollTimer=null;
+  DB.hillKing.message=msg;
+  DB.hillKing.validated=true;
   saveHillKing();
+  var w=document.getElementById('hill-widget');
+  if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
 }
 
 function hillBlockedMsg(){
   var h=DB.hillKing||{};
   var left=Math.ceil(Math.max(0,15000-(Date.now()-(h.claimedAt||0)))/1000);
   var msgs=[
-    '⚔️ Reculez ! La colline appartient à '+esc(h.kingName||'un roi')+' ! Encore '+left+'s de règne.',
+    '⚔️ Reculez ! La colline appartient à '+esc(h.kingName||'un roi')+' ! Encore '+left+'s.',
     '🛡️ '+esc(h.kingName||'Le roi')+' n\'a pas encore dit son dernier mot ! Patientez '+left+'s.',
     '👑 Insolent ! La colline est revendiquée. Attendez '+left+'s avant d\'oser défier le roi.',
     '🏹 Vous ne passerez pas ! '+esc(h.kingName||'Le roi')+' règne encore '+left+'s.'
