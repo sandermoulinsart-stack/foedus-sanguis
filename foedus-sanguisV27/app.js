@@ -6001,7 +6001,8 @@ function sbWarToLocal(r){
     id:r.id, title:r.title, date:r.date||'', time:r.time||'',
     description:r.description||'', status:r.status||'open',
     votes:r.votes||{}, linkedGroupId:r.linked_group_id||null,
-    linkedGroupIds:r.linked_group_ids||[], createdBy:r.created_by||''
+    linkedGroupIds:r.linked_group_ids||[], createdBy:r.created_by||'',
+    rl:r.rl||[]
   };
 }
 function localWarToSb(w){
@@ -6009,7 +6010,8 @@ function localWarToSb(w){
     id:w.id, title:w.title, date:w.date||'', time:w.time||'',
     description:w.description||'', status:w.status||'open',
     votes:w.votes||{}, linked_group_id:w.linkedGroupId||null,
-    linked_group_ids:w.linkedGroupIds||[], created_by:w.createdBy||''
+    linked_group_ids:w.linkedGroupIds||[], created_by:w.createdBy||'',
+    rl:w.rl||[]
   };
 }
 function sbBannerToLocal(r){
