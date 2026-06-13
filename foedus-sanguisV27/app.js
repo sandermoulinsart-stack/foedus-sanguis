@@ -2338,11 +2338,26 @@ function pgHome(){
   var activeWar=(DB.voteWars||[]).find(function(w){return w.status==='open'});
   if(activeWar){
     var myGrp=DB.groups.find(function(g){return!g.archived&&g.warId===activeWar.id&&(g.members||[]).indexOf(CU.id)>=0});
+    // RL sur accueil
+    var activeWarRLIds=activeWar.rl||[];
+    var activeWarRLMembers=activeWarRLIds.map(function(id){return gM(id);}).filter(Boolean);
+    if(activeWarRLMembers.length){
+      myGroupHTML+='<div class="pan" style="margin-bottom:14px;border-top:2px solid var(--gold)">'
+        +'<div class="ph"><span class="ptl">🎖️ RL — '+esc(activeWar.title)+'</span></div>'
+        +'<div class="pb"><div style="display:flex;flex-wrap:wrap;gap:6px">'
+        +activeWarRLMembers.map(function(m){
+          return'<div style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--bg1);border:1px solid var(--golddim);border-radius:3px">'
+            +avaHTML(m,22)+'<span style="font-size:12px;font-weight:700;color:var(--gold)">'+esc(m.username)+'</span>'
+            +(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')
+            +'</div>';
+        }).join('')
+        +'</div></div></div>';
+    }
     if(myGrp){
       var myLead=gM(myGrp.leaderId);
       var myUnits=(myGrp.unitAssignments&&myGrp.unitAssignments[CU.id])||[];
       var obj=myGrp.objective&&typeof OBJECTIVES!=='undefined'?OBJECTIVES[myGrp.objective]:null;
-      myGroupHTML='<div class="pan" style="margin-bottom:18px;border-top:2px solid var(--gold)">'
+      myGroupHTML+='<div class="pan" style="margin-bottom:18px;border-top:2px solid var(--gold)">'
         +'<div class="ph"><span class="ptl">⚔️ Mon groupe — '+esc(activeWar.title)+'</span>'+(obj&&typeof objTag!=='undefined'?objTag(myGrp.objective):'')+'</div>'
         +'<div class="pb">'
         +'<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px">'
@@ -3272,7 +3287,8 @@ function getWarPresents(war){
 
 // Groupes liés à une guerre
 function getWarLinkedGroups(warId){
-  return DB.groups.filter(function(g){return g.warId===warId&&!g.archived});
+  return DB.groups.filter(function(g){return g.warId===warId&&!g.archived})
+    .sort(function(a,b){return (a.order||0)-(b.order||0);});
 }
 
 // Membres déjà placés dans un groupe de la guerre
@@ -3292,11 +3308,10 @@ function pgGrp(){
   var wars=(DB.voteWars||[]).slice().sort(function(a,b){return b.date.localeCompare(a.date)});
 
   // Tact buttons
-  if(canOfficier){
-    document.getElementById('tact').innerHTML=
-      '<button class="btn bg bsm" onclick="openNewGrp()">+ Nouveau groupe</button>'
-      +'<button class="btn bol bsm" style="margin-left:6px" onclick="openGrpBuilder()">⚔️ Constructeur</button>';
-  }
+  document.getElementById('tact').innerHTML=
+    (GRP_WAR_ID?'<button class="btn bol bsm" style="margin-left:6px" onclick="openGrpCompact()">👁️ Vue RL</button>':'')
+    +(canOfficier?'<button class="btn bg bsm" style="margin-left:6px" onclick="openNewGrp()">+ Nouveau groupe</button>':'')
+    +(canOfficier?'<button class="btn bol bsm" style="margin-left:6px" onclick="openGrpBuilder()">⚔️ Constructeur</button>':'');
 
   // ── War selector ──
   var warSelector='<div class="pan" style="margin-bottom:20px">'
@@ -3363,13 +3378,41 @@ function pgGrp(){
 function warSummaryHTML(){
   var war=getSelectedWar();if(!war)return'';
   var votes=war.votes||{};
-  // Compter uniquement les votes des membres connus (exclut les IDs orphelins p...)
   var knownIds=DB.members.filter(function(m){return m.status!=='attente';}).map(function(m){return m.id;});
   var presents=knownIds.filter(function(id){return votes[id]&&votes[id].vote==='present';}).length;
   var maybe=knownIds.filter(function(id){return votes[id]&&votes[id].vote==='maybe';}).length;
   var absent=knownIds.filter(function(id){return votes[id]&&votes[id].vote==='absent';}).length;
   var total=knownIds.length;
   var pct=total?Math.round(presents/total*100):0;
+
+  // RL section
+  var rlIds=war.rl||[];
+  var rlMembers=rlIds.map(function(id){return gM(id);}).filter(Boolean);
+  var canOfficier=HR('officier');
+  var rlHTML='';
+  if(canOfficier||rlMembers.length){
+    rlHTML='<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--b1)">'
+      +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">🎖️ RL DE GUERRE</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">'
+      +rlMembers.map(function(m){
+        return'<div style="display:flex;align-items:center;gap:5px;padding:4px 8px;background:var(--bg3);border:1px solid var(--golddim);border-radius:3px">'
+          +avaHTML(m,18)
+          +'<span style="font-size:11px;font-weight:700;color:var(--gold)">'+esc(m.username)+'</span>'
+          +(canOfficier?'<button onclick="rmRLEl(this)" data-wid="'+war.id+'" data-mid="'+m.id+'" style="background:none;border:none;color:var(--tx4);cursor:pointer;font-size:11px;padding:0 2px;margin-left:2px">✕</button>':'')
+          +'</div>';
+      }).join('')
+      +(canOfficier
+        ? '<select id="rl-add-sel-'+war.id+'" style="background:var(--bg2);border:1px solid var(--b1);color:var(--tx1);border-radius:3px;padding:3px 6px;font-size:11px" onchange="addRLEl(this)" data-wid="'+war.id+'">'
+          +'<option value="">+ Ajouter un RL...</option>'
+          +DB.members.filter(function(m){return rlIds.indexOf(m.id)<0&&m.status==='actif';})
+            .sort(function(a,b){return a.username.localeCompare(b.username);})
+            .map(function(m){return'<option value="'+m.id+'">'+esc(m.username)+'</option>';}).join('')
+          +'</select>'
+        : '')
+      +(rlMembers.length===0&&!canOfficier?'<span style="font-size:11px;color:var(--tx4)">Aucun RL désigné.</span>':'')
+      +'</div></div>';
+  }
+
   return'<div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">'
     +'<span style="font-size:12px">✅ <strong style="color:#66bb6a">'+presents+'</strong> présent(s)</span>'
     +'<span style="font-size:12px">🤔 <strong style="color:#f9a825">'+maybe+'</strong> peut-être</span>'
@@ -3378,12 +3421,78 @@ function warSummaryHTML(){
     +'<div style="flex:1;min-width:120px;height:6px;background:var(--bg1);border-radius:3px;overflow:hidden">'
     +'<div style="height:100%;width:'+pct+'%;background:#388e3c;transition:width .3s"></div></div>'
     +'<span class="badge '+(war.status==='open'?'bok':'bof')+'">'+(war.status==='open'?'Vote ouvert':'Clôturé')+'</span>'
-    +'</div>';
+    +'</div>'
+    +rlHTML;
+}
+
+function addRLEl(sel){
+  var war=DB.voteWars.find(function(w){return w.id===sel.dataset.wid;});
+  if(!war||!sel.value)return;
+  war.rl=war.rl||[];
+  if(war.rl.indexOf(sel.value)<0) war.rl.push(sel.value);
+  sbSaveWar(war);
+  reRenderGrpPage();
+}
+
+function rmRLEl(el){
+  var war=DB.voteWars.find(function(w){return w.id===el.dataset.wid;});
+  if(!war)return;
+  war.rl=(war.rl||[]).filter(function(id){return id!==el.dataset.mid;});
+  sbSaveWar(war);
+  reRenderGrpPage();
 }
 
 function selectGrpWar(warId){
   GRP_WAR_ID=warId||null;
   go('grp');
+}
+
+function openGrpCompact(){
+  var war=getSelectedWar();
+  if(!war){alert('Sélectionnez une guerre d\'abord.');return;}
+  var groups=getWarLinkedGroups(GRP_WAR_ID);
+  if(!groups.length){
+    OM('👁️ Vue RL — '+esc(war.title),'<div style="color:var(--tx3);text-align:center;padding:20px">Aucun groupe créé pour cette guerre.</div>',[{lbl:'Fermer',cls:'bol',fn:CM}]);
+    return;
+  }
+
+  // RL
+  var rlIds=war.rl||[];
+  var rlMembers=rlIds.map(function(id){return gM(id);}).filter(Boolean);
+  var rlBlock='';
+  if(rlMembers.length){
+    rlBlock='<div style="margin-bottom:14px;padding:10px 12px;background:rgba(201,162,39,.07);border:1px solid var(--golddim);border-radius:4px">'
+      +'<div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:6px">🎖️ RL DE GUERRE</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:6px">'
+      +rlMembers.map(function(m){
+        return'<span style="font-size:12px;font-weight:700;color:var(--gold)">'+esc(m.username)+'</span>';
+      }).join('<span style="color:var(--tx4)"> · </span>')
+      +'</div></div>';
+  }
+
+  var grpBlocks=groups.map(function(g,idx){
+    var lead=gM(g.leaderId);
+    var members=(g.members||[]).map(function(mid){return gM(mid);}).filter(Boolean);
+    var typeIcon=g.type==='elite'?'👑':g.type==='refill'?'🔄':'⚔️';
+    return'<div style="margin-bottom:10px;padding:10px 12px;background:var(--bg1);border-radius:4px;border-left:3px solid '+(g.type==='elite'?'var(--gold)':g.type==='refill'?'var(--teal2)':'var(--b2)')+'">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+      +'<span style="font-size:11px;font-weight:700;color:var(--tx3)">'+typeIcon+' '+(g.order||idx+1)+'</span>'
+      +'<span style="font-size:13px;font-weight:700;color:var(--tx1)">'+esc(g.name)+'</span>'
+      +(lead?'<span style="font-size:11px;color:var(--gold);margin-left:auto">🗡️ '+esc(lead.username)+'</span>':'')
+      +'</div>'
+      +(members.length
+        ? '<div style="display:flex;flex-wrap:wrap;gap:4px">'
+          +members.map(function(m){
+            var isLead=m.id===g.leaderId;
+            return'<span style="font-size:11px;padding:2px 7px;background:var(--bg2);border-radius:2px;color:'+(isLead?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(isLead?' 🗡️':'')+'</span>';
+          }).join('')
+          +'</div>'
+        : '<div style="font-size:11px;color:var(--tx4)">Aucun membre</div>')
+      +'</div>';
+  }).join('');
+
+  var html='<div style="font-size:13px">'+rlBlock+grpBlocks+'</div>';
+  OM('👁️ Vue RL — '+esc(war.title), html, [{lbl:'Fermer',cls:'bol',fn:CM}]);
 }
 
 // ── Render group card ──
@@ -3396,7 +3505,7 @@ function renderGroupCard(g, war){
   var canEdit=canAdmin; // Pour les boutons structurels
   var accentColor=isElite?'var(--gold)':isRefill?'var(--teal2)':'var(--tx2)';
   var typeLabel=isElite?'👑 GROUPE ÉLITE':isRefill?'🔄 REFILL':'⚔️ GROUPE';
-  var slotMax=isElite?5:999;
+  var slotMax=5;
   var slotCount=(g.members||[]).length;
 
   // Pool = presents not placed elsewhere (if war selected), else all actifs
@@ -3442,7 +3551,7 @@ function renderGroupCard(g, war){
   html+='<div class="pb">';
 
   // ── Slots ── (5 per row, max 5 for elite)
-  var maxSlots=isElite?5:Math.max(slotCount,1);
+  var maxSlots=Math.min(5,Math.max(slotCount+1,1));
   var cols=Math.min(5,maxSlots);
   html+='<div style="display:grid;grid-template-columns:repeat('+cols+',1fr);gap:6px;margin-bottom:14px">';
   for(var i=0;i<maxSlots;i++){
@@ -3484,7 +3593,7 @@ function renderGroupCard(g, war){
   }
 
   // Pool / Add members
-  if(canAdmin&&(isElite?slotCount<5:true)){
+  if(canAdmin&&slotCount<5){
     if(pool.length){
       html+='<div class="div"></div>'
         +'<div style="font-size:9px;font-weight:700;color:var(--tx3);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px">AJOUTER depuis '+(war?'les présents':'les membres actifs')+'</div>'
@@ -3581,7 +3690,7 @@ function deleteSnapshot(id){
 
 function addGrpMbr(gid,mid){
   var g=gG(gid);if(!g||(g.members||[]).indexOf(mid)>=0)return;
-  if(g.type==='elite'&&(g.members||[]).length>=5){alert('Groupe élite complet (5 slots max).');return;}
+  if((g.members||[]).length>=5){alert('Groupe complet (5 membres max).');return;}
   // Check: member already placed in another group of this war
   if(GRP_WAR_ID){
     var placed=getPlacedMemberIds(GRP_WAR_ID,gid);
@@ -3594,13 +3703,20 @@ function addGrpMbr(gid,mid){
   if(!g.members)g.members=[];
   g.members.push(mid);
   if(g.members.length===1) g.leaderId=mid;
-  sbSaveGroup(g);go('grp');
+  sbSaveGroup(g);reRenderGrpPage();
 }
 
 function rmGrpMbr(gid,mid){
   var g=gG(gid);if(!g)return;
   g.members=(g.members||[]).filter(function(id){return id!==mid});
-  sbSaveGroup(g);go('grp');
+  sbSaveGroup(g);reRenderGrpPage();
+}
+
+function reRenderGrpPage(){
+  var scrollY=window.scrollY||window.pageYOffset||0;
+  var el=document.getElementById('content');
+  if(el){el.innerHTML=pgGrp();}
+  window.scrollTo(0,scrollY);
 }
 
 function editGrp(id){
@@ -3639,7 +3755,10 @@ function openNewGrp(){
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Créer',cls:'btn bg',fn:function(){
       var name=gVal('ng-n').trim();if(!name)return alert('Nom requis');
       var warId=gVal('ng-war')||GRP_WAR_ID||null;
-      var g={id:'g'+Date.now(),name:name,type:gVal('ng-type'),description:gVal('ng-d'),leaderId:gVal('ng-l'),minMastery:safeInt(gVal('ng-m'),DB.minMastery),members:[],unitAssignments:{},mission:'',objective:null,archived:false,warId:warId};
+      var warGroups=warId?DB.groups.filter(function(x){return x.warId===warId&&!x.archived}):[];
+      var nextOrder=warGroups.length?Math.max.apply(null,warGroups.map(function(x){return x.order||0}))+1:1;
+      var autoName=name||(warId?'Groupe '+nextOrder:name);
+      var g={id:'g'+Date.now(),name:autoName,type:gVal('ng-type'),description:gVal('ng-d'),leaderId:gVal('ng-l'),minMastery:safeInt(gVal('ng-m'),DB.minMastery),members:[],unitAssignments:{},mission:'',objective:null,archived:false,warId:warId,order:nextOrder};
       if(warId)GRP_WAR_ID=warId;
       DB.groups.push(g);sbSaveGroup(g);CM();go('grp');
     }}]);
