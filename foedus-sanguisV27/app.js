@@ -372,6 +372,8 @@ function sbLoad(){
     DB.rhUsers        = rhRow ? (rhRow.value||[]) : [];
     var rhDataRow=(res[12]||[]).find(function(r){return r.key==='rh_data';});
     DB.rhData         = rhDataRow ? (rhDataRow.value||{}) : {};
+    var hillRow=(res[12]||[]).find(function(r){return r.key==='hill_king';});
+    DB.hillKing       = hillRow ? (hillRow.value||{}) : {};
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
     console.log('[SB] Chargé: '+DB.members.length+' membres, '+(DB.pendingMembers||[]).length+' en attente');
@@ -633,7 +635,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings().catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{}}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{}}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -2566,7 +2568,101 @@ function pgHome(){
       +'<button class="btn bg bsm" onclick="go(\'vote\')" style="background:var(--red2);border-color:var(--red2);flex-shrink:0">Voter maintenant →</button>'
       +'</div>';
   }
-  return urgentWarBanner+statsH+warHtml+myGroupHTML+banHtml+extraBanHtml+featuredHTML;
+  return urgentWarBanner+statsH+warHtml+myGroupHTML+banHtml+extraBanHtml+featuredHTML+hillHTML();
+}
+
+function hillHTML(){
+  var h=DB.hillKing||{};
+  var now=Date.now();
+  var isKing=h.kingId===CU.id;
+  var cooldownLeft=h.claimedAt?(Math.max(0,15000-(now-h.claimedAt))):0;
+  var canClaim=cooldownLeft===0&&!isKing;
+  var bg=h.bgImage?'background-image:url('+h.bgImage+');background-size:cover;background-position:center;':'background:linear-gradient(135deg,#1a0a0a,#2d1a00);';
+
+  var out='<div id="hill-widget" style="margin-top:18px;border-radius:6px;overflow:hidden;border:2px solid var(--golddim);position:relative;min-height:180px;'+bg+'">'
+    +'<div style="position:absolute;inset:0;background:rgba(0,0,0,'+(h.bgImage?'0.55':'0.3')+')"></div>'
+    +'<div style="position:relative;z-index:1;padding:18px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px">'
+    +'<div style="font-family:Cinzel,serif;font-size:16px;font-weight:700;color:var(--gold);letter-spacing:2px;text-shadow:0 2px 8px rgba(0,0,0,.8)">⛰️ ROI DE LA COLLINE</div>';
+
+  if(h.kingId&&h.kingName){
+    out+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px">'
+      +'<div style="font-size:22px;font-weight:700;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.9);font-family:Cinzel,serif">👑 '+esc(h.kingName)+'</div>';
+    if(h.message){
+      out+='<div style="font-size:13px;color:rgba(255,255,255,.9);font-style:italic;text-shadow:0 1px 6px rgba(0,0,0,.8);max-width:320px">"'+esc(h.message)+'"</div>';
+    }
+    if(cooldownLeft>0){
+      out+='<div id="hill-timer" style="font-size:11px;color:var(--gold);margin-top:4px">🛡️ Protégé encore <span id="hill-seconds">'+Math.ceil(cooldownLeft/1000)+'</span>s</div>';
+    }
+    out+='</div>';
+  } else {
+    out+='<div style="font-size:13px;color:rgba(255,255,255,.7)">La colline est vide... qui osera la prendre ?</div>';
+  }
+
+  if(canClaim){
+    out+='<div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;max-width:320px">'
+      +'<input id="hill-msg" class="fi" placeholder="Votre cri de victoire... (optionnel)" maxlength="80" style="text-align:center;background:rgba(0,0,0,.5);border-color:var(--golddim);color:#fff">'
+      +'<button onclick="claimHill()" style="background:var(--gold);border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:13px;padding:10px 24px;border-radius:3px;cursor:pointer;letter-spacing:1px;width:100%">⚔️ À MOI LA COLLINE !</button>'
+      +'</div>';
+  } else if(isKing){
+    out+='<div style="font-size:11px;color:var(--gold);background:rgba(0,0,0,.4);padding:6px 14px;border-radius:3px">👑 Vous régnez sur la colline !</div>';
+  } else if(cooldownLeft>0){
+    out+='<div style="font-size:11px;color:rgba(255,255,255,.5)">Attendez que le roi soit vulnérable...</div>';
+  }
+
+  // Bouton image (admin/officier)
+  if(HR('officier')){
+    out+='<div style="position:absolute;top:8px;right:8px;z-index:2">'
+      +'<label style="cursor:pointer;background:rgba(0,0,0,.6);border:1px solid var(--golddim);color:var(--gold);font-size:10px;padding:4px 8px;border-radius:3px">🖼️ Fond<input type="file" accept="image/*" onchange="setHillBg(this)" style="display:none"></label>'
+      +'</div>';
+  }
+
+  out+='</div></div>';
+
+  // Timer countdown
+  if(cooldownLeft>0){
+    setTimeout(function tick(){
+      var left=Math.max(0,15000-(Date.now()-(DB.hillKing.claimedAt||0)));
+      var el=document.getElementById('hill-seconds');
+      var timerEl=document.getElementById('hill-timer');
+      if(!el)return;
+      if(left<=0){
+        // Cooldown terminé — re-render
+        var w=document.getElementById('hill-widget');
+        if(w) w.outerHTML=hillHTML();
+        return;
+      }
+      el.textContent=Math.ceil(left/1000);
+      setTimeout(tick,500);
+    },500);
+  }
+
+  return out;
+}
+
+function claimHill(){
+  var msg=(document.getElementById('hill-msg')||{}).value||'';
+  DB.hillKing={kingId:CU.id,kingName:CU.username,message:msg.trim(),claimedAt:Date.now(),bgImage:DB.hillKing.bgImage||''};
+  saveHillKing();
+  var w=document.getElementById('hill-widget');
+  if(w) w.outerHTML=hillHTML();
+}
+
+function setHillBg(input){
+  if(!input.files||!input.files[0])return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    DB.hillKing=DB.hillKing||{};
+    DB.hillKing.bgImage=e.target.result;
+    saveHillKing();
+    var w=document.getElementById('hill-widget');
+    if(w) w.outerHTML=hillHTML();
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function saveHillKing(){
+  SB.from('house_settings').upsert({key:'hill_king',value:DB.hillKing})
+    .catch(function(e){console.warn('[hillKing]',e);});
 }
 
 function openBannerMgr(){OM('Bannières',bannerMgrHTML(),[{lbl:'Fermer',cls:'bol',fn:CM}]);}
