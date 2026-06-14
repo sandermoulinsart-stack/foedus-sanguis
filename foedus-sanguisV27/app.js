@@ -2084,13 +2084,24 @@ function getBadgeState(){try{return JSON.parse(sessionStorage.getItem('badge_sta
 function setBadgeState(key,val){var s=getBadgeState();s[key]=val;try{sessionStorage.setItem('badge_state',JSON.stringify(s));}catch(e){}}
 function markSeen(section){
   var now=new Date().getTime();
-  if(section==='forum')setBadgeState('last_forum',now);
-  if(section==='form')setBadgeState('last_form',now);
+  var today=nowDate();
+  if(section==='forum'){setBadgeState('last_forum',today);}
+  if(section==='form'){setBadgeState('last_form',today);setBadgeState('last_form_ts',now);}
   if(section==='vote')setBadgeState('last_vote',now);
   if(section==='grp')setBadgeState('last_grp',now);
   if(section==='cal')setBadgeState('last_cal',now);
   if(section==='banner')setBadgeState('last_banner',now);
   updateAppBadge();
+}
+function isThreadNew(t,lastDateStr){
+  if(!lastDateStr) return t.author!==CU.username;
+  return !!(t.date&&t.date>lastDateStr&&t.author!==CU.username);
+}
+function hasNewReply(t,lastDateStr){
+  if(!t.replies||!t.replies.length) return false;
+  return t.replies.some(function(r){
+    return r.date&&r.date>(lastDateStr||'')&&r.author!==CU.username;
+  });
 }
 function updateAppBadge(){
   if(!CU)return;
@@ -2100,14 +2111,11 @@ function updateAppBadge(){
   badges.home+=(DB.banners||[]).filter(function(b){return b.active&&b.createdAt&&new Date(b.createdAt).getTime()>lastBanner;}).length;
   (DB.voteWars||[]).filter(function(w){return w.status==='open';}).forEach(function(w){if(!(w.votes&&w.votes[CU.id]))badges.vote++;});
   count+=badges.vote;
-  var lastForum=state['last_forum']||0;
+  var lastForum=state['last_forum']||'';
   badges.for=0;
   (DB.forumThreads||[]).filter(function(t){return typeof TAG_LBL!=='undefined'&&Object.keys(TAG_LBL).indexOf(t.tag)>=0;}).forEach(function(t){
-    // Nouveau thread
-    if(t.date&&new Date(t.date).getTime()>lastForum&&t.author!==CU.username){badges.for++;return;}
-    // Nouvelle réponse
-    var hasNewReply=(t.replies||[]).some(function(r){return r.date&&new Date(r.date).getTime()>lastForum&&r.author!==CU.username;});
-    if(hasNewReply) badges.for++;
+    if(isThreadNew(t,lastForum)){badges.for++;return;}
+    if(hasNewReply(t,lastForum)) badges.for++;
   });
   count+=badges.for;
   var lastForm=state['last_form']||'';
@@ -4484,7 +4492,7 @@ function pgFor(){
 function renderForumList(threads, filterTag){
   var filtered=filterTag?threads.filter(function(t){return t.tag===filterTag;}):threads;
   if(!filtered.length) return'<div class="td tsm" style="padding:16px">Aucun sujet'+(filterTag?' dans cette catégorie':'')+'.</div>';
-  var lastForum=getBadgeState()['last_forum']||0;
+  var lastForum=getBadgeState()['last_forum']||'';
   return filtered.map(function(t){
     // Détecter nouveauté : thread récent ou nouvelle réponse
     var isNewThread=t.date&&new Date(t.date).getTime()>lastForum&&t.author!==CU.username;
