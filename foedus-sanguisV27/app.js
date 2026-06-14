@@ -2286,7 +2286,7 @@ function openEditVoteWarW(el){openEditVoteWar(el.dataset.id);}
 function viewFormThrW(el){
   var id=el.dataset.id;
   var t=(DB.forumThreads||[]).find(function(x){return x.id===id;});
-  if(t){CT=t;FV='thread';markSeen('form');go('form');}
+  if(t){CT=t;FV='thread';markThreadRead(id);markSeen('form');go('form');}
 }
 function goDeepFormThread(el){
   var id=el.dataset.tid;
