@@ -2094,13 +2094,16 @@ function markSeen(section){
   updateAppBadge();
 }
 function isThreadNew(t,lastDateStr){
-  if(!lastDateStr) return t.author!==CU.username;
-  return !!(t.date&&t.date>lastDateStr&&t.author!==CU.username);
+  // Pas de dernière visite = tout est nouveau sauf ses propres threads
+  if(!lastDateStr) return !!(t.author!==CU.username);
+  // Sinon : thread plus récent que la dernière visite
+  return !!(t.date&&t.date>lastDateStr);
 }
 function hasNewReply(t,lastDateStr){
   if(!t.replies||!t.replies.length) return false;
+  if(!lastDateStr) return t.replies.some(function(r){return r.author!==CU.username;});
   return t.replies.some(function(r){
-    return r.date&&r.date>(lastDateStr||'')&&r.author!==CU.username;
+    return r.date&&r.date>lastDateStr&&r.author!==CU.username;
   });
 }
 function updateAppBadge(){
