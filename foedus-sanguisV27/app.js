@@ -2085,7 +2085,7 @@ function setBadgeState(key,val){var s=getBadgeState();s[key]=val;try{sessionStor
 function markSeen(section){
   var now=new Date().getTime();
   if(section==='forum')setBadgeState('last_forum',new Date().toISOString().substring(0,10));
-  if(section==='form')setBadgeState('last_form',now);
+  if(section==='form')setBadgeState('last_form',new Date().toISOString().substring(0,10));
   if(section==='vote')setBadgeState('last_vote',now);
   if(section==='grp')setBadgeState('last_grp',now);
   if(section==='cal')setBadgeState('last_cal',now);
@@ -2108,8 +2108,13 @@ function updateAppBadge(){
     return (t.replies||[]).some(function(r){return (r.date||'').substring(0,10)>lastForum&&r.author!==CU.username;});
   }).length;
   count+=badges.for;
-  var lastForm=state['last_form']||0;
-  badges.form=(DB.forumThreads||[]).filter(function(t){return typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(t.tag)>=0&&t.date&&new Date(t.date).getTime()>lastForm&&t.author!==CU.username;}).length;
+  var lastForm=state['last_form']||'1970-01-01';
+  badges.form=(DB.forumThreads||[]).filter(function(t){
+    if(!TAG_LBL_FORM||Object.keys(TAG_LBL_FORM).indexOf(t.tag)<0) return false;
+    var tdate=(t.date||'').substring(0,10);
+    if(tdate>lastForm&&t.author!==CU.username) return true;
+    return (t.replies||[]).some(function(r){return (r.date||'').substring(0,10)>lastForm&&r.author!==CU.username;});
+  }).length;
   badges.form+=(DB.formations||[]).filter(function(f){return f.createdAt&&new Date(f.createdAt).getTime()>lastForm&&f.createdBy!==CU.username;}).length;
   count+=badges.form;
   var lastCal=state['last_cal']||0;
@@ -2281,7 +2286,7 @@ function openEditVoteWarW(el){openEditVoteWar(el.dataset.id);}
 function viewFormThrW(el){
   var id=el.dataset.id;
   var t=(DB.forumThreads||[]).find(function(x){return x.id===id;});
-  if(t){CT=t;FV='thread';go('form');}
+  if(t){CT=t;FV='thread';markSeen('form');go('form');}
 }
 function goDeepFormThread(el){
   var id=el.dataset.tid;
@@ -4862,10 +4867,16 @@ function pgForm(){
       h+='<div class="td ta-c" style="padding:40px">Aucune discussion.</div>';
     } else {
       h+='<div>';
+      var lastFForm=getBadgeState()['last_form']||'1970-01-01';
       threads.slice().reverse().forEach(function(t){
-        h+='<div class="thr" onclick="viewFormThrW(this)" data-id="'+t.id+'">'
-          +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'guide')+'">'+(TAG_LBL_FORM[t.tag]||'Formation')+'</span> '+esc(t.title)+'</div>'
-          +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(t.date)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div>'
+        var tdate=(t.date||'').substring(0,10);
+        var isNewThread=tdate>lastFForm&&t.author!==CU.username;
+        var lastReply=(t.replies||[]).filter(function(r){return r.author!==CU.username;}).slice(-1)[0];
+        var isNewReply=lastReply&&(lastReply.date||'').substring(0,10)>lastFForm;
+        var isNew=isNewThread||isNewReply;
+        var badge=isNew?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px">'+(isNewReply&&!isNewThread?'💬':'✨ Nouveau')+'</span>':'';
+        h+='<div class="thr" onclick="viewFormThrW(this)" data-id="'+t.id+'"'+(isNew?' style="border-left:3px solid var(--red3)"':'')+'>'          +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'guide')+'">'+(TAG_LBL_FORM[t.tag]||'Formation')+'</span> '+esc(t.title)+badge+'</div>'
+          +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(tdate)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div>'
           +'</div>';
       });
       h+='</div>';
