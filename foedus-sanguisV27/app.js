@@ -376,6 +376,8 @@ function sbLoad(){
     DB.hillKing       = hillRow ? (hillRow.value||{}) : {};
     var hillBgRow=(res[12]||[]).find(function(r){return r.key==='hill_bg';});
     DB.hillBg         = hillBgRow ? (hillBgRow.value||'') : '';
+    var hillHistRow=(res[12]||[]).find(function(r){return r.key==='hill_history';});
+    DB.hillHistory    = hillHistRow ? (hillHistRow.value||[]) : [];
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
     console.log('[SB] Chargé: '+DB.members.length+' membres, '+(DB.pendingMembers||[]).length+' en attente');
@@ -650,7 +652,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings().catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{}}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[]}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -2731,6 +2733,7 @@ function hillHTML(){
 
   // Boutons coin supérieur droit
   out+='<div style="position:absolute;top:10px;right:10px;z-index:2;display:flex;gap:6px">';
+  out+='<button onclick="openHillHistoryW()" style="background:rgba(0,0,0,.65);border:1px solid var(--golddim);color:var(--gold);font-size:10px;padding:5px 10px;border-radius:3px;cursor:pointer">📜 Logs</button>';
   out+='<button onclick="openHillRulesW()" style="background:rgba(0,0,0,.65);border:1px solid var(--golddim);color:var(--gold);font-size:10px;padding:5px 10px;border-radius:3px;cursor:pointer">📖 Règles</button>';
   if(HR('officier')){
     out+='<label style="cursor:pointer;background:rgba(0,0,0,.65);border:1px solid var(--golddim);color:var(--gold);font-size:10px;padding:5px 10px;border-radius:3px;display:block">🖼️ Fond<input type="file" accept="image/*" onchange="setHillBg(this)" style="display:none"></label>';
@@ -2815,6 +2818,11 @@ function validateHill(){
   DB.hillKing.message=msg;
   DB.hillKing.validated=true;
   saveHillKing();
+  // Ajouter au log
+  DB.hillHistory=DB.hillHistory||[];
+  DB.hillHistory.unshift({kingName:DB.hillKing.kingName,message:msg,date:new Date().toISOString()});
+  if(DB.hillHistory.length>50) DB.hillHistory=DB.hillHistory.slice(0,50);
+  SB.from('house_settings').upsert({key:'hill_history',value:DB.hillHistory}).catch(function(){});
   var w=document.getElementById('hill-widget');
   if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
 }
@@ -2840,6 +2848,41 @@ function hillBlockedMsg(){
   toast.style.opacity='1';
   clearTimeout(window._hillToastT);
   window._hillToastT=setTimeout(function(){toast.style.opacity='0';},3000);
+}
+
+function openHillHistoryW(){
+  var logs=DB.hillHistory||[];
+  var isAdmin=HR('admin');
+  var html='<div style="font-size:13px">';
+
+  if(!logs.length){
+    html+='<div style="color:var(--tx3);text-align:center;padding:24px">Aucun roi couronné pour l\'instant.</div>';
+  } else {
+    html+='<div style="display:flex;flex-direction:column;gap:6px">';
+    logs.forEach(function(l,i){
+      var dt=l.date?new Date(l.date).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+      html+='<div style="background:var(--bg1);border-radius:4px;padding:8px 12px;border-left:3px solid var(--golddim)">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">'
+        +'<span style="font-weight:700;color:var(--gold);font-family:Cinzel,serif">👑 '+esc(l.kingName||'—')+'</span>'
+        +'<span style="font-size:10px;color:var(--tx3)">'+dt+'</span>'
+        +'</div>'
+        +'<div style="color:var(--tx2);font-style:italic">"'+esc(l.message||'—')+'"</div>'
+        +'</div>';
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+
+  var btns=[{lbl:'Fermer',cls:'bol',fn:CM}];
+  if(isAdmin){
+    btns.unshift({lbl:'🗑️ Effacer les logs',cls:'btn bred',fn:function(){
+      if(!confirm('Effacer tout l\'historique des rois ?')) return;
+      DB.hillHistory=[];
+      SB.from('house_settings').upsert({key:'hill_history',value:[]}).catch(function(){});
+      CM();
+    }});
+  }
+  OM('📜 Historique des Rois de la Colline', html, btns);
 }
 
 function openHillRulesW(){
