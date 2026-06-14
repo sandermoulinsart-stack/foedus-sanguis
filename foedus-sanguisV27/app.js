@@ -4629,7 +4629,7 @@ function openNewThreadFormation(){
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Publier',cls:'btn bg',fn:function(){
       var title=sanitize(gVal('ntf-t'),100);if(!title)return alert('Titre requis');
       getImgUrl('ntf-img').then(function(imgUrl){
-        var t={id:'f'+Date.now(),title:title,tag:gVal('ntf-tg')||'guide',author:CU.username,date:nowDate(),content:gVal('ntf-c'),image:imgUrl||'',replies:[],pinned:false,featured:gChk('ntf-feat')};
+        var t={id:'f'+Date.now(),title:title,tag:gVal('ntf-tg')||'guide',author:CU.username,date:nowDateTime(),content:gVal('ntf-c'),image:imgUrl||'',replies:[],pinned:false,featured:gChk('ntf-feat')};
         sbSaveThread(t).then(function(){sbLoad().then(function(){CM();go('form');});}).catch(function(e){console.warn('[thread]',e);});
       });
     }}]);
