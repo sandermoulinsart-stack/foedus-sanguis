@@ -374,6 +374,8 @@ function sbLoad(){
     DB.rhData         = rhDataRow ? (rhDataRow.value||{}) : {};
     var hillRow=(res[12]||[]).find(function(r){return r.key==='hill_king';});
     DB.hillKing       = hillRow ? (hillRow.value||{}) : {};
+    var hillBgRow=(res[12]||[]).find(function(r){return r.key==='hill_bg';});
+    DB.hillBg         = hillBgRow ? (hillBgRow.value||'') : '';
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
     console.log('[SB] Chargé: '+DB.members.length+' membres, '+(DB.pendingMembers||[]).length+' en attente');
@@ -635,7 +637,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings().catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{}}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:''}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -1055,6 +1057,11 @@ function startRealtime(){
         var rec=msg.payload&&msg.payload.data&&msg.payload.data.record;
         if(rec&&rec.key==='hill_king'){
           DB.hillKing=rec.value||{};
+          var w=document.getElementById('hill-widget');
+          if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
+        }
+        if(rec&&rec.key==='hill_bg'){
+          DB.hillBg=rec.value||'';
           var w=document.getElementById('hill-widget');
           if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
         }
@@ -2590,10 +2597,11 @@ function hillHTML(){
   var cooldownLeft=h.claimedAt?Math.max(0,15000-(now-h.claimedAt)):0;
   var occupied=cooldownLeft>0;
   var validated=!!h.validated;
-  var bg=h.bgImage
-    ?'background-image:url('+h.bgImage+');background-size:cover;background-position:center;'
+  var bgImg=DB.hillBg||'';
+  var bg=bgImg
+    ?'background-image:url('+bgImg+');background-size:cover;background-position:center;'
     :'background:linear-gradient(135deg,#1a0a0a 0%,#2d1a00 50%,#0a0a1a 100%);';
-  var overlay=h.bgImage?'rgba(0,0,0,0.55)':'rgba(0,0,0,0.2)';
+  var overlay=bgImg?'rgba(0,0,0,0.55)':'rgba(0,0,0,0.2)';
 
   var out='<div id="hill-widget" style="margin-top:18px;border-radius:6px;overflow:hidden;border:2px solid var(--golddim);position:relative;'+bg+'">';
   // Overlay
@@ -2721,19 +2729,41 @@ function hillBlockedMsg(){
 
 function setHillBg(input){
   if(!input.files||!input.files[0])return;
-  var reader=new FileReader();
-  reader.onload=function(e){
-    DB.hillKing=DB.hillKing||{};
-    DB.hillKing.bgImage=e.target.result;
-    saveHillKing();
-    var w=document.getElementById('hill-widget');
-    if(w) w.outerHTML=hillHTML();
+  var file=input.files[0];
+  // Compresser l'image avant stockage
+  var img=new Image();
+  var url=URL.createObjectURL(file);
+  img.onload=function(){
+    var canvas=document.createElement('canvas');
+    var maxW=1200,maxH=400;
+    var ratio=Math.min(maxW/img.width,maxH/img.height,1);
+    canvas.width=Math.round(img.width*ratio);
+    canvas.height=Math.round(img.height*ratio);
+    canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+    var b64=canvas.toDataURL('image/jpeg',0.75);
+    URL.revokeObjectURL(url);
+    DB.hillBg=b64;
+    // Sauvegarder dans une clé séparée pour ne pas mélanger avec l'état du roi
+    SB.from('house_settings').upsert({key:'hill_bg',value:b64})
+      .then(function(){
+        var w=document.getElementById('hill-widget');
+        if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
+      })
+      .catch(function(e){console.warn('[hillBg]',e);alert('Image trop lourde, essayez une image plus petite.');});
   };
-  reader.readAsDataURL(input.files[0]);
+  img.src=url;
 }
 
 function saveHillKing(){
-  SB.from('house_settings').upsert({key:'hill_king',value:DB.hillKing})
+  // Ne jamais inclure bgImage dans hill_king — stocké séparément dans hill_bg
+  var data={
+    kingId:DB.hillKing.kingId||null,
+    kingName:DB.hillKing.kingName||'',
+    message:DB.hillKing.message||'',
+    claimedAt:DB.hillKing.claimedAt||null,
+    validated:DB.hillKing.validated||false
+  };
+  SB.from('house_settings').upsert({key:'hill_king',value:data})
     .catch(function(e){console.warn('[hillKing]',e);});
 }
 
