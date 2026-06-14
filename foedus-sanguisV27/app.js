@@ -4539,7 +4539,7 @@ function renderThread(t){
     +(HR('officier')?'<button class="btn bred bsm" style="margin-left:8px" onclick="delThreadW(this)" data-id="'+t.id+'">Supprimer</button>':'')+'</div>'
     +'<div class="pan"><div class="ph"><span class="ttag t-'+(t.tag||'general')+'">'+(TAG_LBL[t.tag]||t.tag)+'</span><span class="ptl" style="margin-left:8px;font-size:15px">'+esc(t.title)+'</span></div>'
     +(t.image?'<div style="width:100%;height:220px;border-radius:3px;margin-bottom:12px;overflow:hidden;cursor:zoom-in" onclick="showImg(this)" data-img="'+esc(t.image)+'"><img src="'+esc(t.image)+'" style="width:100%;height:100%;object-fit:cover;object-position:center top"></div>':'')
-    +'<div class="pb"><div class="fbc g12 td tsm mb12"><span class="cin fw7">'+esc(t.author)+'</span><span>'+esc(t.date)+'</span></div>'
+    +'<div class="pb"><div class="fbc g12 td tsm mb12"><span class="cin fw7">'+esc(t.author)+'</span><span style="margin-left:8px">·</span><span>'+esc(t.date)+'</span></div>'
     +'<div style="font-size:14px;line-height:1.9;white-space:pre-line">'+esc(t.content)+'</div>'
     +reactionsHTML(t.reactions, t.id)
     +'</div></div>'
@@ -4547,7 +4547,7 @@ function renderThread(t){
       var ri=(t.replies||[]).indexOf(r);
       var canEditReply=CU&&(r.author.toLowerCase()===CU.username.toLowerCase()||HR('officier')||HR('chef_groupe'));
       var html='<div class="card" style="margin-bottom:10px">';
-      html+='<div class="fbt mb12"><span class="cin fw7" style="font-size:12px">'+esc(r.author)+'</span><span class="td txs">'+esc(r.date)+'</span>';
+      html+='<div class="fbt mb12"><span class="cin fw7" style="font-size:12px">'+esc(r.author)+'</span><span class="td txs" style="margin-left:8px;flex:1;text-align:right">'+esc(r.date)+'</span>';
       if(canEditReply) html+='<button class="btn bol bsm" style="font-size:10px;margin-left:auto" onclick="editReplyW(this)" data-tid="'+t.id+'" data-ri="'+ri+'">\u270f\ufe0f</button>'        +'<button class="btn bred bsm" style="font-size:10px;margin-left:4px" onclick="delReplyW(this)" data-tid="'+t.id+'" data-ri="'+ri+'">\u2715</button>';
       html+='</div>';
       if(r.image) html+='<div style="max-width:280px;height:160px;border-radius:3px;overflow:hidden;cursor:zoom-in;margin-bottom:8px" data-img="'+esc(r.image)+'" onclick="showImg(this)"><img src="'+esc(r.image)+'" style="width:100%;height:100%;object-fit:cover"></div>';
