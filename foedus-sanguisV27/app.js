@@ -2084,27 +2084,13 @@ function getBadgeState(){try{return JSON.parse(sessionStorage.getItem('badge_sta
 function setBadgeState(key,val){var s=getBadgeState();s[key]=val;try{sessionStorage.setItem('badge_state',JSON.stringify(s));}catch(e){}}
 function markSeen(section){
   var now=new Date().getTime();
-  var today=nowDate();
-  if(section==='forum'){setBadgeState('last_forum',today);}
-  if(section==='form'){setBadgeState('last_form',today);setBadgeState('last_form_ts',now);}
+  if(section==='forum')setBadgeState('last_forum',new Date().toISOString().substring(0,10));
+  if(section==='form')setBadgeState('last_form',now);
   if(section==='vote')setBadgeState('last_vote',now);
   if(section==='grp')setBadgeState('last_grp',now);
   if(section==='cal')setBadgeState('last_cal',now);
   if(section==='banner')setBadgeState('last_banner',now);
   updateAppBadge();
-}
-function isThreadNew(t,lastDateStr){
-  // Pas de dernière visite = tout est nouveau sauf ses propres threads
-  if(!lastDateStr) return !!(t.author!==CU.username);
-  // Sinon : thread plus récent que la dernière visite
-  return !!(t.date&&t.date>lastDateStr);
-}
-function hasNewReply(t,lastDateStr){
-  if(!t.replies||!t.replies.length) return false;
-  if(!lastDateStr) return t.replies.some(function(r){return r.author!==CU.username;});
-  return t.replies.some(function(r){
-    return r.date&&r.date>lastDateStr&&r.author!==CU.username;
-  });
 }
 function updateAppBadge(){
   if(!CU)return;
@@ -2114,21 +2100,17 @@ function updateAppBadge(){
   badges.home+=(DB.banners||[]).filter(function(b){return b.active&&b.createdAt&&new Date(b.createdAt).getTime()>lastBanner;}).length;
   (DB.voteWars||[]).filter(function(w){return w.status==='open';}).forEach(function(w){if(!(w.votes&&w.votes[CU.id]))badges.vote++;});
   count+=badges.vote;
-  var lastForum=state['last_forum']||'';
-  badges.for=0;
-  (DB.forumThreads||[]).filter(function(t){return typeof TAG_LBL!=='undefined'&&Object.keys(TAG_LBL).indexOf(t.tag)>=0;}).forEach(function(t){
-    if(isThreadNew(t,lastForum)){badges.for++;return;}
-    if(hasNewReply(t,lastForum)) badges.for++;
-  });
+  var lastForum=state['last_forum']||'1970-01-01';
+  badges.for=(DB.forumThreads||[]).filter(function(t){
+    if(!TAG_LBL||Object.keys(TAG_LBL).indexOf(t.tag)<0) return false;
+    var tdate=(t.date||'').substring(0,10);
+    if(tdate>lastForum&&t.author!==CU.username) return true;
+    return (t.replies||[]).some(function(r){return (r.date||'').substring(0,10)>lastForum&&r.author!==CU.username;});
+  }).length;
   count+=badges.for;
-  var lastForm=state['last_form']||'';
-  var lastFormTs=state['last_form_ts']||0;
-  badges.form=0;
-  (DB.forumThreads||[]).filter(function(t){return typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(t.tag)>=0;}).forEach(function(t){
-    if(isThreadNew(t,lastForm)){badges.form++;return;}
-    if(hasNewReply(t,lastForm)) badges.form++;
-  });
-  badges.form+=(DB.formations||[]).filter(function(f){return f.createdAt&&new Date(f.createdAt).getTime()>lastFormTs&&f.createdBy!==CU.username;}).length;
+  var lastForm=state['last_form']||0;
+  badges.form=(DB.forumThreads||[]).filter(function(t){return typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(t.tag)>=0&&t.date&&new Date(t.date).getTime()>lastForm&&t.author!==CU.username;}).length;
+  badges.form+=(DB.formations||[]).filter(function(f){return f.createdAt&&new Date(f.createdAt).getTime()>lastForm&&f.createdBy!==CU.username;}).length;
   count+=badges.form;
   var lastCal=state['last_cal']||0;
   badges.cal=(DB.events||[]).filter(function(e){return e.createdAt&&new Date(e.createdAt).getTime()>lastCal;}).length;
@@ -2299,7 +2281,7 @@ function openEditVoteWarW(el){openEditVoteWar(el.dataset.id);}
 function viewFormThrW(el){
   var id=el.dataset.id;
   var t=(DB.forumThreads||[]).find(function(x){return x.id===id;});
-  if(t){CT=t;FV='thread';markSeen('form');go('form');}
+  if(t){CT=t;FV='thread';go('form');}
 }
 function goDeepFormThread(el){
   var id=el.dataset.tid;
@@ -4495,24 +4477,19 @@ function pgFor(){
 function renderForumList(threads, filterTag){
   var filtered=filterTag?threads.filter(function(t){return t.tag===filterTag;}):threads;
   if(!filtered.length) return'<div class="td tsm" style="padding:16px">Aucun sujet'+(filterTag?' dans cette catégorie':'')+'.</div>';
-  var lastForum=getBadgeState()['last_forum']||'';
+  var lastF=getBadgeState()['last_forum']||'1970-01-01';
   return filtered.map(function(t){
-    // Détecter nouveauté : thread récent ou nouvelle réponse
-    var isNewThread=t.date&&new Date(t.date).getTime()>lastForum&&t.author!==CU.username;
-    var lastReply=(t.replies||[]).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);})[0];
-    var isNewReply=lastReply&&lastReply.date&&new Date(lastReply.date).getTime()>lastForum&&lastReply.author!==CU.username;
+    var tdate=(t.date||'').substring(0,10);
+    var isNewThread=tdate>lastF&&t.author!==CU.username;
+    var lastReply=(t.replies||[]).filter(function(r){return r.author!==CU.username;}).slice(-1)[0];
+    var isNewReply=lastReply&&(lastReply.date||'').substring(0,10)>lastF;
     var isNew=isNewThread||isNewReply;
-    var newBadge=isNew
-      ? '<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px;vertical-align:middle">'+(isNewReply&&!isNewThread?'💬 Réponse':'✨ Nouveau')+'</span>'
-      : '';
-    // Dernière activité : date du dernier reply ou du thread
-    var lastActivity=lastReply?lastReply.date:t.date;
-    var lastAuthor=lastReply?lastReply.author:t.author;
-    return'<div class="thr" onclick="viewThrW(this)" data-id="'+t.id+'" style="display:flex;align-items:center;gap:10px;'+(isNew?'border-left:3px solid var(--red3);':'')+'">'
+    var badge=isNew?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px">'+(isNewReply&&!isNewThread?'💬':'✨ Nouveau')+'</span>':'';
+    return'<div class="thr" onclick="viewThrW(this)" data-id="'+t.id+'" style="display:flex;align-items:center;gap:10px'+(isNew?';border-left:3px solid var(--red3)':'')+'">'
       +(t.image?'<div style="width:56px;height:56px;flex-shrink:0;border-radius:3px;overflow:hidden"><img src="'+esc(t.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')
       +'<div style="flex:1">'
-      +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'general')+'">'+(TAG_LBL[t.tag]||t.tag||'Général')+'</span> '+esc(t.title)+newBadge+'</div>'
-      +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>Actif : '+esc(lastActivity)+'</span><span>💬 '+((t.replies||[]).length)+'</span>'+(lastReply?'<span style="color:var(--tx3);font-size:10px">↩ '+esc(lastAuthor)+'</span>':'')+'</div>'
+      +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'general')+'">'+(TAG_LBL[t.tag]||t.tag||'Général')+'</span> '+esc(t.title)+badge+'</div>'
+      +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(tdate)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div>'
       +'</div></div>';
   }).join('');
 }
@@ -4594,7 +4571,7 @@ function editReplyW(btn){
 }
 
 
-function viewThr(id){CT=(DB.forumThreads||[]).find(function(t){return t.id===id;});FV='thread';go('for');}
+function viewThr(id){CT=(DB.forumThreads||[]).find(function(t){return t.id===id;});FV='thread';markSeen('forum');go('for');}
 function backForum(){
   var wasFormation=CT&&typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(CT.tag)>=0;
   FV='list';CT=null;
@@ -4632,7 +4609,7 @@ function openNewThreadFormation(){
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Publier',cls:'btn bg',fn:function(){
       var title=sanitize(gVal('ntf-t'),100);if(!title)return alert('Titre requis');
       getImgUrl('ntf-img').then(function(imgUrl){
-        var t={id:'f'+Date.now(),title:title,tag:gVal('ntf-tg')||'guide',author:CU.username,date:nowDateTime(),content:gVal('ntf-c'),image:imgUrl||'',replies:[],pinned:false,featured:gChk('ntf-feat')};
+        var t={id:'f'+Date.now(),title:title,tag:gVal('ntf-tg')||'guide',author:CU.username,date:nowDate(),content:gVal('ntf-c'),image:imgUrl||'',replies:[],pinned:false,featured:gChk('ntf-feat')};
         sbSaveThread(t).then(function(){sbLoad().then(function(){CM();go('form');});}).catch(function(e){console.warn('[thread]',e);});
       });
     }}]);
@@ -4885,18 +4862,10 @@ function pgForm(){
       h+='<div class="td ta-c" style="padding:40px">Aucune discussion.</div>';
     } else {
       h+='<div>';
-      var lastFormD=getBadgeState()['last_form']||'';
       threads.slice().reverse().forEach(function(t){
-        var isNT=isThreadNew(t,lastFormD);
-        var lr=(t.replies||[]).slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');})[0];
-        var isNR=lr&&lr.date&&lr.date>(lastFormD||'')&&lr.author!==CU.username;
-        var isN=isNT||isNR;
-        var nb=isN?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px;vertical-align:middle">'+(isNR&&!isNT?'💬 Réponse':'✨ Nouveau')+'</span>':'';
-        var la=lr?lr.date:t.date;
-        var lau=lr?lr.author:t.author;
-        h+='<div class="thr" onclick="viewFormThrW(this)" data-id="'+t.id+'" style="'+(isN?'border-left:3px solid var(--red3);':'')+'">'
-          +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'guide')+'">'+(TAG_LBL_FORM[t.tag]||'Formation')+'</span> '+esc(t.title)+nb+'</div>'
-          +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>Actif : '+esc(la)+'</span><span>💬 '+((t.replies||[]).length)+'</span>'+(lr?'<span style="color:var(--tx3);font-size:10px">↩ '+esc(lau)+'</span>':'')+'</div>'
+        h+='<div class="thr" onclick="viewFormThrW(this)" data-id="'+t.id+'">'
+          +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'guide')+'">'+(TAG_LBL_FORM[t.tag]||'Formation')+'</span> '+esc(t.title)+'</div>'
+          +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(t.date)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div>'
           +'</div>';
       });
       h+='</div>';
