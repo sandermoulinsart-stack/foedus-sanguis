@@ -391,10 +391,14 @@ function sbLoad(){
     repairOrphanVotes();
     if(CU){
       updSB();
-      fetch(SB_URL+'/rest/v1/thread_reads?membre_id=eq.'+encodeURIComponent(CU.id)+'&select=thread_id',{headers:SB._headers})
+      fetch(SB_URL+'/rest/v1/thread_reads?membre_id=eq.'+encodeURIComponent(CU.id)+'&select=thread_id,read_at',{headers:SB._headers})
         .then(function(r){return r.json();})
-        .then(function(rows){DB.threadReads=(rows||[]).map(function(r){return r.thread_id;});updateAppBadge();})
-        .catch(function(){DB.threadReads=[];});
+        .then(function(rows){
+          DB.threadReads={};
+          (rows||[]).forEach(function(r){DB.threadReads[r.thread_id]=r.read_at||'';});
+          updateAppBadge();
+        })
+        .catch(function(){DB.threadReads={};});
     }
   }).catch(function(e){
     SB_READY = false;
@@ -643,7 +647,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings().catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:[]}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{}}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -2088,15 +2092,27 @@ function removeSanction(memberId,idx){var m=gM(memberId);if(!m||!m.sanctions)ret
 // ════════════════════════════════════════
 function getBadgeState(){try{return JSON.parse(sessionStorage.getItem('badge_state')||'{}');}catch(e){return{};}}
 function setBadgeState(key,val){var s=getBadgeState();s[key]=val;try{sessionStorage.setItem('badge_state',JSON.stringify(s));}catch(e){}}
+function threadHasUnread(t){
+  if(!CU) return false;
+  var reads=DB.threadReads||{};
+  var readAt=reads[t.id]||'';
+  // Thread jamais lu et pas créé par moi
+  if(!readAt) return t.author!==CU.username;
+  // Vérifier si une réponse d'un autre est plus récente que ma dernière lecture
+  return (t.replies||[]).some(function(r){
+    return r.author!==CU.username && r.date && r.date>readAt;
+  });
+}
+
 function markThreadRead(threadId){
   if(!CU||!threadId) return;
-  if((DB.threadReads||[]).indexOf(threadId)>=0) return;
-  DB.threadReads=DB.threadReads||[];
-  DB.threadReads.push(threadId);
+  DB.threadReads=DB.threadReads||{};
+  var now=new Date().toISOString();
+  DB.threadReads[threadId]=now;
   fetch(SB_URL+'/rest/v1/thread_reads',{
     method:'POST',
-    headers:Object.assign({},SB._headers,{'Prefer':'resolution=ignore-duplicates,return=minimal'}),
-    body:JSON.stringify([{membre_id:CU.id,thread_id:threadId}])
+    headers:Object.assign({},SB._headers,{'Prefer':'resolution=merge-duplicates,return=minimal'}),
+    body:JSON.stringify([{membre_id:CU.id,thread_id:threadId,read_at:now}])
   }).catch(function(e){console.warn('[threadRead]',e);});
   updateAppBadge();
 }
@@ -2120,14 +2136,12 @@ function updateAppBadge(){
   count+=badges.vote;
   badges.for=(DB.forumThreads||[]).filter(function(t){
     if(!TAG_LBL||Object.keys(TAG_LBL).indexOf(t.tag)<0) return false;
-    if(t.author===CU.username) return false;
-    return (DB.threadReads||[]).indexOf(t.id)<0;
+    return threadHasUnread(t);
   }).length;
   count+=badges.for;
   badges.form=(DB.forumThreads||[]).filter(function(t){
     if(!TAG_LBL_FORM||Object.keys(TAG_LBL_FORM).indexOf(t.tag)<0) return false;
-    if(t.author===CU.username) return false;
-    return (DB.threadReads||[]).indexOf(t.id)<0;
+    return threadHasUnread(t);
   }).length;
   count+=badges.form;
   var lastCal=state['last_cal']||0;
@@ -4496,7 +4510,7 @@ function renderForumList(threads, filterTag){
   var filtered=filterTag?threads.filter(function(t){return t.tag===filterTag;}):threads;
   if(!filtered.length) return'<div class="td tsm" style="padding:16px">Aucun sujet'+(filterTag?' dans cette catégorie':'')+'.</div>';
   return filtered.map(function(t){
-    var isNew=t.author!==CU.username&&(DB.threadReads||[]).indexOf(t.id)<0;
+    var isNew=threadHasUnread(t);
     var badge=isNew?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px">✨ Nouveau</span>':'';
     return'<div class="thr" onclick="viewThrW(this)" data-id="'+t.id+'" style="display:flex;align-items:center;gap:10px'+(isNew?';border-left:3px solid var(--red3)':'')+'">'+(t.image?'<div style="width:56px;height:56px;flex-shrink:0;border-radius:3px;overflow:hidden"><img src="'+esc(t.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')+'<div style="flex:1">'
       +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'general')+'">'+(TAG_LBL[t.tag]||t.tag||'Général')+'</span> '+esc(t.title)+badge+'</div>'
@@ -4874,7 +4888,7 @@ function pgForm(){
     } else {
       h+='<div>';
       threads.slice().reverse().forEach(function(t){
-        var isNewF=t.author!==CU.username&&(DB.threadReads||[]).indexOf(t.id)<0;
+        var isNewF=threadHasUnread(t);
         var badgeF=isNewF?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px">✨ Nouveau</span>':'';
         h+='<div class="thr" onclick="viewFormThrW(this)" data-id="'+t.id+'"'+(isNewF?' style="border-left:3px solid var(--red3)"':'')+'>'
           +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'guide')+'">'+(TAG_LBL_FORM[t.tag]||'Formation')+'</span> '+esc(t.title)+badgeF+'</div>'
