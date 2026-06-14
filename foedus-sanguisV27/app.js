@@ -1374,16 +1374,22 @@ function pgRank(){
 // ════════════════════════════════════════════════════════════════
 // HIÉRARCHIE DE LA MAISON
 // ════════════════════════════════════════════════════════════════
-var HIER_TITRES = ['Baron','Bras droit','Intendant','Officier recruteur','Référent recruteur','Raid Lead','Recruteur','Formateur'];
+var HIER_TITRES = ['Baron','Bras droit','Raid Lead','Intendant','Référent recruteur','Recruteur','Formateur'];
+var HIER_CATEGORIES = ['Direction','Officiers','Intendant','Sous-officiers'];
+var HIER_CAT_COLORS = {
+  'Direction':     {border:'#c9a227',bg:'rgba(201,162,39,.1)',color:'#c9a227'},
+  'Officiers':     {border:'#ce93d8',bg:'rgba(206,147,216,.1)',color:'#ce93d8'},
+  'Intendant':     {border:'#64b5f6',bg:'rgba(100,181,246,.1)',color:'#64b5f6'},
+  'Sous-officiers':{border:'#7090a8',bg:'rgba(112,144,168,.1)',color:'#7090a8'}
+};
 var HIER_COLORS = {
-  'Baron':              {border:'#c9a227',bg:'rgba(201,162,39,.15)',color:'#c9a227',tier:'top'},
-  'Bras droit':         {border:'#ce93d8',bg:'rgba(206,147,216,.12)',color:'#ce93d8',tier:'top'},
-  'Raid Lead':          {border:'#66bb6a',bg:'rgba(102,187,106,.1)',color:'#66bb6a',tier:'top'},
-  'Intendant':          {border:'#64b5f6',bg:'rgba(100,181,246,.12)',color:'#64b5f6',tier:'mid'},
-  'Officier recruteur': {border:'#ef5350',bg:'rgba(239,83,80,.1)',color:'#ef5350',tier:'mid'},
-  'Référent recruteur': {border:'#ef9a80',bg:'rgba(239,83,80,.07)',color:'#ef9a80',tier:'mid'},
-  'Recruteur':          {border:'#ffa726',bg:'rgba(255,167,38,.1)',color:'#ffa726',tier:'low'},
-  'Formateur':          {border:'#7090a8',bg:'rgba(112,144,168,.1)',color:'#7090a8',tier:'low'}
+  'Baron':              {border:'#c9a227',bg:'rgba(201,162,39,.15)',color:'#c9a227'},
+  'Bras droit':         {border:'#ce93d8',bg:'rgba(206,147,216,.12)',color:'#ce93d8'},
+  'Raid Lead':          {border:'#66bb6a',bg:'rgba(102,187,106,.1)',color:'#66bb6a'},
+  'Intendant':          {border:'#64b5f6',bg:'rgba(100,181,246,.12)',color:'#64b5f6'},
+  'Référent recruteur': {border:'#ef9a80',bg:'rgba(239,83,80,.07)',color:'#ef9a80'},
+  'Recruteur':          {border:'#ffa726',bg:'rgba(255,167,38,.1)',color:'#ffa726'},
+  'Formateur':          {border:'#7090a8',bg:'rgba(112,144,168,.1)',color:'#7090a8'}
 };
 
 function sbSaveHierarchyNode(n){ return SB.from('hierarchy').upsert(n); }
@@ -1400,119 +1406,76 @@ function pgHierarchy(){
       +'<div class="pb td ta-c" style="padding:40px;color:var(--tx3)">Aucun poste défini.</div></div>';
   }
 
-  // Regrouper par membre — un membre peut avoir plusieurs titres
+  // Regrouper par membre — un membre peut avoir plusieurs titres/catégories
   var memberMap={};
   nodes.forEach(function(n){
-    if(!memberMap[n.membre_id]){
-      memberMap[n.membre_id]={membre_id:n.membre_id,username:n.username,titres:[],notes:[],ids:[]};
+    var key=n.membre_id;
+    if(!memberMap[key]){
+      memberMap[key]={membre_id:n.membre_id,username:n.username,titres:[],categories:[],notes:[],ids:[],ordre:n.ordre||0};
     }
-    memberMap[n.membre_id].titres.push(n.titre);
-    if(n.note) memberMap[n.membre_id].notes.push(n.note);
-    memberMap[n.membre_id].ids.push(n.id);
-    // Ordre = minimum des ordres de ses postes
-    if(memberMap[n.membre_id].ordre===undefined||n.ordre<memberMap[n.membre_id].ordre){
-      memberMap[n.membre_id].ordre=n.ordre||0;
-    }
+    memberMap[key].titres.push(n.titre);
+    if(n.categorie&&memberMap[key].categories.indexOf(n.categorie)<0) memberMap[key].categories.push(n.categorie);
+    if(n.note) memberMap[key].notes.push(n.note);
+    memberMap[key].ids.push(n.id);
+    if((n.ordre||0)<memberMap[key].ordre) memberMap[key].ordre=n.ordre||0;
   });
 
-  var members=Object.values(memberMap).sort(function(a,b){return a.ordre-b.ordre;});
+  var allMembers=Object.values(memberMap).sort(function(a,b){return a.ordre-b.ordre;});
 
-  // Classer par tier (top/mid/low) selon le titre le plus haut
-  function memberTier(mc){
-    if(mc.titres.some(function(t){return(HIER_COLORS[t]||{}).tier==='top';})) return 'top';
-    if(mc.titres.some(function(t){return(HIER_COLORS[t]||{}).tier==='mid';})) return 'mid';
-    return 'low';
-  }
-
-  function hierCard(mc, size){
+  function hierCard(mc,catCol){
     var m=DB.members.find(function(x){return x.id===mc.membre_id;});
-    var avaSize=size==='top'?48:size==='mid'?36:28;
-    var nameSize=size==='top'?'15px':size==='mid'?'13px':'12px';
-    // Couleur dominante = titre le plus élevé
-    var mainCol=null;
-    ['Baron','Bras droit','Raid Lead','Intendant','Officier recruteur','Référent recruteur','Recruteur','Formateur'].forEach(function(t){
-      if(!mainCol&&mc.titres.indexOf(t)>=0) mainCol=HIER_COLORS[t];
-    });
-    var col=mainCol||{border:'var(--b2)',bg:'var(--bg1)',color:'var(--tx2)'};
+    var col=catCol||{border:'var(--b2)',bg:'var(--bg1)',color:'var(--tx2)'};
 
-    var card='<div style="background:'+col.bg+';border:1px solid '+col.border+';border-radius:6px;padding:'+(size==='top'?'16px 18px':'12px 14px')+';display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;position:relative;flex:1;min-width:'+(size==='top'?'160px':size==='mid'?'140px':'120px')+'">';
-
-    // Avatar
-    if(m) card+=avaHTML(m,avaSize);
-    else card+='<div style="width:'+avaSize+'px;height:'+avaSize+'px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:'+(avaSize/2)+'px;color:var(--tx3)">?</div>';
-
-    // Nom
-    card+='<div style="font-size:'+nameSize+';font-weight:700;color:var(--tx1);font-family:Cinzel,serif;line-height:1.2">'+esc(mc.username||'—')+'</div>';
+    var card='<div style="background:'+col.bg+';border:1px solid '+col.border+';border-radius:6px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center">';
+    if(m) card+=avaHTML(m,40);
+    else card+='<div style="width:40px;height:40px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--tx3)">?</div>';
+    card+='<div style="font-size:13px;font-weight:700;color:var(--tx1);font-family:Cinzel,serif;line-height:1.2">'+esc(mc.username||'—')+'</div>';
 
     // Badges titres
-    card+='<div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center">';
+    card+='<div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:center">';
     mc.titres.forEach(function(t){
       var tc=HIER_COLORS[t]||{border:'var(--b2)',color:'var(--tx3)'};
-      card+='<span style="font-size:9px;font-weight:700;color:'+tc.color+';border:1px solid '+tc.border+';padding:2px 7px;border-radius:10px;letter-spacing:.5px;white-space:nowrap">'+t+'</span>';
+      card+='<span style="font-size:9px;font-weight:700;color:'+tc.color+';border:1px solid '+tc.border+';padding:2px 7px;border-radius:10px;white-space:nowrap">'+esc(t)+'</span>';
     });
     card+='</div>';
 
-    // Badges membres
+    // Badges membre
     if(m){
-      var badges='';
-      if(m.chefGroupe)    badges+='<span style="font-size:9px;color:var(--teal2)">🗡️</span>';
-      if(m.sanguin)       badges+='<span style="font-size:9px;color:#e57373">🩸</span>';
-      if(m.grandChampion) badges+='<span style="font-size:9px;color:var(--gold)">🏆</span>';
-      if(badges) card+='<div style="display:flex;gap:4px">'+badges+'</div>';
+      var b='';
+      if(m.chefGroupe)    b+='<span style="font-size:10px">🗡️</span>';
+      if(m.sanguin)       b+='<span style="font-size:10px">🩸</span>';
+      if(m.grandChampion) b+='<span style="font-size:10px">🏆</span>';
+      if(b) card+='<div style="display:flex;gap:3px">'+b+'</div>';
     }
 
-    // Notes
-    if(mc.notes.length){
-      card+='<div style="font-size:10px;color:var(--tx3);font-style:italic">'+esc(mc.notes.join(' · '))+'</div>';
-    }
+    if(mc.notes.length) card+='<div style="font-size:10px;color:var(--tx3);font-style:italic">'+esc(mc.notes.join(' · '))+'</div>';
 
-    // Boutons edit (un par entrée)
     if(canEdit){
-      card+='<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:2px">';
+      card+='<div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center;margin-top:2px">';
       mc.ids.forEach(function(id,i){
         var t=mc.titres[i]||'';
-        card+='<button class="btn bol bsm" style="font-size:9px" onclick="openEditHierNodeW(this)" data-id="'+id+'" title="Modifier '+esc(t)+'">✏️ '+esc(t)+'</button>';
-        card+='<button class="btn bred bsm" style="font-size:9px" onclick="delHierNodeW(this)" data-id="'+id+'" title="Supprimer '+esc(t)+'">✕</button>';
+        card+='<button class="btn bol bsm" style="font-size:9px;padding:2px 5px" onclick="openEditHierNodeW(this)" data-id="'+id+'">✏️ '+esc(t)+'</button>';
+        card+='<button class="btn bred bsm" style="font-size:9px;padding:2px 5px" onclick="delHierNodeW(this)" data-id="'+id+'">✕</button>';
       });
       card+='</div>';
     }
-
     card+='</div>';
     return card;
   }
 
-  var topMembers=members.filter(function(mc){return memberTier(mc)==='top';});
-  var midMembers=members.filter(function(mc){return memberTier(mc)==='mid';});
-  var lowMembers=members.filter(function(mc){return memberTier(mc)==='low';});
-
   var html='<div class="pan"><div class="ph"><span class="ptl">⚜️ Hiérarchie de la Maison</span></div><div class="pb">';
 
-  // TOP — grandes cartes pleine largeur flex
-  if(topMembers.length){
+  HIER_CATEGORIES.forEach(function(cat){
+    var catMembers=allMembers.filter(function(mc){return mc.categories.indexOf(cat)>=0;});
+    if(!catMembers.length) return;
+    var col=HIER_CAT_COLORS[cat]||{border:'var(--b2)',bg:'var(--bg1)',color:'var(--tx3)'};
+    var isBig=(cat==='Direction');
     html+='<div style="margin-bottom:24px">';
-    html+='<div style="font-family:Cinzel,serif;font-size:9px;font-weight:700;color:var(--tx4);letter-spacing:3px;margin-bottom:12px;text-transform:uppercase">Direction</div>';
-    html+='<div style="display:flex;flex-wrap:wrap;gap:12px">';
-    topMembers.forEach(function(mc){html+=hierCard(mc,'top');});
+    html+='<div style="font-family:Cinzel,serif;font-size:10px;font-weight:700;color:'+col.color+';letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;border-bottom:1px solid '+col.border+';padding-bottom:6px">'+cat+'</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax('+(isBig?'180px':'140px')+',1fr));gap:'+(isBig?'14px':'10px')+'">';
+    catMembers.forEach(function(mc){html+=hierCard(mc,col);});
     html+='</div></div>';
-  }
-
-  // MID — grille 2 colonnes
-  if(midMembers.length){
-    html+='<div style="margin-bottom:24px">';
-    html+='<div style="font-family:Cinzel,serif;font-size:9px;font-weight:700;color:var(--tx4);letter-spacing:3px;margin-bottom:12px;text-transform:uppercase">Officiers</div>';
-    html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">';
-    midMembers.forEach(function(mc){html+=hierCard(mc,'mid');});
-    html+='</div></div>';
-  }
-
-  // LOW — grille 3 colonnes compactes
-  if(lowMembers.length){
-    html+='<div style="margin-bottom:8px">';
-    html+='<div style="font-family:Cinzel,serif;font-size:9px;font-weight:700;color:var(--tx4);letter-spacing:3px;margin-bottom:12px;text-transform:uppercase">Membres actifs</div>';
-    html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">';
-    lowMembers.forEach(function(mc){html+=hierCard(mc,'low');});
-    html+='</div></div>';
-  }
+  });
 
   html+='</div></div>';
   return html;
@@ -1528,18 +1491,20 @@ function memberDropdown(selectedId){
 function openAddHierNode(){
   if(!HR('baron')&&!HR('admin'))return;
   OM('Ajouter un poste',
-    '<div class="fg"><label class="fl">Titre</label><select class="fs" id="hier-titre">'+HIER_TITRES.map(function(t){return'<option value="'+t+'">'+t+'</option>';}).join('')+'</select></div>'
+    '<div class="fg"><label class="fl">Catégorie</label><select class="fs" id="hier-cat">'+HIER_CATEGORIES.map(function(c){return'<option value="'+c+'">'+c+'</option>';}).join('')+'</select></div>'
+    +'<div class="fg"><label class="fl">Titre</label><select class="fs" id="hier-titre">'+HIER_TITRES.map(function(t){return'<option value="'+t+'">'+t+'</option>';}).join('')+'</select></div>'
     +'<div class="fg"><label class="fl">Membre</label>'+memberDropdown('')+'</div>'
     +'<div class="fg"><label class="fl">Note (optionnel)</label><textarea class="ft" id="hier-note" style="min-height:60px"></textarea></div>'
-    +'<div class="fg"><label class="fl">Ordre</label><input class="fi" type="number" id="hier-ordre" value="0" style="max-width:80px"></div>',
+    +'<div class="fg"><label class="fl">Ordre d\'affichage</label><input class="fi" type="number" id="hier-ordre" value="0" style="max-width:80px"></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Ajouter',cls:'btn bg',fn:function(){
       var titre=document.getElementById('hier-titre').value;
+      var cat=document.getElementById('hier-cat').value;
       var mbId=document.getElementById('hier-mb').value;
       var note=document.getElementById('hier-note').value.trim();
       var ordre=parseInt(document.getElementById('hier-ordre').value)||0;
       if(!mbId)return alert('Choisissez un membre.');
       var m=DB.members.find(function(x){return x.id===mbId;});
-      var node={id:'h'+Date.now(),titre:titre,membre_id:mbId,username:m?m.username:'',note:note,ordre:ordre,updated_at:new Date().toISOString()};
+      var node={id:'h'+Date.now(),titre:titre,categorie:cat,membre_id:mbId,username:m?m.username:'',note:note,ordre:ordre,updated_at:new Date().toISOString()};
       DB.hierarchy=DB.hierarchy||[];
       DB.hierarchy.push(node);
       sbSaveHierarchyNode(node).then(function(){CM();go('hier');}).catch(function(e){console.warn('[hier]',e);});
@@ -1551,14 +1516,16 @@ function openEditHierNode(id){
   if(!HR('baron')&&!HR('admin'))return;
   var n=(DB.hierarchy||[]).find(function(x){return x.id===id;});if(!n)return;
   OM('Modifier le poste',
-    '<div class="fg"><label class="fl">Titre</label><select class="fs" id="hier-titre">'+HIER_TITRES.map(function(t){return'<option value="'+t+'"'+(t===n.titre?' selected':'')+'>'+t+'</option>';}).join('')+'</select></div>'
+    '<div class="fg"><label class="fl">Catégorie</label><select class="fs" id="hier-cat">'+HIER_CATEGORIES.map(function(c){return'<option value="'+c+'"'+(c===(n.categorie||'')?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>'
+    +'<div class="fg"><label class="fl">Titre</label><select class="fs" id="hier-titre">'+HIER_TITRES.map(function(t){return'<option value="'+t+'"'+(t===n.titre?' selected':'')+'>'+t+'</option>';}).join('')+'</select></div>'
     +'<div class="fg"><label class="fl">Membre</label>'+memberDropdown(n.membre_id)+'</div>'
     +'<div class="fg"><label class="fl">Note (optionnel)</label><textarea class="ft" id="hier-note" style="min-height:60px">'+esc(n.note||'')+'</textarea></div>'
-    +'<div class="fg"><label class="fl">Ordre</label><input class="fi" type="number" id="hier-ordre" value="'+(n.ordre||0)+'" style="max-width:80px"></div>',
+    +'<div class="fg"><label class="fl">Ordre d\'affichage</label><input class="fi" type="number" id="hier-ordre" value="'+(n.ordre||0)+'" style="max-width:80px"></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
       var mbId=document.getElementById('hier-mb').value;
       if(!mbId)return alert('Choisissez un membre.');
       var m=DB.members.find(function(x){return x.id===mbId;});
+      n.categorie=document.getElementById('hier-cat').value;
       n.titre=document.getElementById('hier-titre').value;
       n.membre_id=mbId; n.username=m?m.username:'';
       n.note=document.getElementById('hier-note').value.trim();
