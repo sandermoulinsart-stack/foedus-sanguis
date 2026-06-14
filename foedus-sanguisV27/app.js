@@ -2703,6 +2703,14 @@ function hillHTML(){
 
   // Zone action
   if(isKing&&occupied&&!validated){
+    // Afficher le dernier message du roi précédent
+    if(h.prevKingName||h.prevMessage){
+      out+='<div style="background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:8px 14px;max-width:380px;width:100%">';
+      out+='<div style="font-size:9px;color:rgba(255,255,255,.4);letter-spacing:1px;margin-bottom:4px">DERNIER ROI</div>';
+      if(h.prevKingName) out+='<div style="font-size:12px;font-weight:700;color:var(--gold);font-family:Cinzel,serif">👑 '+esc(h.prevKingName)+'</div>';
+      if(h.prevMessage) out+='<div style="font-size:11px;color:rgba(255,255,255,.7);font-style:italic;margin-top:3px">"'+esc(h.prevMessage)+'"</div>';
+      out+='</div>';
+    }
     // ROI — champ message + timer + bouton valider
     out+='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:100%;max-width:380px">';
     out+='<input id="hill-msg" class="fi" placeholder="Adressez la parole à vos sujets…" maxlength="100" style="text-align:center;background:rgba(0,0,0,.6);border-color:var(--golddim);color:#fff;font-style:italic">';
@@ -2712,8 +2720,12 @@ function hillHTML(){
     out+='<div style="font-size:12px;color:var(--gold);text-shadow:0 1px 6px rgba(0,0,0,1)">⏳ <span id="hill-seconds">'+Math.ceil(cooldownLeft/1000)+'</span>s pour valider sinon vous perdez la colline</div>';
     out+='</div>';
   } else if(!occupied||validated){
-    // LIBRE — bouton conquête
-    out+='<button onclick="claimHill()" style="background:var(--gold);border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:14px;padding:13px 36px;border-radius:3px;cursor:pointer;letter-spacing:2px;box-shadow:0 4px 24px rgba(201,162,39,.5)">⚔️ À MOI LA COLLINE !</button>';
+    // LIBRE — bouton conquête à position aléatoire
+    var rx=Math.floor(Math.random()*60)+5; // 5% à 65% depuis la gauche
+    var ry=Math.floor(Math.random()*50)+15; // 15% à 65% depuis le haut
+    out+='<div style="position:absolute;left:'+rx+'%;top:'+ry+'%;transform:translate(-50%,-50%);z-index:2">';
+    out+='<button onclick="claimHill()" style="background:var(--gold);border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:14px;padding:13px 36px;border-radius:3px;cursor:pointer;letter-spacing:2px;box-shadow:0 4px 24px rgba(201,162,39,.5);white-space:nowrap">⚔️ À MOI LA COLLINE !</button>';
+    out+='</div>';
   } else {
     // OCCUPÉE PAR UN AUTRE — bouton grisé + timer
     out+='<button onclick="hillBlockedMsg()" style="background:rgba(40,40,40,.75);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.35);font-family:Cinzel,serif;font-weight:700;font-size:14px;padding:13px 36px;border-radius:3px;cursor:pointer;letter-spacing:2px">⚔️ À MOI LA COLLINE !</button>';
@@ -2765,7 +2777,10 @@ function hillStartTimer(){
 
 function claimHill(){
   clearInterval(_hillPollTimer);_hillPollTimer=null;
-  DB.hillKing={kingId:CU.id,kingName:CU.username,message:'',claimedAt:Date.now(),validated:false,bgImage:(DB.hillKing||{}).bgImage||''};
+  var prev=DB.hillKing||{};
+  DB.hillKing={kingId:CU.id,kingName:CU.username,message:'',claimedAt:Date.now(),validated:false,
+    bgImage:prev.bgImage||'',
+    prevKingName:prev.kingName||'',prevMessage:prev.message||''};
   saveHillKing();
   var w=document.getElementById('hill-widget');
   if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
