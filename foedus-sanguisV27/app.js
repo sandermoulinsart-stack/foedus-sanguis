@@ -2952,7 +2952,9 @@ function saveHillKing(){
     kingName:DB.hillKing.kingName||'',
     message:DB.hillKing.message||'',
     claimedAt:DB.hillKing.claimedAt||null,
-    validated:DB.hillKing.validated||false
+    validated:DB.hillKing.validated||false,
+    prevKingName:DB.hillKing.prevKingName||'',
+    prevMessage:DB.hillKing.prevMessage||''
   };
   SB.from('house_settings').upsert({key:'hill_king',value:data})
     .catch(function(e){console.warn('[hillKing]',e);});
