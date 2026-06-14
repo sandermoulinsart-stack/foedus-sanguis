@@ -4514,10 +4514,11 @@ function renderForumList(threads, filterTag){
   if(!filtered.length) return'<div class="td tsm" style="padding:16px">Aucun sujet'+(filterTag?' dans cette catégorie':'')+'.</div>';
   return filtered.map(function(t){
     var isNew=threadHasUnread(t);
-    var badge=isNew?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px">✨ Nouveau</span>':'';
+    var badge=isNew?'<span style="display:inline-block;font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-top:3px;white-space:nowrap">✨ Nouveau</span>':'';
     return'<div class="thr" onclick="viewThrW(this)" data-id="'+t.id+'" style="display:flex;align-items:center;gap:10px'+(isNew?';border-left:3px solid var(--red3)':'')+'">'+(t.image?'<div style="width:56px;height:56px;flex-shrink:0;border-radius:3px;overflow:hidden"><img src="'+esc(t.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')+'<div style="flex:1">'
-      +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'general')+'">'+(TAG_LBL[t.tag]||t.tag||'Général')+'</span> '+esc(t.title)+badge+'</div>'
-      +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(t.date)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div>'
+      +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'general')+'">'+(TAG_LBL[t.tag]||t.tag||'Général')+'</span> '+esc(t.title)+'</div>'
+      +(badge?'<div>'+badge+'</div>':'')
+      +'<div class="thr-meta"><span>'+esc(t.author)+'</span> <span>'+esc(t.date)+'</span> <span>💬 '+((t.replies||[]).length)+'</span></div>'
       +'</div></div>';
   }).join('');
 }
@@ -4892,10 +4893,11 @@ function pgForm(){
       h+='<div>';
       threads.slice().reverse().forEach(function(t){
         var isNewF=threadHasUnread(t);
-        var badgeF=isNewF?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px">✨ Nouveau</span>':'';
+        var badgeF=isNewF?'<span style="display:inline-block;font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-top:3px;white-space:nowrap">✨ Nouveau</span>':'';
         h+='<div class="thr" onclick="viewFormThrW(this)" data-id="'+t.id+'"'+(isNewF?' style="border-left:3px solid var(--red3)"':'')+'>'
-          +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'guide')+'">'+(TAG_LBL_FORM[t.tag]||'Formation')+'</span> '+esc(t.title)+badgeF+'</div>'
-          +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(t.date)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div>'
+          +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'guide')+'">'+(TAG_LBL_FORM[t.tag]||'Formation')+'</span> '+esc(t.title)+'</div>'
+          +(badgeF?'<div>'+badgeF+'</div>':'')
+          +'<div class="thr-meta"><span>'+esc(t.author)+'</span> <span>'+esc(t.date)+'</span> <span>💬 '+((t.replies||[]).length)+'</span></div>'
           +'</div>';
       });
       h+='</div>';
