@@ -2792,6 +2792,29 @@ function validateHill(){
   var msg=el?el.value.trim():'';
   var left=Math.max(0,15000-(Date.now()-(DB.hillKing.claimedAt||0)));
   if(left<=0){alert('Trop tard ! La colline vous a échappé.');return;}
+  if(!msg){
+    var tips=[
+      '✍️ Un roi sans parole est un roi sans couronne… Écris quelque chose !',
+      '📜 Même Bonjour ferait l\'affaire. On croit en toi !',
+      '🗣️ La colline t\'appartient, mais ta langue est muette ? Exprime-toi !',
+      '🏋️ Entraîne-toi à rédiger ! Commence par ton prénom si besoin.',
+      '👑 Les grands rois ont de grands discours. Lance-toi, même un mot suffit !'
+    ];
+    var tip=tips[Math.floor(Math.random()*tips.length)];
+    var toast=document.getElementById('hill-toast');
+    if(!toast){
+      toast=document.createElement('div');
+      toast.id='hill-toast';
+      toast.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(20,10,0,.95);border:1px solid var(--golddim);color:var(--gold);padding:12px 20px;border-radius:4px;font-size:12px;z-index:9999;max-width:340px;text-align:center;font-style:italic;box-shadow:0 4px 24px rgba(0,0,0,.7);transition:opacity .4s;';
+      document.body.appendChild(toast);
+    }
+    toast.textContent=tip;
+    toast.style.opacity='1';
+    clearTimeout(window._hillToastT);
+    window._hillToastT=setTimeout(function(){toast.style.opacity='0';},3500);
+    if(el) el.focus();
+    return;
+  }
   clearInterval(_hillPollTimer);_hillPollTimer=null;
   DB.hillKing.message=msg;
   DB.hillKing.validated=true;
