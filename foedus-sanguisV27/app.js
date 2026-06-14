@@ -3242,11 +3242,11 @@ function editMbr(id){
       if((newRole==='admin'&&myRole!=='admin')||(newRole==='admin_assistant'&&myRole!=='admin'&&myRole!=='admin_assistant'&&myRole!=='baron')){
         return alert('Vous n\'avez pas les droits pour attribuer ce rôle.');
       }
+      var oldRole = m.role;
       m.username=sanitize(gVal('em-u'),50)||m.username;
       m.role=newRole;m.status=gVal('em-s');
       m.sanguin=gChk('em-sg');m.chefGroupe=gChk('em-cg');m.grandChampion=gChk('em-gc');m.note=gVal('em-n');
       var np=gVal('em-p');
-      var oldRole = m.role;
       function save(){
         if(m.id===CU.id)CU=m;
         var idx=DB.members.findIndex(function(x){return x.id===m.id;});
