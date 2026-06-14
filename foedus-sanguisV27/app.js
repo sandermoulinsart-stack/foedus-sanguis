@@ -397,6 +397,9 @@ function sbLoad(){
           DB.threadReads={};
           (rows||[]).forEach(function(r){DB.threadReads[r.thread_id]=r.read_at||'';});
           updateAppBadge();
+          // Re-rendre le forum/formation si ouvert pour afficher les badges
+          if(CP==='for'){var el=document.getElementById('forum-list');if(el){var threads=(DB.forumThreads||[]).filter(function(t){return t.tag!=='formation'&&!Object.keys(TAG_LBL_FORM).includes(t.tag);}).slice().reverse();el.innerHTML=renderForumList(threads,null);}}
+          if(CP==='form'){var c=document.getElementById('content');if(c)c.innerHTML=pgForm();}
         })
         .catch(function(){DB.threadReads={};});
     }
