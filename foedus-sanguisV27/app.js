@@ -2610,7 +2610,7 @@ function hillHTML(){
   out+='<div style="position:relative;z-index:1;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:24px 20px">';
 
   // Titre
-  out+='<div style="font-family:Cinzel,serif;font-size:15px;font-weight:700;color:var(--gold);letter-spacing:3px;text-shadow:0 2px 10px rgba(0,0,0,1)">⛰️ ROI DE LA COLLINE</div>';
+  out+='<div style="font-family:Cinzel,serif;font-size:15px;font-weight:700;color:var(--gold);letter-spacing:3px;text-shadow:0 2px 10px rgba(0,0,0,1)">ROI DE LA COLLINE</div>';
 
   // Roi + message
   if(h.kingId&&h.kingName&&(occupied||validated)){
@@ -2641,12 +2641,13 @@ function hillHTML(){
     out+='<div style="font-size:11px;color:rgba(255,255,255,.45)">🛡️ Libre dans <span id="hill-seconds">'+Math.ceil(cooldownLeft/1000)+'</span>s</div>';
   }
 
-  // Bouton image (officier+)
+  // Boutons coin supérieur droit
+  out+='<div style="position:absolute;top:10px;right:10px;z-index:2;display:flex;gap:6px">';
+  out+='<button onclick="openHillRulesW()" style="background:rgba(0,0,0,.65);border:1px solid var(--golddim);color:var(--gold);font-size:10px;padding:5px 10px;border-radius:3px;cursor:pointer">📖 Règles</button>';
   if(HR('officier')){
-    out+='<div style="position:absolute;top:10px;right:10px;z-index:2">';
     out+='<label style="cursor:pointer;background:rgba(0,0,0,.65);border:1px solid var(--golddim);color:var(--gold);font-size:10px;padding:5px 10px;border-radius:3px;display:block">🖼️ Fond<input type="file" accept="image/*" onchange="setHillBg(this)" style="display:none"></label>';
-    out+='</div>';
   }
+  out+='</div>';
 
   out+='</div></div>';
 
@@ -2725,6 +2726,39 @@ function hillBlockedMsg(){
   toast.style.opacity='1';
   clearTimeout(window._hillToastT);
   window._hillToastT=setTimeout(function(){toast.style.opacity='0';},3000);
+}
+
+function openHillRulesW(){
+  var html='<div style="font-size:13px;line-height:1.7;color:var(--tx2)">'
+    +'<div style="text-align:center;font-size:28px;margin-bottom:8px">⛰️</div>'
+    +'<div style="font-family:Cinzel,serif;font-size:14px;font-weight:700;color:var(--gold);text-align:center;margin-bottom:16px;letter-spacing:1px">ROI DE LA COLLINE</div>'
+
+    +'<div style="display:flex;flex-direction:column;gap:10px">'
+
+    +'<div style="background:var(--bg1);border-left:3px solid var(--gold);border-radius:3px;padding:10px 12px">'
+    +'<div style="font-weight:700;color:var(--tx1);margin-bottom:4px">⚔️ Conquérir la colline</div>'
+    +'<div style="font-size:12px;color:var(--tx3)">Cliquez sur le bouton <strong style="color:var(--gold)">À MOI LA COLLINE !</strong> pour revendiquer le trône. Vous devenez immédiatement Roi de la Colline.</div>'
+    +'</div>'
+
+    +'<div style="background:var(--bg1);border-left:3px solid #f9a825;border-radius:3px;padding:10px 12px">'
+    +'<div style="font-weight:700;color:var(--tx1);margin-bottom:4px">⏳ Le temps presse</div>'
+    +'<div style="font-size:12px;color:var(--tx3)">Vous avez <strong>15 secondes</strong> pour écrire votre message et cliquer sur <strong>✅ Valider mon règne</strong>. Si vous ne validez pas à temps, vous perdez la colline et elle redevient libre.</div>'
+    +'</div>'
+
+    +'<div style="background:var(--bg1);border-left:3px solid #66bb6a;border-radius:3px;padding:10px 12px">'
+    +'<div style="font-weight:700;color:var(--tx1);margin-bottom:4px">👑 Régner</div>'
+    +'<div style="font-size:12px;color:var(--tx3)">Une fois validé, votre nom et votre message s\'affichent sur la colline pour tous les membres. La colline redevient libre — un autre guerrier peut tenter sa chance.</div>'
+    +'</div>'
+
+    +'<div style="background:var(--bg1);border-left:3px solid var(--red3);border-radius:3px;padding:10px 12px">'
+    +'<div style="font-weight:700;color:var(--tx1);margin-bottom:4px">🛡️ Pendant le règne</div>'
+    +'<div style="font-size:12px;color:var(--tx3)">Pendant les 15 secondes de règne, le bouton est verrouillé pour les autres membres. Toute tentative affichera un message… royal.</div>'
+    +'</div>'
+
+    +'</div>'
+    +'</div>';
+
+  OM('📖 Règles — Roi de la Colline', html, [{lbl:'Fermer', cls:'bol', fn:CM}]);
 }
 
 function setHillBg(input){
