@@ -2110,9 +2110,14 @@ function updateAppBadge(){
     if(hasNewReply) badges.for++;
   });
   count+=badges.for;
-  var lastForm=state['last_form']||0;
-  badges.form=(DB.forumThreads||[]).filter(function(t){return typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(t.tag)>=0&&t.date&&new Date(t.date).getTime()>lastForm&&t.author!==CU.username;}).length;
-  badges.form+=(DB.formations||[]).filter(function(f){return f.createdAt&&new Date(f.createdAt).getTime()>lastForm&&f.createdBy!==CU.username;}).length;
+  var lastForm=state['last_form']||'';
+  var lastFormTs=state['last_form_ts']||0;
+  badges.form=0;
+  (DB.forumThreads||[]).filter(function(t){return typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(t.tag)>=0;}).forEach(function(t){
+    if(isThreadNew(t,lastForm)){badges.form++;return;}
+    if(hasNewReply(t,lastForm)) badges.form++;
+  });
+  badges.form+=(DB.formations||[]).filter(function(f){return f.createdAt&&new Date(f.createdAt).getTime()>lastFormTs&&f.createdBy!==CU.username;}).length;
   count+=badges.form;
   var lastCal=state['last_cal']||0;
   badges.cal=(DB.events||[]).filter(function(e){return e.createdAt&&new Date(e.createdAt).getTime()>lastCal;}).length;
@@ -4869,10 +4874,18 @@ function pgForm(){
       h+='<div class="td ta-c" style="padding:40px">Aucune discussion.</div>';
     } else {
       h+='<div>';
+      var lastFormD=getBadgeState()['last_form']||'';
       threads.slice().reverse().forEach(function(t){
-        h+='<div class="thr" onclick="viewFormThrW(this)" data-id="'+t.id+'">'
-          +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'guide')+'">'+(TAG_LBL_FORM[t.tag]||'Formation')+'</span> '+esc(t.title)+'</div>'
-          +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(t.date)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div>'
+        var isNT=isThreadNew(t,lastFormD);
+        var lr=(t.replies||[]).slice().sort(function(a,b){return (b.date||'').localeCompare(a.date||'');})[0];
+        var isNR=lr&&lr.date&&lr.date>(lastFormD||'')&&lr.author!==CU.username;
+        var isN=isNT||isNR;
+        var nb=isN?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px;vertical-align:middle">'+(isNR&&!isNT?'💬 Réponse':'✨ Nouveau')+'</span>':'';
+        var la=lr?lr.date:t.date;
+        var lau=lr?lr.author:t.author;
+        h+='<div class="thr" onclick="viewFormThrW(this)" data-id="'+t.id+'" style="'+(isN?'border-left:3px solid var(--red3);':'')+'">'
+          +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'guide')+'">'+(TAG_LBL_FORM[t.tag]||'Formation')+'</span> '+esc(t.title)+nb+'</div>'
+          +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>Actif : '+esc(la)+'</span><span>💬 '+((t.replies||[]).length)+'</span>'+(lr?'<span style="color:var(--tx3);font-size:10px">↩ '+esc(lau)+'</span>':'')+'</div>'
           +'</div>';
       });
       h+='</div>';
