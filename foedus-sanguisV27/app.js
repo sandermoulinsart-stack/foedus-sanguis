@@ -2691,14 +2691,9 @@ function hillHTML(){
   // Titre
   out+='<div style="font-family:Cinzel,serif;font-size:15px;font-weight:700;color:var(--gold);letter-spacing:3px;text-shadow:0 2px 10px rgba(0,0,0,1)">ROI DE LA COLLINE</div>';
 
-  // Roi + message
-  if(h.kingId&&h.kingName&&(occupied||validated)){
+  // Roi + message — uniquement si occupé (en cours de règne, pas encore validé)
+  if(h.kingId&&h.kingName&&occupied&&!validated){
     out+='<div style="font-size:28px;font-weight:700;color:#fff;text-shadow:0 2px 20px rgba(0,0,0,1);font-family:Cinzel,serif">👑 '+esc(h.kingName)+'</div>';
-    if(h.message&&validated){
-      out+='<div style="font-size:15px;color:rgba(255,255,255,.95);font-style:italic;text-shadow:0 1px 8px rgba(0,0,0,1);max-width:400px;line-height:1.6">"'+ esc(h.message)+'"</div>';
-    }
-  } else if(!occupied&&!validated){
-    out+='<div style="font-size:14px;color:rgba(255,255,255,.65);text-shadow:0 1px 6px rgba(0,0,0,.8)">La colline est vide… qui osera la prendre ?</div>';
   }
 
   // Zone action
@@ -2720,11 +2715,17 @@ function hillHTML(){
     out+='<div style="font-size:12px;color:var(--gold);text-shadow:0 1px 6px rgba(0,0,0,1)">⏳ <span id="hill-seconds">'+Math.ceil(cooldownLeft/1000)+'</span>s pour valider sinon vous perdez la colline</div>';
     out+='</div>';
   } else if(!occupied||validated){
-    // LIBRE — bouton conquête à position aléatoire
-    var rx=Math.floor(Math.random()*60)+5; // 5% à 65% depuis la gauche
-    var ry=Math.floor(Math.random()*50)+15; // 15% à 65% depuis le haut
-    out+='<div style="position:absolute;left:'+rx+'%;top:'+ry+'%;transform:translate(-50%,-50%);z-index:2">';
-    out+='<button onclick="claimHill()" style="background:var(--gold);border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:14px;padding:13px 36px;border-radius:3px;cursor:pointer;letter-spacing:2px;box-shadow:0 4px 24px rgba(201,162,39,.5);white-space:nowrap">⚔️ À MOI LA COLLINE !</button>';
+    // LIBRE — roi à gauche, bouton à droite
+    out+='<div style="display:flex;align-items:center;justify-content:space-between;width:100%;max-width:500px;gap:16px">';
+    out+='<div style="text-align:left;flex:1">';
+    if(h.kingId&&h.kingName&&validated){
+      out+='<div style="font-size:22px;font-weight:700;color:#fff;text-shadow:0 2px 16px rgba(0,0,0,1);font-family:Cinzel,serif">👑 '+esc(h.kingName)+'</div>';
+      if(h.message) out+='<div style="font-size:13px;color:rgba(255,255,255,.85);font-style:italic;margin-top:4px">"'+esc(h.message)+'"</div>';
+    } else {
+      out+='<div style="font-size:13px;color:rgba(255,255,255,.5)">La colline est vide…</div>';
+    }
+    out+='</div>';
+    out+='<button onclick="claimHill()" style="flex-shrink:0;background:var(--gold);border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:13px;padding:12px 20px;border-radius:3px;cursor:pointer;letter-spacing:1px;box-shadow:0 4px 24px rgba(201,162,39,.5);white-space:nowrap">⚔️ À MOI LA COLLINE !</button>';
     out+='</div>';
   } else {
     // OCCUPÉE PAR UN AUTRE — bouton grisé + timer
