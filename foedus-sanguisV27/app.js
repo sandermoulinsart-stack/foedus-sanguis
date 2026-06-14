@@ -1376,14 +1376,14 @@ function pgRank(){
 // ════════════════════════════════════════════════════════════════
 var HIER_TITRES = ['Baron','Bras droit','Intendant','Officier recruteur','Référent recruteur','Raid Lead','Recruteur','Formateur'];
 var HIER_COLORS = {
-  'Baron':              {border:'#c9a227',bg:'rgba(201,162,39,.15)',color:'#c9a227'},
-  'Bras droit':         {border:'#ce93d8',bg:'rgba(206,147,216,.12)',color:'#ce93d8'},
-  'Intendant':          {border:'#64b5f6',bg:'rgba(100,181,246,.12)',color:'#64b5f6'},
-  'Officier recruteur': {border:'#ef5350',bg:'rgba(239,83,80,.1)',color:'#ef5350'},
-  'Référent recruteur': {border:'#ef5350',bg:'rgba(239,83,80,.1)',color:'#ef5350'},
-  'Raid Lead':          {border:'#66bb6a',bg:'rgba(102,187,106,.1)',color:'#66bb6a'},
-  'Recruteur':          {border:'#ffa726',bg:'rgba(255,167,38,.1)',color:'#ffa726'},
-  'Formateur':          {border:'#7090a8',bg:'rgba(112,144,168,.1)',color:'#7090a8'}
+  'Baron':              {border:'#c9a227',bg:'rgba(201,162,39,.15)',color:'#c9a227',tier:'top'},
+  'Bras droit':         {border:'#ce93d8',bg:'rgba(206,147,216,.12)',color:'#ce93d8',tier:'top'},
+  'Raid Lead':          {border:'#66bb6a',bg:'rgba(102,187,106,.1)',color:'#66bb6a',tier:'top'},
+  'Intendant':          {border:'#64b5f6',bg:'rgba(100,181,246,.12)',color:'#64b5f6',tier:'mid'},
+  'Officier recruteur': {border:'#ef5350',bg:'rgba(239,83,80,.1)',color:'#ef5350',tier:'mid'},
+  'Référent recruteur': {border:'#ef9a80',bg:'rgba(239,83,80,.07)',color:'#ef9a80',tier:'mid'},
+  'Recruteur':          {border:'#ffa726',bg:'rgba(255,167,38,.1)',color:'#ffa726',tier:'low'},
+  'Formateur':          {border:'#7090a8',bg:'rgba(112,144,168,.1)',color:'#7090a8',tier:'low'}
 };
 
 function sbSaveHierarchyNode(n){ return SB.from('hierarchy').upsert(n); }
@@ -1400,48 +1400,120 @@ function pgHierarchy(){
       +'<div class="pb td ta-c" style="padding:40px;color:var(--tx3)">Aucun poste défini.</div></div>';
   }
 
-  // Grouper par titre+ordre → membres du même titre et même ordre sont côte à côte
-  var groups=[];
+  // Regrouper par membre — un membre peut avoir plusieurs titres
+  var memberMap={};
   nodes.forEach(function(n){
-    var last=groups[groups.length-1];
-    if(last&&last.titre===n.titre&&last.ordre===n.ordre){
-      last.items.push(n);
-    } else {
-      groups.push({titre:n.titre,ordre:n.ordre,items:[n]});
+    if(!memberMap[n.membre_id]){
+      memberMap[n.membre_id]={membre_id:n.membre_id,username:n.username,titres:[],notes:[],ids:[]};
+    }
+    memberMap[n.membre_id].titres.push(n.titre);
+    if(n.note) memberMap[n.membre_id].notes.push(n.note);
+    memberMap[n.membre_id].ids.push(n.id);
+    // Ordre = minimum des ordres de ses postes
+    if(memberMap[n.membre_id].ordre===undefined||n.ordre<memberMap[n.membre_id].ordre){
+      memberMap[n.membre_id].ordre=n.ordre||0;
     }
   });
 
-  var html='<div class="pan"><div class="ph"><span class="ptl">⚜️ Hiérarchie de la Maison</span></div><div class="pb">';
-  groups.forEach(function(grp){
-    var col=HIER_COLORS[grp.titre]||{border:'var(--b2)',bg:'var(--bg1)',color:'var(--tx2)'};
-    html+='<div style="margin-bottom:20px">';
-    html+='<div style="font-family:Cinzel,serif;font-size:10px;font-weight:700;color:'+col.color
-      +';letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;border-bottom:1px solid '
-      +col.border+';padding-bottom:6px">'+grp.titre+'</div>';
-    html+='<div style="display:flex;flex-wrap:wrap;gap:10px">';
-    grp.items.forEach(function(n){
-      var m=DB.members.find(function(x){return x.id===n.membre_id;});
-      html+='<div style="background:'+col.bg+';border:1px solid '+col.border
-        +';border-radius:4px;padding:12px 16px;display:flex;align-items:center;gap:10px;min-width:160px">';
-      if(m) html+=avaHTML(m,32);
-      else html+='<div style="width:32px;height:32px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--tx3)">?</div>';
-      html+='<div>';
-      html+='<div style="font-size:13px;font-weight:700;color:var(--tx1);font-family:Cinzel,serif">'+esc(n.username||'—')+'</div>';
-      if(m&&m.chefGroupe)    html+='<div style="font-size:10px;color:var(--teal2)">🗡️ Chef de Groupe</div>';
-      if(m&&m.sanguin)       html+='<div style="font-size:10px;color:var(--tx3)">🩸 Garde Sanguin</div>';
-      if(m&&m.grandChampion) html+='<div style="font-size:10px;color:var(--gold)">🏆 Grand Champion</div>';
-      if(n.note)             html+='<div style="font-size:10px;color:var(--tx3);font-style:italic;margin-top:2px">'+esc(n.note)+'</div>';
-      html+='</div>';
-      if(canEdit){
-        html+='<div style="margin-left:auto;display:flex;gap:4px">'
-          +'<button class="btn bol bsm" style="font-size:10px" onclick="openEditHierNodeW(this)" data-id="'+n.id+'">✏️</button>'
-          +'<button class="btn bred bsm" style="font-size:10px" onclick="delHierNodeW(this)" data-id="'+n.id+'">✕</button>'
-          +'</div>';
-      }
-      html+='</div></div>';
+  var members=Object.values(memberMap).sort(function(a,b){return a.ordre-b.ordre;});
+
+  // Classer par tier (top/mid/low) selon le titre le plus haut
+  function memberTier(mc){
+    if(mc.titres.some(function(t){return(HIER_COLORS[t]||{}).tier==='top';})) return 'top';
+    if(mc.titres.some(function(t){return(HIER_COLORS[t]||{}).tier==='mid';})) return 'mid';
+    return 'low';
+  }
+
+  function hierCard(mc, size){
+    var m=DB.members.find(function(x){return x.id===mc.membre_id;});
+    var avaSize=size==='top'?48:size==='mid'?36:28;
+    var nameSize=size==='top'?'15px':size==='mid'?'13px':'12px';
+    // Couleur dominante = titre le plus élevé
+    var mainCol=null;
+    ['Baron','Bras droit','Raid Lead','Intendant','Officier recruteur','Référent recruteur','Recruteur','Formateur'].forEach(function(t){
+      if(!mainCol&&mc.titres.indexOf(t)>=0) mainCol=HIER_COLORS[t];
     });
+    var col=mainCol||{border:'var(--b2)',bg:'var(--bg1)',color:'var(--tx2)'};
+
+    var card='<div style="background:'+col.bg+';border:1px solid '+col.border+';border-radius:6px;padding:'+(size==='top'?'16px 18px':'12px 14px')+';display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;position:relative;flex:1;min-width:'+(size==='top'?'160px':size==='mid'?'140px':'120px')+'">';
+
+    // Avatar
+    if(m) card+=avaHTML(m,avaSize);
+    else card+='<div style="width:'+avaSize+'px;height:'+avaSize+'px;border-radius:50%;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:'+(avaSize/2)+'px;color:var(--tx3)">?</div>';
+
+    // Nom
+    card+='<div style="font-size:'+nameSize+';font-weight:700;color:var(--tx1);font-family:Cinzel,serif;line-height:1.2">'+esc(mc.username||'—')+'</div>';
+
+    // Badges titres
+    card+='<div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:center">';
+    mc.titres.forEach(function(t){
+      var tc=HIER_COLORS[t]||{border:'var(--b2)',color:'var(--tx3)'};
+      card+='<span style="font-size:9px;font-weight:700;color:'+tc.color+';border:1px solid '+tc.border+';padding:2px 7px;border-radius:10px;letter-spacing:.5px;white-space:nowrap">'+t+'</span>';
+    });
+    card+='</div>';
+
+    // Badges membres
+    if(m){
+      var badges='';
+      if(m.chefGroupe)    badges+='<span style="font-size:9px;color:var(--teal2)">🗡️</span>';
+      if(m.sanguin)       badges+='<span style="font-size:9px;color:#e57373">🩸</span>';
+      if(m.grandChampion) badges+='<span style="font-size:9px;color:var(--gold)">🏆</span>';
+      if(badges) card+='<div style="display:flex;gap:4px">'+badges+'</div>';
+    }
+
+    // Notes
+    if(mc.notes.length){
+      card+='<div style="font-size:10px;color:var(--tx3);font-style:italic">'+esc(mc.notes.join(' · '))+'</div>';
+    }
+
+    // Boutons edit (un par entrée)
+    if(canEdit){
+      card+='<div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;margin-top:2px">';
+      mc.ids.forEach(function(id,i){
+        var t=mc.titres[i]||'';
+        card+='<button class="btn bol bsm" style="font-size:9px" onclick="openEditHierNodeW(this)" data-id="'+id+'" title="Modifier '+esc(t)+'">✏️ '+esc(t)+'</button>';
+        card+='<button class="btn bred bsm" style="font-size:9px" onclick="delHierNodeW(this)" data-id="'+id+'" title="Supprimer '+esc(t)+'">✕</button>';
+      });
+      card+='</div>';
+    }
+
+    card+='</div>';
+    return card;
+  }
+
+  var topMembers=members.filter(function(mc){return memberTier(mc)==='top';});
+  var midMembers=members.filter(function(mc){return memberTier(mc)==='mid';});
+  var lowMembers=members.filter(function(mc){return memberTier(mc)==='low';});
+
+  var html='<div class="pan"><div class="ph"><span class="ptl">⚜️ Hiérarchie de la Maison</span></div><div class="pb">';
+
+  // TOP — grandes cartes pleine largeur flex
+  if(topMembers.length){
+    html+='<div style="margin-bottom:24px">';
+    html+='<div style="font-family:Cinzel,serif;font-size:9px;font-weight:700;color:var(--tx4);letter-spacing:3px;margin-bottom:12px;text-transform:uppercase">Direction</div>';
+    html+='<div style="display:flex;flex-wrap:wrap;gap:12px">';
+    topMembers.forEach(function(mc){html+=hierCard(mc,'top');});
     html+='</div></div>';
-  });
+  }
+
+  // MID — grille 2 colonnes
+  if(midMembers.length){
+    html+='<div style="margin-bottom:24px">';
+    html+='<div style="font-family:Cinzel,serif;font-size:9px;font-weight:700;color:var(--tx4);letter-spacing:3px;margin-bottom:12px;text-transform:uppercase">Officiers</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">';
+    midMembers.forEach(function(mc){html+=hierCard(mc,'mid');});
+    html+='</div></div>';
+  }
+
+  // LOW — grille 3 colonnes compactes
+  if(lowMembers.length){
+    html+='<div style="margin-bottom:8px">';
+    html+='<div style="font-family:Cinzel,serif;font-size:9px;font-weight:700;color:var(--tx4);letter-spacing:3px;margin-bottom:12px;text-transform:uppercase">Membres actifs</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px">';
+    lowMembers.forEach(function(mc){html+=hierCard(mc,'low');});
+    html+='</div></div>';
+  }
+
   html+='</div></div>';
   return html;
 }
