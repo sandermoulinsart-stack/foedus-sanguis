@@ -389,7 +389,13 @@ function sbLoad(){
       }
     }
     repairOrphanVotes();
-    if(CU)updSB();
+    if(CU){
+      updSB();
+      fetch(SB_URL+'/rest/v1/thread_reads?membre_id=eq.'+encodeURIComponent(CU.id)+'&select=thread_id',{headers:SB._headers})
+        .then(function(r){return r.json();})
+        .then(function(rows){DB.threadReads=(rows||[]).map(function(r){return r.thread_id;});updateAppBadge();})
+        .catch(function(){DB.threadReads=[];});
+    }
   }).catch(function(e){
     SB_READY = false;
     sbStatus('⚠ Hors ligne','var(--red3)');
@@ -637,7 +643,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings().catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:''}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:[]}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -2082,6 +2088,18 @@ function removeSanction(memberId,idx){var m=gM(memberId);if(!m||!m.sanctions)ret
 // ════════════════════════════════════════
 function getBadgeState(){try{return JSON.parse(sessionStorage.getItem('badge_state')||'{}');}catch(e){return{};}}
 function setBadgeState(key,val){var s=getBadgeState();s[key]=val;try{sessionStorage.setItem('badge_state',JSON.stringify(s));}catch(e){}}
+function markThreadRead(threadId){
+  if(!CU||!threadId) return;
+  if((DB.threadReads||[]).indexOf(threadId)>=0) return;
+  DB.threadReads=DB.threadReads||[];
+  DB.threadReads.push(threadId);
+  fetch(SB_URL+'/rest/v1/thread_reads',{
+    method:'POST',
+    headers:Object.assign({},SB._headers,{'Prefer':'resolution=ignore-duplicates,return=minimal'}),
+    body:JSON.stringify([{membre_id:CU.id,thread_id:threadId}])
+  }).catch(function(e){console.warn('[threadRead]',e);});
+  updateAppBadge();
+}
 function markSeen(section){
   var now=new Date().getTime();
   if(section==='forum')setBadgeState('last_forum',new Date().toISOString().substring(0,10));
@@ -2100,22 +2118,17 @@ function updateAppBadge(){
   badges.home+=(DB.banners||[]).filter(function(b){return b.active&&b.createdAt&&new Date(b.createdAt).getTime()>lastBanner;}).length;
   (DB.voteWars||[]).filter(function(w){return w.status==='open';}).forEach(function(w){if(!(w.votes&&w.votes[CU.id]))badges.vote++;});
   count+=badges.vote;
-  var lastForum=state['last_forum']||'1970-01-01';
   badges.for=(DB.forumThreads||[]).filter(function(t){
     if(!TAG_LBL||Object.keys(TAG_LBL).indexOf(t.tag)<0) return false;
-    var tdate=(t.date||'').substring(0,10);
-    if(tdate>lastForum&&t.author!==CU.username) return true;
-    return (t.replies||[]).some(function(r){return (r.date||'').substring(0,10)>lastForum&&r.author!==CU.username;});
+    if(t.author===CU.username) return false;
+    return (DB.threadReads||[]).indexOf(t.id)<0;
   }).length;
   count+=badges.for;
-  var lastForm=state['last_form']||'1970-01-01';
   badges.form=(DB.forumThreads||[]).filter(function(t){
     if(!TAG_LBL_FORM||Object.keys(TAG_LBL_FORM).indexOf(t.tag)<0) return false;
-    var tdate=(t.date||'').substring(0,10);
-    if(tdate>lastForm&&t.author!==CU.username) return true;
-    return (t.replies||[]).some(function(r){return (r.date||'').substring(0,10)>lastForm&&r.author!==CU.username;});
+    if(t.author===CU.username) return false;
+    return (DB.threadReads||[]).indexOf(t.id)<0;
   }).length;
-  badges.form+=(DB.formations||[]).filter(function(f){return f.createdAt&&new Date(f.createdAt).getTime()>lastForm&&f.createdBy!==CU.username;}).length;
   count+=badges.form;
   var lastCal=state['last_cal']||0;
   badges.cal=(DB.events||[]).filter(function(e){return e.createdAt&&new Date(e.createdAt).getTime()>lastCal;}).length;
@@ -4482,19 +4495,12 @@ function pgFor(){
 function renderForumList(threads, filterTag){
   var filtered=filterTag?threads.filter(function(t){return t.tag===filterTag;}):threads;
   if(!filtered.length) return'<div class="td tsm" style="padding:16px">Aucun sujet'+(filterTag?' dans cette catégorie':'')+'.</div>';
-  var lastF=getBadgeState()['last_forum']||'1970-01-01';
   return filtered.map(function(t){
-    var tdate=(t.date||'').substring(0,10);
-    var isNewThread=tdate>lastF&&t.author!==CU.username;
-    var lastReply=(t.replies||[]).filter(function(r){return r.author!==CU.username;}).slice(-1)[0];
-    var isNewReply=lastReply&&(lastReply.date||'').substring(0,10)>lastF;
-    var isNew=isNewThread||isNewReply;
-    var badge=isNew?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px">'+(isNewReply&&!isNewThread?'💬':'✨ Nouveau')+'</span>':'';
-    return'<div class="thr" onclick="viewThrW(this)" data-id="'+t.id+'" style="display:flex;align-items:center;gap:10px'+(isNew?';border-left:3px solid var(--red3)':'')+'">'
-      +(t.image?'<div style="width:56px;height:56px;flex-shrink:0;border-radius:3px;overflow:hidden"><img src="'+esc(t.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')
-      +'<div style="flex:1">'
+    var isNew=t.author!==CU.username&&(DB.threadReads||[]).indexOf(t.id)<0;
+    var badge=isNew?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px">✨ Nouveau</span>':'';
+    return'<div class="thr" onclick="viewThrW(this)" data-id="'+t.id+'" style="display:flex;align-items:center;gap:10px'+(isNew?';border-left:3px solid var(--red3)':'')+'">'+(t.image?'<div style="width:56px;height:56px;flex-shrink:0;border-radius:3px;overflow:hidden"><img src="'+esc(t.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')+'<div style="flex:1">'
       +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'general')+'">'+(TAG_LBL[t.tag]||t.tag||'Général')+'</span> '+esc(t.title)+badge+'</div>'
-      +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(tdate)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div>'
+      +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(t.date)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div>'
       +'</div></div>';
   }).join('');
 }
@@ -4576,7 +4582,7 @@ function editReplyW(btn){
 }
 
 
-function viewThr(id){CT=(DB.forumThreads||[]).find(function(t){return t.id===id;});FV='thread';markSeen('forum');go('for');}
+function viewThr(id){CT=(DB.forumThreads||[]).find(function(t){return t.id===id;});FV='thread';markThreadRead(id);go('for');}
 function backForum(){
   var wasFormation=CT&&typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(CT.tag)>=0;
   FV='list';CT=null;
@@ -4867,16 +4873,12 @@ function pgForm(){
       h+='<div class="td ta-c" style="padding:40px">Aucune discussion.</div>';
     } else {
       h+='<div>';
-      var lastFForm=getBadgeState()['last_form']||'1970-01-01';
       threads.slice().reverse().forEach(function(t){
-        var tdate=(t.date||'').substring(0,10);
-        var isNewThread=tdate>lastFForm&&t.author!==CU.username;
-        var lastReply=(t.replies||[]).filter(function(r){return r.author!==CU.username;}).slice(-1)[0];
-        var isNewReply=lastReply&&(lastReply.date||'').substring(0,10)>lastFForm;
-        var isNew=isNewThread||isNewReply;
-        var badge=isNew?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px">'+(isNewReply&&!isNewThread?'💬':'✨ Nouveau')+'</span>':'';
-        h+='<div class="thr" onclick="viewFormThrW(this)" data-id="'+t.id+'"'+(isNew?' style="border-left:3px solid var(--red3)"':'')+'>'          +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'guide')+'">'+(TAG_LBL_FORM[t.tag]||'Formation')+'</span> '+esc(t.title)+badge+'</div>'
-          +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(tdate)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div>'
+        var isNewF=t.author!==CU.username&&(DB.threadReads||[]).indexOf(t.id)<0;
+        var badgeF=isNewF?'<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px">✨ Nouveau</span>':'';
+        h+='<div class="thr" onclick="viewFormThrW(this)" data-id="'+t.id+'"'+(isNewF?' style="border-left:3px solid var(--red3)"':'')+'>'
+          +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'guide')+'">'+(TAG_LBL_FORM[t.tag]||'Formation')+'</span> '+esc(t.title)+badgeF+'</div>'
+          +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(t.date)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div>'
           +'</div>';
       });
       h+='</div>';
