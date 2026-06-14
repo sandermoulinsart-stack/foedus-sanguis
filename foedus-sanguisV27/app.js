@@ -2101,7 +2101,14 @@ function updateAppBadge(){
   (DB.voteWars||[]).filter(function(w){return w.status==='open';}).forEach(function(w){if(!(w.votes&&w.votes[CU.id]))badges.vote++;});
   count+=badges.vote;
   var lastForum=state['last_forum']||0;
-  badges.for=(DB.forumThreads||[]).filter(function(t){return typeof TAG_LBL!=='undefined'&&Object.keys(TAG_LBL).indexOf(t.tag)>=0&&t.date&&new Date(t.date).getTime()>lastForum&&t.author!==CU.username;}).length;
+  badges.for=0;
+  (DB.forumThreads||[]).filter(function(t){return typeof TAG_LBL!=='undefined'&&Object.keys(TAG_LBL).indexOf(t.tag)>=0;}).forEach(function(t){
+    // Nouveau thread
+    if(t.date&&new Date(t.date).getTime()>lastForum&&t.author!==CU.username){badges.for++;return;}
+    // Nouvelle réponse
+    var hasNewReply=(t.replies||[]).some(function(r){return r.date&&new Date(r.date).getTime()>lastForum&&r.author!==CU.username;});
+    if(hasNewReply) badges.for++;
+  });
   count+=badges.for;
   var lastForm=state['last_form']||0;
   badges.form=(DB.forumThreads||[]).filter(function(t){return typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(t.tag)>=0&&t.date&&new Date(t.date).getTime()>lastForm&&t.author!==CU.username;}).length;
@@ -2276,7 +2283,7 @@ function openEditVoteWarW(el){openEditVoteWar(el.dataset.id);}
 function viewFormThrW(el){
   var id=el.dataset.id;
   var t=(DB.forumThreads||[]).find(function(x){return x.id===id;});
-  if(t){CT=t;FV='thread';go('form');}
+  if(t){CT=t;FV='thread';markSeen('form');go('form');}
 }
 function goDeepFormThread(el){
   var id=el.dataset.tid;
@@ -4472,11 +4479,25 @@ function pgFor(){
 function renderForumList(threads, filterTag){
   var filtered=filterTag?threads.filter(function(t){return t.tag===filterTag;}):threads;
   if(!filtered.length) return'<div class="td tsm" style="padding:16px">Aucun sujet'+(filterTag?' dans cette catégorie':'')+'.</div>';
+  var lastForum=getBadgeState()['last_forum']||0;
   return filtered.map(function(t){
-    return'<div class="thr" onclick="viewThrW(this)" data-id="'+t.id+'" style="display:flex;align-items:center;gap:10px">'+(t.image?'<div style="width:56px;height:56px;flex-shrink:0;border-radius:3px;overflow:hidden"><img src="'+esc(t.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')+'<div style="flex:1">'
-      +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'general')+'">'+(TAG_LBL[t.tag]||t.tag||'Général')+'</span> '+esc(t.title)+'</div>'
-      +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>'+esc(t.date)+'</span><span>💬 '+((t.replies||[]).length)+'</span></div></div>'
-      +'</div>';
+    // Détecter nouveauté : thread récent ou nouvelle réponse
+    var isNewThread=t.date&&new Date(t.date).getTime()>lastForum&&t.author!==CU.username;
+    var lastReply=(t.replies||[]).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);})[0];
+    var isNewReply=lastReply&&lastReply.date&&new Date(lastReply.date).getTime()>lastForum&&lastReply.author!==CU.username;
+    var isNew=isNewThread||isNewReply;
+    var newBadge=isNew
+      ? '<span style="font-size:9px;font-weight:700;background:var(--red3);color:#fff;padding:2px 6px;border-radius:10px;margin-left:6px;vertical-align:middle">'+(isNewReply&&!isNewThread?'💬 Réponse':'✨ Nouveau')+'</span>'
+      : '';
+    // Dernière activité : date du dernier reply ou du thread
+    var lastActivity=lastReply?lastReply.date:t.date;
+    var lastAuthor=lastReply?lastReply.author:t.author;
+    return'<div class="thr" onclick="viewThrW(this)" data-id="'+t.id+'" style="display:flex;align-items:center;gap:10px;'+(isNew?'border-left:3px solid var(--red3);':'')+'">'
+      +(t.image?'<div style="width:56px;height:56px;flex-shrink:0;border-radius:3px;overflow:hidden"><img src="'+esc(t.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')
+      +'<div style="flex:1">'
+      +'<div class="thr-ttl"><span class="ttag t-'+(t.tag||'general')+'">'+(TAG_LBL[t.tag]||t.tag||'Général')+'</span> '+esc(t.title)+newBadge+'</div>'
+      +'<div class="thr-meta"><span>'+esc(t.author)+'</span><span>Actif : '+esc(lastActivity)+'</span><span>💬 '+((t.replies||[]).length)+'</span>'+(lastReply?'<span style="color:var(--tx3);font-size:10px">↩ '+esc(lastAuthor)+'</span>':'')+'</div>'
+      +'</div></div>';
   }).join('');
 }
 
