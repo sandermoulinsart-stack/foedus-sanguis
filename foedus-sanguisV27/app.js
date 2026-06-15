@@ -5214,6 +5214,7 @@ function pgCal(){
         +'</div>'
         +(canManage?'<div style="padding:8px 16px;border-top:1px solid var(--b1);display:flex;gap:8px">'
           +'<button class="btn bol bsm" onclick="editTournamentW(this);event.stopPropagation()" data-id="'+t.id+'">✏️ Éditer</button>'
+          +'<button class="btn bol bsm" onclick="generateInviteToken(this.dataset.id);event.stopPropagation()" data-id="'+t.id+'">🔗 Inviter</button>'
           +(t.status==='open'&&(t.participants||[]).length>=2?'<button class="btn bg bsm" onclick="startTournamentW(this);event.stopPropagation()" data-id="'+t.id+'">⚔️ Démarrer</button>':'')
           +'<button class="btn bred bsm" onclick="delTournamentW(this);event.stopPropagation()" data-id="'+t.id+'">✕</button>'
           +'</div>':'')
@@ -6570,7 +6571,8 @@ function guestJoinTeam(teamIdx){
 }
 
 // Générer un token d'invitation pour un tournoi
-function generateInviteToken(tournamentId){
+function generateInviteToken(el){
+  var tournamentId=typeof el==='string'?el:el.dataset.id;
   var chars='abcdefghijklmnopqrstuvwxyz0123456789';
   var token='';
   for(var i=0;i<12;i++) token+=chars[Math.floor(Math.random()*chars.length)];
