@@ -795,10 +795,7 @@ function doLogin(){
         updSB();
         if(CU&&CU.theme&&typeof applyTheme!=='undefined')applyTheme(CU.theme);
         addNavBadge('nav-for','badge-forum');addNavBadge('nav-form','badge-form');addNavBadge('nav-vote','badge-vote');addNavBadge('nav-grp','badge-grp');addNavBadge('nav-cal','badge-cal');addNavBadge('nav-home','badge-home');
-        var savedPage=null;
-        try{savedPage=localStorage.getItem('fs_page');}catch(e){}
-        var validPages=['home','mbr','unit','grp','vote','for','form','cal','rec','param','profil','stats','rank','planning','hier','rh'];
-        go(savedPage&&validPages.indexOf(savedPage)>=0?savedPage:'home');
+        go('home');
         startRealtime();
         initServiceWorker();
         setTimeout(subscribePush, 3000);
@@ -2390,7 +2387,6 @@ function goFor(){go('for');}
 function goCal(){go('cal');}
 function go(p){
   CP=p;
-  try{localStorage.setItem('fs_page',p);}catch(e){}
   try{sessionStorage.setItem('fs_cp',p);}catch(e){}
   document.querySelectorAll('.ni').forEach(function(n){n.classList.remove('active');});
   var el=document.querySelector('.ni[data-page="'+p+'"]');
