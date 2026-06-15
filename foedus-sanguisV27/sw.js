@@ -1,5 +1,5 @@
 // ── Foedus Sanguis — Service Worker ──────────────────────────
-const CACHE = 'foedus-v2';
+const CACHE = 'foedus-v6';
 const ASSETS = ['/', '/index.html', '/app.js', '/app.css', '/manifest.json'];
 
 // Installation — mise en cache des assets principaux
