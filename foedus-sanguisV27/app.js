@@ -6671,7 +6671,8 @@ function sbMemberToLocal(r){
     joinDate:r.joined_at||'', note:r.note||'', units:r.units||[], avatar:r.avatar||'',
     classe:r.classe||'', classes:r.classes||[],
     playerLevel:r.player_level||0, influenceLevel:r.influence_level||0,
-    sanctions:r.sanctions||[]
+    sanctions:r.sanctions||[],
+    isGuest:r.is_guest||false, guestTournamentId:r.guest_tournament_id||'', guestHouse:r.guest_house||''
   };
 }
 function localMemberToSb(m){
@@ -6683,7 +6684,8 @@ function localMemberToSb(m){
     note:m.note||m.message||'', units:m.units||[], avatar:m.avatar||'',
     classe:m.classe||'', classes:m.classes||[],
     player_level:m.playerLevel||0, influence_level:m.influenceLevel||0,
-    sanctions:m.sanctions||[]
+    sanctions:m.sanctions||[],
+    is_guest:m.isGuest||false, guest_tournament_id:m.guestTournamentId||'', guest_house:m.guestHouse||''
   };
 }
 function sbGroupToLocal(r){
