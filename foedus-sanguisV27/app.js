@@ -5835,6 +5835,7 @@ function enterScoreW(tid,roundNum,matchIdx){
       var lastRound=t.bracket[t.bracket.length-1];
       if(lastRound&&lastRound.matches.every(function(m){return m.winner;})){
         t.status='finished';
+        cleanupGuestAccounts(t.id);
       }
       sbSaveTournament(t).catch(function(e){console.warn(e);});
       CM();window._calDetail={type:'tournament',data:t};go('cal');
@@ -6318,6 +6319,32 @@ document.addEventListener('click', function(e){
       }
     });
   }
+  // ── Vérifier token invité dans l'URL ─────────────────────────
+  var _guestToken=(function(){
+    try{return new URLSearchParams(window.location.search).get('tourney');}catch(e){return null;}
+  })();
+
+  if(_guestToken){
+    // Charger les tournois pour trouver le tournoi lié
+    fetch(SB_URL+'/rest/v1/tournaments?invite_token=eq.'+encodeURIComponent(_guestToken)+'&select=*',{
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    }).then(function(r){return r.json();}).then(function(rows){
+      if(!rows||!rows.length){
+        document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#080a0c;color:#c9a227;font-family:Cinzel,serif;font-size:18px;text-align:center;padding:20px">Invalid or expired invitation link.</div>';
+        return;
+      }
+      var tour=rows[0];
+      if(tour.status==='completed'){
+        document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#080a0c;color:var(--tx3);font-family:Cinzel,serif;font-size:16px;text-align:center;padding:20px">This tournament has ended.<br><br>Thank you for participating!</div>';
+        return;
+      }
+      showGuestJoinPage(tour, _guestToken);
+    }).catch(function(){
+      document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#080a0c;color:var(--red3);font-family:Cinzel,serif;font-size:16px;text-align:center;padding:20px">Connection error. Please try again.</div>';
+    });
+    return;
+  }
+
   _initLoad();
   setInterval(function(){
     if(!CU) return;
@@ -6347,6 +6374,227 @@ document.addEventListener('click', function(e){
     if(res&&inp&&!res.contains(e.target)&&e.target!==inp) res.style.display='none';
   });
 });
+
+
+// ════════════════════════════════════════════════════════════════
+// SYSTÈME INVITÉS TOURNOI
+// ════════════════════════════════════════════════════════════════
+
+function showGuestJoinPage(tour, token){
+  document.getElementById('ls').style.display='none';
+  document.getElementById('app').style.display='none';
+
+  var div=document.createElement('div');
+  div.id='guest-page';
+  div.style.cssText='min-height:100vh;background:#080a0c;display:flex;align-items:center;justify-content:center;padding:20px;';
+  div.innerHTML='<div style="background:#0f1114;border:1px solid #c9a227;border-radius:8px;padding:32px 28px;max-width:420px;width:100%;text-align:center">'
+    +'<img src="/icon-192.png" style="width:64px;height:64px;object-fit:contain;margin-bottom:12px">'
+    +'<div style="font-family:Cinzel,serif;font-size:20px;font-weight:700;color:#c9a227;margin-bottom:4px">FOEDUS SANGUIS</div>'
+    +'<div style="font-size:12px;color:#888;margin-bottom:20px">Tournament Guest Access</div>'
+    +'<div style="background:rgba(201,162,39,.08);border:1px solid rgba(201,162,39,.3);border-radius:4px;padding:12px;margin-bottom:20px">'
+    +'<div style="font-size:11px;color:#888;margin-bottom:4px">You are invited to</div>'
+    +'<div style="font-size:16px;font-weight:700;color:#fff;font-family:Cinzel,serif">🏆 '+esc(tour.title)+'</div>'
+    +'<div style="font-size:11px;color:#888;margin-top:4px">'+esc(tour.date)+(tour.time?' at '+esc(tour.time):'')+'</div>'
+    +'</div>'
+    +'<div style="text-align:left;margin-bottom:12px">'
+    +'<label style="font-size:11px;color:#888;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Your in-game name</label>'
+    +'<input id="g-username" class="fi" placeholder="Your pseudo in game" style="margin-bottom:10px">'
+    +'<label style="font-size:11px;color:#888;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px">Your house / guild name</label>'
+    +'<input id="g-house" class="fi" placeholder="Your house or guild">'
+    +'</div>'
+    +'<div id="g-err" style="color:#e57373;font-size:12px;margin-bottom:8px;display:none"></div>'
+    +'<button onclick="doGuestJoinBtn(this)" data-tid="'+tour.id+'" data-token="'+token+'" style="width:100%;background:#c9a227;border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:14px;padding:13px;border-radius:3px;cursor:pointer;letter-spacing:1px">⚔️ Join as Guest</button>'
+    +'<div style="font-size:10px;color:#555;margin-top:12px">Guest access is limited to this tournament only.</div>'
+    +'</div>';
+  document.body.appendChild(div);
+}
+
+function copyGuestLink(btn){
+  navigator.clipboard.writeText(btn.dataset.link).then(function(){alert('Copied!');}).catch(function(){alert(btn.dataset.link);});
+}
+function doGuestJoinBtn(btn){
+  doGuestJoin(btn.dataset.tid, btn.dataset.token);
+}
+function doGuestJoin(tournamentId, token){
+  var username=(document.getElementById('g-username').value||'').trim();
+  var house=(document.getElementById('g-house').value||'').trim();
+  var errEl=document.getElementById('g-err');
+  if(!username){errEl.textContent='Please enter your in-game name.';errEl.style.display='block';return;}
+  if(!house){errEl.textContent='Please enter your house/guild name.';errEl.style.display='block';return;}
+  errEl.style.display='none';
+
+  // Créer le compte invité
+  var guestId='g'+Date.now();
+  var guestMember={
+    id:guestId, username:username, pin:null,
+    role:'recrue', status:'actif',
+    sanguin:false, chef_groupe:false, grand_champion:false,
+    joined_at:new Date().toISOString().split('T')[0],
+    note:'Guest — '+house, units:[], avatar:'', classe:'', classes:[],
+    player_level:0, influence_level:0, sanctions:[],
+    is_guest:true, guest_tournament_id:tournamentId, guest_house:house
+  };
+
+  fetch(SB_URL+'/rest/v1/membres',{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},
+    body:JSON.stringify([localMemberToSb(guestMember)])
+  }).then(function(r){return r.json();}).then(function(rows){
+    if(!rows||!rows[0]){errEl.textContent='Error creating account. Please try again.';errEl.style.display='block';return;}
+    guestMember.id=rows[0].id||guestId;
+    CU=guestMember;
+    // Charger les données du tournoi
+    fetch(SB_URL+'/rest/v1/tournaments?id=eq.'+encodeURIComponent(tournamentId)+'&select=*',{
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    }).then(function(r){return r.json();}).then(function(trows){
+      var tour=trows&&trows[0]?sbTournamentToLocal(trows[0]):null;
+      if(!tour){errEl.textContent='Tournament not found.';errEl.style.display='block';return;}
+      DB.tournaments=[tour];
+      var gd=document.getElementById('guest-page');
+      if(gd) gd.remove();
+      showGuestTournamentPage(tour);
+    });
+  }).catch(function(){errEl.textContent='Connection error. Please try again.';errEl.style.display='block';});
+}
+
+function showGuestTournamentPage(tour){
+  document.getElementById('ls').style.display='none';
+  document.getElementById('app').style.display='none';
+
+  var div=document.createElement('div');
+  div.id='guest-tournament-page';
+  div.style.cssText='min-height:100vh;background:#080a0c;padding:20px;font-family:Spectral,serif;';
+
+  var statusColor=tour.status==='open'?'#66bb6a':tour.status==='ongoing'?'#f9a825':'#888';
+  var statusLabel=tour.status==='open'?'Registration Open':tour.status==='ongoing'?'Ongoing':'Completed';
+  var myReg=(tour.participants||[]).find(function(p){return p.memberId===CU.id;});
+  var teams=tour.teams||[];
+
+  var teamsHTML='';
+  if(teams.length){
+    teamsHTML='<div style="margin-top:20px">'
+      +'<div style="font-family:Cinzel,serif;font-size:11px;font-weight:700;color:#888;letter-spacing:2px;margin-bottom:12px">TEAMS</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">'
+      +teams.map(function(team,ti){
+        var members=team.members||[];
+        var isFull=members.length>=(tour.teamSize||2);
+        var isMine=members.some(function(m){return m.id===CU.id;});
+        return '<div style="background:#0f1114;border:1px solid '+(isMine?'#c9a227':'#222')+';border-radius:4px;padding:12px">'
+          +'<div style="font-size:12px;font-weight:700;color:#c9a227;margin-bottom:8px">Team '+(ti+1)+'</div>'
+          +'<div style="font-size:11px;color:#aaa;margin-bottom:8px">'+members.map(function(m){
+            return '<div>'+esc(m.name||m.username||'?')+(m.house?' <span style="color:#555;font-size:10px">('+esc(m.house)+')</span>':'')+'</div>';
+          }).join('')+(members.length===0?'<div style="color:#444">No members yet</div>':'')+'</div>'
+          +(!isFull&&!isMine&&tour.status==='open'?'<button onclick="guestJoinTeam('+ti+')" style="width:100%;background:#c9a227;border:none;color:#000;font-size:11px;font-weight:700;padding:6px;border-radius:3px;cursor:pointer;font-family:Cinzel,serif">Join this team</button>':'')
+          +(isMine?'<div style="font-size:10px;color:#66bb6a;text-align:center">✅ Your team</div>':'')
+          +(isFull&&!isMine?'<div style="font-size:10px;color:#555;text-align:center">Full</div>':'')
+          +'</div>';
+      }).join('')
+      +'</div></div>';
+  }
+
+  div.innerHTML='<div style="max-width:600px;margin:0 auto">'
+    +'<div style="text-align:center;margin-bottom:20px">'
+    +'<img src="/icon-192.png" style="width:48px;height:48px;object-fit:contain">'
+    +'<div style="font-family:Cinzel,serif;font-size:13px;color:#c9a227;margin-top:4px">FOEDUS SANGUIS</div>'
+    +'</div>'
+    +'<div style="background:#0f1114;border:1px solid #222;border-radius:6px;padding:20px;margin-bottom:16px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
+    +'<div style="font-family:Cinzel,serif;font-size:18px;font-weight:700;color:#fff">🏆 '+esc(tour.title)+'</div>'
+    +'<span style="font-size:11px;font-weight:700;color:'+statusColor+'">'+statusLabel+'</span>'
+    +'</div>'
+    +(tour.description?'<div style="font-size:13px;color:#aaa;margin-bottom:12px">'+esc(tour.description)+'</div>':'')
+    +'<div style="display:flex;gap:16px;font-size:11px;color:#666;flex-wrap:wrap">'
+    +'<span>📅 '+esc(tour.date)+(tour.time?' at '+esc(tour.time):'')+'</span>'
+    +'<span>🎮 '+(tour.type==='1v1'?'Individual (1v1)':'Teams ('+(tour.teamSize||2)+'v'+(tour.teamSize||2)+')')+'</span>'
+    +'<span>👥 '+(tour.participants||[]).length+'/'+(tour.maxParticipants||16)+' registered</span>'
+    +'</div>'
+    +'</div>'
+    +'<div style="background:#0f1114;border:1px solid #222;border-radius:4px;padding:12px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">'
+    +'<div style="font-size:12px;color:#aaa">Logged in as <strong style="color:#fff">'+esc(CU.username)+'</strong> <span style="color:#555">('+esc(CU.guestHouse)+')</span></div>'
+    +'<span style="font-size:10px;background:rgba(201,162,39,.15);color:#c9a227;padding:2px 8px;border-radius:10px;border:1px solid rgba(201,162,39,.3)">🎟️ Guest</span>'
+    +'</div>'
+    +(!myReg&&tour.status==='open'?'<button onclick="guestRegisterTournament()" style="width:100%;background:#c9a227;border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:14px;padding:13px;border-radius:3px;cursor:pointer;letter-spacing:1px;margin-bottom:16px">⚔️ Register for this tournament</button>':'')
+    +(myReg?'<div style="background:rgba(102,187,106,.1);border:1px solid #66bb6a;border-radius:4px;padding:10px;text-align:center;color:#66bb6a;font-size:13px;margin-bottom:16px">✅ You are registered!</div>':'')
+    +teamsHTML
+    +'<div id="g-tour-msg" style="color:#e57373;font-size:12px;margin-top:12px;text-align:center"></div>'
+    +'</div>';
+
+  document.body.appendChild(div);
+  window._guestTour=tour;
+}
+
+function guestRegisterTournament(){
+  var tour=window._guestTour;if(!tour)return;
+  tour.participants=tour.participants||[];
+  if(tour.participants.find(function(p){return p.memberId===CU.id;})) return;
+  tour.participants.push({memberId:CU.id,name:CU.username,house:CU.guestHouse,registeredAt:new Date().toISOString()});
+  fetch(SB_URL+'/rest/v1/tournaments?id=eq.'+encodeURIComponent(tour.id),{
+    method:'PATCH',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+    body:JSON.stringify({participants:tour.participants})
+  }).then(function(){
+    var p=document.getElementById('guest-tournament-page');
+    if(p)p.remove();
+    showGuestTournamentPage(tour);
+  }).catch(function(){
+    var m=document.getElementById('g-tour-msg');
+    if(m)m.textContent='Error. Please try again.';
+  });
+}
+
+function guestJoinTeam(teamIdx){
+  var tour=window._guestTour;if(!tour)return;
+  var teams=tour.teams||[];
+  if(!teams[teamIdx])return;
+  // Retirer de l'équipe précédente
+  teams.forEach(function(t){t.members=(t.members||[]).filter(function(m){return m.id!==CU.id;});});
+  teams[teamIdx].members=teams[teamIdx].members||[];
+  teams[teamIdx].members.push({id:CU.id,name:CU.username,house:CU.guestHouse});
+  // S'inscrire aussi comme participant si pas déjà fait
+  tour.participants=tour.participants||[];
+  if(!tour.participants.find(function(p){return p.memberId===CU.id;})){
+    tour.participants.push({memberId:CU.id,name:CU.username,house:CU.guestHouse,registeredAt:new Date().toISOString()});
+  }
+  fetch(SB_URL+'/rest/v1/tournaments?id=eq.'+encodeURIComponent(tour.id),{
+    method:'PATCH',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+    body:JSON.stringify({teams:teams,participants:tour.participants})
+  }).then(function(){
+    var p=document.getElementById('guest-tournament-page');
+    if(p)p.remove();
+    showGuestTournamentPage(tour);
+  }).catch(function(){
+    var m=document.getElementById('g-tour-msg');
+    if(m)m.textContent='Error. Please try again.';
+  });
+}
+
+// Générer un token d'invitation pour un tournoi
+function generateInviteToken(tournamentId){
+  var chars='abcdefghijklmnopqrstuvwxyz0123456789';
+  var token='';
+  for(var i=0;i<12;i++) token+=chars[Math.floor(Math.random()*chars.length)];
+  var t=DB.tournaments.find(function(x){return x.id===tournamentId;});
+  if(!t)return;
+  t.inviteToken=token;
+  sbSaveTournament(t).then(function(){
+    var link=window.location.origin+'/?tourney='+token;
+    OM('🔗 Invitation Link',
+      '<div style="margin-bottom:12px;font-size:13px;color:var(--tx2)">Share this link with your guests. It gives access only to this tournament.</div>'
+      +'<div style="background:var(--bg1);border:1px solid var(--golddim);border-radius:4px;padding:10px 12px;font-size:12px;word-break:break-all;color:var(--gold);font-family:monospace">'+link+'</div>'
+      +'<button onclick="copyGuestLink(this)" data-link="'+link+'" style="margin-top:10px;width:100%;background:var(--gold);border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:13px;padding:10px;border-radius:3px;cursor:pointer">📋 Copy link</button>',
+      [{lbl:'Close',cls:'bol',fn:CM}]
+    );
+  }).catch(function(e){alert('Error generating link.');console.warn(e);});
+}
+
+// Nettoyage invités quand tournoi terminé
+function cleanupGuestAccounts(tournamentId){
+  fetch(SB_URL+'/rest/v1/membres?is_guest=eq.true&guest_tournament_id=eq.'+encodeURIComponent(tournamentId),{
+    method:'DELETE',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'return=minimal'}
+  }).catch(function(e){console.warn('[cleanup guests]',e);});
+}
 
 document.getElementById('lp').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
 document.getElementById('lu').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
