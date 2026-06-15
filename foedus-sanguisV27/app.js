@@ -358,6 +358,8 @@ function sbLoad(){
     DB.minMastery  = settings.min_mastery||DB.minMastery||1;
     DB.activeWarId = settings.active_war_id||null;
     DB.members        = membres.filter(function(m){return m.status!=='attente';}).map(sbMemberToLocal);
+    // Séparer les invités du reste
+    DB.guestMembers   = DB.members.filter(function(m){return m.isGuest;});
     DB.pendingMembers = membres.filter(function(m){return m.status==='attente';}).map(sbMemberToLocal);
     DB.groups         = groupes.map(sbGroupToLocal);
     DB.voteWars       = voteWars.map(sbWarToLocal);
@@ -1515,7 +1517,7 @@ function pgHierarchy(){
 }
 
 function memberDropdown(selectedId){
-  var opts=DB.members.filter(function(m){return m.status!=='attente';})
+  var opts=DB.members.filter(function(m){return m.status!=='attente'&&!m.isGuest;})
     .sort(function(a,b){return a.username.localeCompare(b.username);})
     .map(function(m){return'<option value="'+esc(m.id)+'"'+(m.id===selectedId?' selected':'')+'>'+esc(m.username)+'</option>';}).join('');
   return'<select class="fs" id="hier-mb"><option value="">— Choisir un membre —</option>'+opts+'</select>';
@@ -1798,7 +1800,7 @@ function pgRH(){
     + '<button class="btn bol bsm" onclick="openRHRulesW()" style="margin-right:4px">📖 Règles</button>'
     + (HR('admin') ? '<button class="btn bol bsm" onclick="openRHUsersW()">👥 Accès RH</button>' : '');
 
-  var members = DB.members.filter(function(m){return m.status!=='attente';})
+  var members = DB.members.filter(function(m){return m.status!=='attente'&&!m.isGuest;})
     .sort(function(a,b){return a.username.localeCompare(b.username);});
   var wars = (DB.voteWars||[]).filter(function(w){return w.status==='closed';})
     .sort(function(a,b){return b.date.localeCompare(a.date);}).slice(0,10);
@@ -2554,7 +2556,7 @@ function pgHome(){
       +'</div></div>';
   }).join('');
 
-  var actifs=DB.members.filter(function(m){return m.status==='actif';}).length;
+  var actifs=DB.members.filter(function(m){return m.status==='actif'&&!m.isGuest;}).length;
   var gardes=DB.members.filter(function(m){return m.sanguin;}).length;
   var onlineCount=(DB.presence||[]).filter(function(p){
     return p.last_seen && (Date.now()-new Date(p.last_seen).getTime()) < 2*60*1000;
