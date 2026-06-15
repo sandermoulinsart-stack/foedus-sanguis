@@ -5393,7 +5393,16 @@ function renderTournamentDetail(t){
         +((t.participants||[]).length===0?'<div class="td tsm" style="padding:8px 16px">Aucun inscrit.</div>':'')
         +(t.participants||[]).map(function(p,i){
           var mb=DB.members.find(function(m){return m.id===p.memberId;});
-          return'<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--b1)">'            +'<div style="font-size:12px;font-weight:700;color:var(--gold);min-width:24px">'+(i+1)+'</div>'            +(mb?avaHTML(mb,28):'<div style="width:28px;height:28px;border-radius:50%;background:var(--bg3)"></div>')            +'<div style="flex:1;font-size:13px;font-weight:600">'+(mb?esc(mb.username):esc(p.name||'Inconnu'))+'</div>'            +(canManage?'<button class="btn bred bsm" style="font-size:9px" data-tid="'+t.id+'" data-mid="'+p.memberId+'" onclick="removeParticipantW(this.dataset.tid,this.dataset.mid)">✕</button>':'')            +'</div>';
+          var isGuest=!mb&&p.house;
+          return'<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--b1)">'
+            +'<div style="font-size:12px;font-weight:700;color:var(--gold);min-width:24px">'+(i+1)+'</div>'
+            +(mb?avaHTML(mb,28):'<div style="width:28px;height:28px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--tx3)">'+(p.name||'?')[0].toUpperCase()+'</div>')
+            +'<div style="flex:1">'
+            +'<div style="font-size:13px;font-weight:600">'+(mb?esc(mb.username):esc(p.name||'Inconnu'))+(isGuest?'<span style="font-size:10px;background:rgba(201,162,39,.15);color:var(--gold);padding:1px 6px;border-radius:10px;border:1px solid rgba(201,162,39,.3);margin-left:6px">🎟️ Guest</span>':'')+'</div>'
+            +(isGuest?'<div style="font-size:11px;color:var(--tx3)">'+esc(p.house)+'</div>':'')
+            +'</div>'
+            +(canManage?'<button class="btn bred bsm" style="font-size:9px" data-tid="'+t.id+'" data-mid="'+p.memberId+'" onclick="removeParticipantW(this.dataset.tid,this.dataset.mid)">✕</button>':'')
+            +'</div>';
         }).join('')
         +'</div></div>';
     }
