@@ -1920,12 +1920,15 @@ function openRHMemberW(id){
 
   var sanctionsList = sanctions.length
     ? sanctions.map(function(s,i){
-        return '<div style="background:var(--bg1);border-radius:3px;padding:8px 12px;margin-bottom:6px;display:flex;align-items:center;gap:8px">'
-          +'<span style="font-size:18px">'+esc(s.type)+'</span>'
-          +'<div style="flex:1"><div style="font-size:12px;font-weight:700">'+esc(s.type)+'</div>'
-          +'<div style="font-size:11px;color:var(--tx3)">'+esc(s.note)+'</div>'
-          +'<div style="font-size:10px;color:var(--tx3)">par '+esc(s.by||'—')+' · '+esc(s.date||'')+'</div></div>'
-          +'<button class="btn bol bsm" style="font-size:9px" onclick="resolveRHSanction(\''+id+'\','+i+')">✅</button>'
+        var resolved=s.type&&s.type.indexOf('✅')>=0;
+        var color=resolved?'var(--tx3)':s.type.indexOf('3ème')>=0?'var(--red3)':s.type.indexOf('2ème')>=0?'#f9a825':'var(--gold)';
+        return '<div style="background:var(--bg1);border-radius:3px;padding:8px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;border-left:3px solid '+color+';opacity:'+(resolved?'0.5':'1')+'">'  
+          +'<div style="flex:1">'
+          +'<div style="font-size:12px;font-weight:700;color:'+color+'">'+esc(s.type)+'</div>'
+          +'<div style="font-size:11px;color:var(--tx2);margin-top:2px">'+esc(s.note)+'</div>'
+          +'<div style="font-size:10px;color:var(--tx3);margin-top:2px">par '+esc(s.by||'—')+' · '+esc(s.date||'')+'</div>'
+          +'</div>'
+          +(resolved?'':'<button class="btn bol bsm" style="font-size:9px" onclick="resolveRHSanction(\''+id+'\','+i+')">✅ Résoudre</button>')
           +'</div>';
       }).join('')
     : '<div style="color:var(--tx3);font-size:12px">Aucune sanction active.</div>';
