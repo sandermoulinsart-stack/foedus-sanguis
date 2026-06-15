@@ -421,7 +421,17 @@ function sbSaveMember(m) {
   return SB.from('membres').upsert(data);
 }
 function sbDeleteMember(id) {
-  return SB.from('membres').delete('id', id);
+  return fetch('/.netlify/functions/delete-membre', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-foedus-key': FOEDUS_PUSH_SECRET
+    },
+    body: JSON.stringify({ callerId: CU.id, targetId: id })
+  }).then(function(r) {
+    if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Erreur serveur'); });
+    return r.json();
+  });
 }
 function sbSaveGroup(g) {
   return SB.from('groupes').upsert(localGroupToSb(g));
