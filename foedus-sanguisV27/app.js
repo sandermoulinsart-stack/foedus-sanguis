@@ -457,12 +457,7 @@ function sbSaveBanner(b) {
 function sbDeleteBanner(id) {
   return SB.from('banners').delete('id', id);
 }
-function sbSaveSettings() {
-  return SB.from('house_settings').upsert({
-    id:'main', house_name:DB.houseName,
-    min_mastery:DB.minMastery, active_war_id:DB.activeWarId||null
-  });
-}
+
 
 
 
@@ -1742,13 +1737,11 @@ function isRH(){
 }
 
 function saveRHData(){
-  SB.from('house_settings').upsert({key:'rh_data', value:DB.rhData})
-    .catch(function(e){console.warn('[RH]',e);});
+  sbSaveSettings('rh_data', DB.rhData);
 }
 
 function saveRHUsers(){
-  SB.from('house_settings').upsert({key:'rh_users', value:DB.rhUsers})
-    .catch(function(e){console.warn('[RH users]',e);});
+  sbSaveSettings('rh_users', DB.rhUsers);
 }
 
 function getRHMemberData(id){
@@ -2832,7 +2825,7 @@ function validateHill(){
   DB.hillHistory=DB.hillHistory||[];
   DB.hillHistory.unshift({kingName:DB.hillKing.kingName,message:msg,date:new Date().toISOString()});
   if(DB.hillHistory.length>50) DB.hillHistory=DB.hillHistory.slice(0,50);
-  SB.from('house_settings').upsert({key:'hill_history',value:DB.hillHistory}).catch(function(){});
+  sbSaveSettings('hill_history', DB.hillHistory);
   var w=document.getElementById('hill-widget');
   if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
 }
@@ -2888,7 +2881,7 @@ function openHillHistoryW(){
     btns.unshift({lbl:'🗑️ Effacer les logs',cls:'btn bred',fn:function(){
       if(!confirm('Effacer tout l\'historique des rois ?')) return;
       DB.hillHistory=[];
-      SB.from('house_settings').upsert({key:'hill_history',value:[]}).catch(function(){});
+      sbSaveSettings('hill_history', []);
       CM();
     }});
   }
@@ -2945,12 +2938,10 @@ function setHillBg(input){
     URL.revokeObjectURL(url);
     DB.hillBg=b64;
     // Sauvegarder dans une clé séparée pour ne pas mélanger avec l'état du roi
-    SB.from('house_settings').upsert({key:'hill_bg',value:b64})
-      .then(function(){
+    sbSaveSettings('hill_bg', b64).then(function(){
         var w=document.getElementById('hill-widget');
         if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
-      })
-      .catch(function(e){console.warn('[hillBg]',e);alert('Image trop lourde, essayez une image plus petite.');});
+      }).catch(function(e){console.warn('[hillBg]',e);alert('Image trop lourde, essayez une image plus petite.');});
   };
   img.src=url;
 }
@@ -2966,8 +2957,7 @@ function saveHillKing(){
     prevKingName:DB.hillKing.prevKingName||'',
     prevMessage:DB.hillKing.prevMessage||''
   };
-  SB.from('house_settings').upsert({key:'hill_king',value:data})
-    .catch(function(e){console.warn('[hillKing]',e);});
+  sbSaveSettings('hill_king', data);
 }
 
 function openBannerMgr(){OM('Bannières',bannerMgrHTML(),[{lbl:'Fermer',cls:'bol',fn:CM}]);}
@@ -3476,8 +3466,7 @@ function delMbr(id){
 // ── Gestion unités META ──────────────────────────────────────
 function saveMetaUnits(){
   var existing=(DB.metaUnits||[]);
-  SB.from('house_settings').upsert({key:'meta_units',value:existing})
-    .catch(function(e){console.warn('[meta]',e);});
+  sbSaveSettings('meta_units', existing);
 }
 
 function toggleMetaUnit(name){
