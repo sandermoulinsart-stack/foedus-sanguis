@@ -5393,8 +5393,8 @@ function renderTournamentDetail(t){
         +((t.participants||[]).length===0?'<div class="td tsm" style="padding:8px 16px">Aucun inscrit.</div>':'')
         +(t.participants||[]).map(function(p,i){
           var mb=DB.members.find(function(m){return m.id===p.memberId;});
-          var guestMb=!mb&&DB.members.find(function(x){return x.id===p.memberId&&x.isGuest;});
-          var isGuest=(!mb&&p.house)||(guestMb);
+          var guestMb=DB.members.find(function(x){return x.id===p.memberId&&x.isGuest;});
+          var isGuest=!!(p.house||guestMb);
           var guestHouse=p.house||(guestMb&&guestMb.guestHouse)||'';
           return'<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--b1)">'
             +'<div style="font-size:12px;font-weight:700;color:var(--gold);min-width:24px">'+(i+1)+'</div>'
