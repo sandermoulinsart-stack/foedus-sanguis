@@ -1921,17 +1921,24 @@ function openRHMemberW(id){
   var sanctionsList = sanctions.length
     ? sanctions.map(function(s,i){
         var resolved=s.type&&s.type.indexOf('✅')>=0;
-        var color=resolved?'var(--tx3)':s.type.indexOf('3ème')>=0?'var(--red3)':s.type.indexOf('2ème')>=0?'#f9a825':'var(--gold)';
-        return '<div style="background:var(--bg1);border-radius:3px;padding:8px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;border-left:3px solid '+color+';opacity:'+(resolved?'0.5':'1')+'">'  
-          +'<div style="flex:1">'
-          +'<div style="font-size:12px;font-weight:700;color:'+color+'">'+esc(s.type)+'</div>'
-          +'<div style="font-size:11px;color:var(--tx2);margin-top:2px">'+esc(s.note)+'</div>'
-          +'<div style="font-size:10px;color:var(--tx3);margin-top:2px">par '+esc(s.by||'—')+' · '+esc(s.date||'')+'</div>'
-          +'</div>'
-          +(resolved?'':'<button class="btn bol bsm" style="font-size:9px" onclick="resolveRHSanction(\''+id+'\','+i+')">✅ Résoudre</button>')
+        var typeClean=resolved?s.type.replace('✅ ',''):s.type;
+        var color=resolved?'var(--tx3)':typeClean.indexOf('3ème')>=0?'var(--red3)':typeClean.indexOf('2ème')>=0?'#f9a825':'var(--gold)';
+        var canDelete=isRH()||HR('admin');
+        return '<div style="background:var(--bg1);border-radius:3px;padding:8px 12px;margin-bottom:6px;border-left:3px solid '+color+';opacity:'+(resolved?'0.6':'1')+'">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+          +'<span style="font-size:12px;font-weight:700;color:'+color+'">'
+          +(resolved?'✅ ':'')+esc(typeClean)
+          +(resolved?' <span style="font-size:10px;color:var(--tx3);font-weight:400">(résolue)</span>':'')
+          +'</span>'
+          +'<div style="display:flex;gap:4px">'
+          +(!resolved?'<button class="btn bol bsm" style="font-size:9px" onclick="resolveRHSanction(\''+id+'\','+i+')">✅</button>':'')
+          +(canDelete?'<button class="btn bred bsm" style="font-size:9px" onclick="deleteRHSanction(\''+id+'\','+i+')">🗑️</button>':'')
+          +'</div></div>'
+          +'<div style="font-size:11px;color:var(--tx2)">'+esc(s.note)+'</div>'
+          +'<div style="font-size:10px;color:var(--tx3);margin-top:3px">par '+esc(s.by||'—')+' · '+esc(s.date||'')+'</div>'
           +'</div>';
       }).join('')
-    : '<div style="color:var(--tx3);font-size:12px">Aucune sanction active.</div>';
+    : '<div style="color:var(--tx3);font-size:12px">Aucune sanction.</div>';
 
   var html = '<div style="margin-bottom:14px">'
     +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">SANCTIONS</div>'
@@ -1973,6 +1980,16 @@ function addRHSanction(id, type){
     CM();
     openRHMemberW(id);
   }).catch(function(e){console.warn('[RH sanction]',e);});
+}
+
+function deleteRHSanction(id, idx){
+  if(!confirm('Supprimer définitivement cette sanction de l\'historique ?')) return;
+  var m=DB.members.find(function(x){return x.id===id;});if(!m)return;
+  m.sanctions.splice(idx,1);
+  sbSaveMember(m).then(function(){
+    CM();
+    openRHMemberW(id);
+  }).catch(function(e){console.warn('[RH delete sanction]',e);});
 }
 
 function resolveRHSanction(id, idx){
