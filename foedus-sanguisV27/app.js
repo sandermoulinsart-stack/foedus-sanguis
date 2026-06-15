@@ -433,6 +433,16 @@ function sbDeleteMember(id) {
     return r.json();
   });
 }
+function sbSaveSettings(key, value){
+  return fetch('/.netlify/functions/update-settings', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','x-foedus-key':FOEDUS_PUSH_SECRET},
+    body: JSON.stringify({callerId:CU?CU.id:'', key:key, value:value})
+  }).then(function(r){
+    if(!r.ok) return r.json().then(function(e){console.warn('[update-settings]',e.error);});
+    return r.json();
+  }).catch(function(e){console.warn('[update-settings]',e);});
+}
 function sbSaveGroup(g) {
   return SB.from('groupes').upsert(localGroupToSb(g));
 }
@@ -654,7 +664,7 @@ function getImgUrl(inputId, maxW, maxH) {
 
 // ── sDB: sauvegarde Supabase ──────────────────────────────────
 function sDB(){
-  if(SB_READY) sbSaveSettings().catch(function(e){console.warn('[sDB]',e);});
+  if(SB_READY) sbSaveSettings('main', {house_name:DB.houseName, min_mastery:DB.minMastery, active_war_id:DB.activeWarId||null}).catch(function(e){console.warn('[sDB]',e);});
 }
 
 var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[]}, CU=null, CP='home';
