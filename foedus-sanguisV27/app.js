@@ -3421,9 +3421,21 @@ function editMbr(id){
         var idx=DB.members.findIndex(function(x){return x.id===m.id;});
         if(idx>=0)DB.members[idx]=m;
         CM();go('mbr');
-        sbSaveMember(m).catch(function(e){console.warn('[editMbr]',e);});
+        // Si le rôle a changé — passer par la Netlify Function sécurisée
         if(m.role !== oldRole){
-          sbAuditLog('role_change', m.id, m.username, (RN[oldRole]||oldRole)+' → '+(RN[m.role]||m.role));
+          fetch('/.netlify/functions/update-role', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json','x-foedus-key':FOEDUS_PUSH_SECRET},
+            body: JSON.stringify({callerId:CU.id, targetId:m.id, newRole:m.role})
+          }).then(function(r){
+            if(!r.ok) return r.json().then(function(e){console.warn('[update-role]',e.error);});
+            sbAuditLog('role_change', m.id, m.username, (RN[oldRole]||oldRole)+' → '+(RN[m.role]||m.role));
+          }).catch(function(e){console.warn('[update-role]',e);});
+          // Sauvegarder le reste sans le rôle (géré par update-role)
+          var mCopy = Object.assign({}, m, {role: oldRole});
+          sbSaveMember(mCopy).catch(function(e){console.warn('[editMbr]',e);});
+        } else {
+          sbSaveMember(m).catch(function(e){console.warn('[editMbr]',e);});
         }
       }
       if(np){sha256(np).then(function(h){m.pin=h;save();});}else save();
