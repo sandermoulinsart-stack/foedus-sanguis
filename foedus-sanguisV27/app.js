@@ -183,7 +183,8 @@ function localTournamentToSb(t){
     status:t.status||'open',
     participants:t.participants||[],
     bracket:t.bracket||[],
-    created_by:t.createdBy||'', featured:t.featured||false
+    created_by:t.createdBy||'', featured:t.featured||false,
+    invite_token:t.inviteToken||'', winner:t.winner||''
   };
 }
 function sbSaveTournament(t){ return SB.from('tournaments').upsert(localTournamentToSb(t)); }
