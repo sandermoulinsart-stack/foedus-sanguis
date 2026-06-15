@@ -341,7 +341,9 @@ function sbLoad(){
     SB.from('presence').get().catch(function(e){console.warn('[SB] presence:',e);return[];}),
     SB.from('house_settings').get().catch(function(e){console.warn('[SB] settings:',e);return[];})
   ]).then(function(res){
-    var settings=res[0][0]||{};
+    var settingsRaw=res[0]||[];
+    var settingsRow=settingsRaw.find(function(r){return r.key==='main';});
+    var settings=settingsRow?(settingsRow.value||{}):(res[0][0]||{});
     var membres=res[1]||[];
     var groupes=res[2]||[];
     var voteWars=res[3]||[];
