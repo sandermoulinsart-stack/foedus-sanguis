@@ -4255,6 +4255,442 @@ function openNewGrp(){
 
 
 
+
+// ════════════════════════════════════════════════════════════════
+// CONSTRUCTEUR DE GROUPES
+// ════════════════════════════════════════════════════════════════
+
+var UNIT_META = {
+  // Prio 1
+  'Berserkers':{'cat':'Pusher','prio':1},
+  'Chevaliers de la maison de York':{'cat':'Cavalerie','prio':1},
+  'Claymores':{'cat':'Pusher','prio':1},
+  'Éclaireurs de Liao':{'cat':'Cavalerie','prio':1},
+  'Élus de Sparte':{'cat':'Bouclier','prio':1},
+  'Equipe de Lionroar':{'cat':'Exotique','prio':1},
+  'Fauchefers':{'cat':'Pusher','prio':1},
+  'Fidèles Symmachéens':{'cat':'Bouclier','prio':1},
+  'Gardes au modao':{'cat':'Anti-cav','prio':1},
+  'Grenadiers de Shenji':{'cat':'Exotique','prio':1},
+  'Lanciers impériaux':{'cat':'Bouclier','prio':1},
+  'Milice Zykalienne':{'cat':'Exotique','prio':1},
+  'Mirmillons':{'cat':'Bouclier','prio':1},
+  'Phalange solaire':{'cat':'Anti-cav','prio':1},
+  'Piquiers impériaux':{'cat':'Anti-cav','prio':1},
+  'Siphonaros':{'cat':'Exotique','prio':1},
+  // Prio 2
+  'Arbalétriers avant-garde':{'cat':'Ranged','prio':2},
+  'Hallebardiers':{'cat':'Anti-cav','prio':2},
+  'Hwarang':{'cat':'Ranged','prio':2},
+  'Lanciers avec esponton':{'cat':'Cavalerie','prio':2},
+  'Maîtres de la chu ko nu':{'cat':'Ranged','prio':2},
+  'Paladins Symmachéens':{'cat':'Pusher','prio':2},
+  'Piquiers vipères':{'cat':'Pusher','prio':2},
+  'Prévôts lanciers':{'cat':'Bouclier','prio':2},
+  'Skjaldmös':{'cat':'Pusher','prio':2},
+  'Zélote':{'cat':'Pusher','prio':2},
+  // Prio 3
+  'Archers gallos aguerris':{'cat':'Ranged','prio':3},
+  'Archers tête-de-fer':{'cat':'Ranged','prio':3},
+  'Archers vipères':{'cat':'Ranged','prio':3},
+  'Arquebusiers tête-de-fer':{'cat':'Ranged','prio':3},
+  'Chevaucheurs':{'cat':'Cavalerie','prio':3},
+  'Condottières':{'cat':'Pusher','prio':3},
+  'Coutiliers':{'cat':'Cavalerie','prio':3},
+  'Éclaireurs tête-de-fer':{'cat':'Cavalerie','prio':3},
+  'Écuyers':{'cat':'Utilitaire','prio':3},
+  'Épéistes tête-de-fer':{'cat':'Pusher','prio':3},
+  'Fantassins à rondache':{'cat':'Pusher','prio':3},
+  'Martellatori':{'cat':'Pusher','prio':3},
+  'Piquiers du Wuxing':{'cat':'Anti-cav','prio':3},
+  'Pistoleros Reitar':{'cat':'Cavalerie','prio':3},
+  'Prévôts Marteleurs':{'cat':'Pusher','prio':3},
+  'Pyro-archers':{'cat':'Ranged','prio':3},
+};
+
+// Unités prioritaires par objectif
+var OBJ_UNITS = {
+  ville: {
+    porte:   ['Equipe de Lionroar','Siphonaros','Berserkers','Claymores','Fauchefers','Piquiers vipères'],
+    muraille:['Grenadiers de Shenji','Fidèles Symmachéens','Lanciers impériaux','Mirmillons','Élus de Sparte','Phalange solaire'],
+    breche:  ['Fauchefers','Gardes au modao','Phalange solaire','Piquiers impériaux','Berserkers','Milice Zykalienne'],
+  },
+  village: {
+    cavalerie:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs','Coutiliers','Pistoleros Reitar','Éclaireurs tête-de-fer'],
+  }
+};
+
+function memberUnitScore(m, priorityUnits){
+  var units=(m.units||[]).map(function(u){return u.name;});
+  var score=0;
+  priorityUnits.forEach(function(pu,i){
+    if(units.indexOf(pu)>=0) score+=(priorityUnits.length-i);
+  });
+  return score;
+}
+
+function openGrpBuilder(){
+  if(!GRP_WAR_ID){alert('Sélectionnez une guerre avant de lancer le constructeur.');return;}
+  var war=getSelectedWar();if(!war)return;
+  var presents=getWarPresents(war);
+  var rlIds=war.rl||[];
+  var available=presents.filter(function(m){return rlIds.indexOf(m.id)<0;});
+
+  if(available.length<5){
+    alert('Pas assez de présents pour générer des groupes (minimum 5).');return;
+  }
+
+  var html='<div style="font-size:13px">'
+    +'<div style="background:var(--bg1);border:1px solid var(--golddim);border-radius:4px;padding:10px 14px;margin-bottom:14px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px">⚙️ Comment fonctionne le constructeur ?</div>'
+    +'<div style="font-size:11px;color:var(--tx2);line-height:1.6">'
+    +'<b>1.</b> Chaque joueur est classé selon ses unités les plus fortes (méta Prio 1 en priorité).<br>'
+    +'<b>2.</b> Les joueurs sont répartis par catégorie (Bouclier, Anti-cav, Cavalerie…) en respectant les <b>pourcentages cibles</b> du type de guerre.<br>'
+    +'<b>3.</b> Si un joueur dépasse le quota de sa catégorie, ses autres unités sont analysées pour le placer ailleurs.<br>'
+    +'<b>4.</b> Les groupes sont formés : <b>Porte</b> (Exotiques/Pushers), <b>Muraille</b> (Boucliers/Anti-cav), <b>Brèche</b> (Pushers/Anti-cav), <b>Refill</b> (reste, groupes de 5).<br>'
+    +'<b>5.</b> Les chefs de groupe sont automatiquement désignés leaders. Les groupes restent <b>modifiables manuellement</b> après génération.'
+    +'</div></div>'
+    +'<div style="margin-bottom:14px;color:var(--tx3);font-size:11px">'+available.length+' joueurs disponibles · RL exclus</div>'
+    +'<div class="fg"><label class="fl">Type de guerre</label>'
+    +'<div style="display:flex;gap:8px">'
+    +'<div id="bt-ville" data-type="ville" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:12px;border:2px solid var(--gold);border-radius:4px;cursor:pointer;text-align:center;background:rgba(201,162,39,.1)">'
+    +'<div style="font-size:18px">🏰</div><div style="font-size:12px;font-weight:700;color:var(--gold)">Ville</div>'
+    +'<div style="font-size:10px;color:var(--tx3)">Muraille · Porte · Brèche · Refill</div></div>'
+    +'<div id="bt-village" data-type="village" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:12px;border:2px solid var(--b2);border-radius:4px;cursor:pointer;text-align:center;background:var(--bg1)">'
+    +'<div style="font-size:10px;color:var(--tx3)">Cavalerie prioritaire</div></div>'
+    +'</div></div>'
+    +'<div id="build-preview" style="margin-top:12px;color:var(--tx3);font-size:12px;font-style:italic">Choisissez un type pour voir la prévisualisation.</div>'
+    +'</div>';
+
+  window._buildType=null;
+  window._buildPresents=available;
+
+  OM('⚔️ Constructeur de Groupes', html, [
+    {lbl:'Annuler',cls:'bol',fn:CM},
+    {lbl:'⚔️ Générer les groupes',cls:'btn bg',fn:function(){
+      if(!window._buildType){alert('Choisissez un type de guerre.');return;}
+      buildGroups(window._buildType, window._buildPresents);
+      CM();
+    }}
+  ]);
+}
+
+function selectBuildType(type){
+  window._buildType=type;
+  var vEl=document.getElementById('bt-ville');
+  var vgEl=document.getElementById('bt-village');
+  if(vEl&&vgEl){
+    vEl.style.borderColor=type==='ville'?'var(--gold)':'var(--b2)';
+    vEl.style.background=type==='ville'?'rgba(201,162,39,.1)':'var(--bg1)';
+    vgEl.style.borderColor=type==='village'?'var(--gold)':'var(--b2)';
+    vgEl.style.background=type==='village'?'rgba(201,162,39,.1)':'var(--bg1)';
+  }
+  // Prévisualisation
+  var prev=document.getElementById('build-preview');
+  if(!prev)return;
+  var members=window._buildPresents||[];
+  var groups=simulateBuild(type,members);
+  var html='<div style="margin-top:4px">';
+  groups.forEach(function(g){
+    html+='<div style="margin-bottom:6px;padding:6px 10px;background:var(--bg1);border-radius:3px;border-left:3px solid '+(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].border:'var(--b2)')+'">'
+      +'<span style="font-size:11px;font-weight:700;color:'+(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].color:'var(--tx2)')+'">'+( OBJECTIVES[g.obj]?OBJECTIVES[g.obj].icon+' '+OBJECTIVES[g.obj].label:'🔄 Refill')+' ('+g.members.length+' joueurs)</span>'
+      +'<div style="font-size:10px;color:var(--tx3);margin-top:3px">'+g.members.map(function(m){return esc(m.username);}).join(', ')+'</div>'
+      +'</div>';
+  });
+  html+='</div>';
+  prev.innerHTML=html;
+}
+
+// Pourcentages cibles par catégorie
+var PCT_TARGETS = {
+  ville:   {Bouclier:0.40, 'Anti-cav':0.25, Cavalerie:0.05, Exotique:0.15, Pusher:0.15, Ranged:0, Utilitaire:0},
+  village: {Bouclier:0.30, 'Anti-cav':0.25, Cavalerie:0.20, Exotique:0.10, Pusher:0.15, Ranged:0, Utilitaire:0}
+};
+
+// Objectifs Ville: catégories associées
+var OBJ_CATS = {
+  porte:   ['Exotique','Pusher'],
+  muraille:['Bouclier','Anti-cav'],
+  breche:  ['Pusher','Anti-cav'],
+  refill:  ['Cavalerie','Ranged','Utilitaire','Bouclier','Anti-cav','Exotique','Pusher']
+};
+
+function getBestCat(m, type){
+  // Trouver la meilleure catégorie du joueur selon Prio 1→2→3→ses unités
+  var units=(m.units||[]).map(function(u){return u.name;});
+  // Chercher dans les unités META par priorité
+  for(var prio=1;prio<=3;prio++){
+    for(var i=0;i<units.length;i++){
+      var meta=UNIT_META[units[i]];
+      if(meta&&meta.prio===prio) return meta.cat;
+    }
+  }
+  // Fallback: première unité dans ses unités perso
+  if(units.length>0){
+    var meta2=UNIT_META[units[0]];
+    if(meta2) return meta2.cat;
+  }
+  return 'Pusher'; // défaut
+}
+
+function simulateBuild(type, members){
+  var n=members.length;
+  var targets=PCT_TARGETS[type]||PCT_TARGETS.ville;
+
+  // Calculer les quotas
+  var quotas={};
+  var cats=Object.keys(targets);
+  cats.forEach(function(c){quotas[c]=Math.round(targets[c]*n);});
+
+  // Ajuster pour que le total = n
+  var total=cats.reduce(function(s,c){return s+(quotas[c]||0);},0);
+  var diff=n-total;
+  if(diff>0) quotas['Bouclier']=(quotas['Bouclier']||0)+diff;
+  else if(diff<0) quotas['Bouclier']=Math.max(0,(quotas['Bouclier']||0)+diff);
+
+  // Assigner chaque joueur à une catégorie
+  var assigned={}; // memberId → cat
+  var catBuckets={}; // cat → [members]
+  cats.forEach(function(c){catBuckets[c]=[];});
+
+  // Trier par Prio 1 d'abord
+  var sorted=members.slice().sort(function(a,b){
+    var pa=getBestPrio(a);var pb=getBestPrio(b);
+    return pa-pb;
+  });
+
+  sorted.forEach(function(m){
+    var bestCat=getBestCat(m,type);
+    // Si quota dispo → assigner
+    if((catBuckets[bestCat]||[]).length<(quotas[bestCat]||0)){
+      catBuckets[bestCat]=catBuckets[bestCat]||[];
+      catBuckets[bestCat].push(m);
+      assigned[m.id]=bestCat;
+    } else {
+      // Quota plein → trouver catégorie alternative via autres unités
+      var units=(m.units||[]).map(function(u){return u.name;});
+      var placed=false;
+      for(var i=0;i<units.length&&!placed;i++){
+        var meta=UNIT_META[units[i]];
+        if(meta&&(catBuckets[meta.cat]||[]).length<(quotas[meta.cat]||0)){
+          catBuckets[meta.cat]=catBuckets[meta.cat]||[];
+          catBuckets[meta.cat].push(m);
+          assigned[m.id]=meta.cat;
+          placed=true;
+        }
+      }
+      if(!placed){
+        // Mettre dans la catégorie la moins remplie par rapport à son quota
+        var leastFull=cats.reduce(function(best,c){
+          var fill=(catBuckets[c]||[]).length/(quotas[c]||1);
+          var bestFill=(catBuckets[best]||[]).length/(quotas[best]||1);
+          return fill<bestFill?c:best;
+        },cats[0]);
+        catBuckets[leastFull]=catBuckets[leastFull]||[];
+        catBuckets[leastFull].push(m);
+        assigned[m.id]=leastFull;
+      }
+    }
+  });
+
+  // Construire les groupes par objectif
+  var groups=[];
+  var remaining=members.slice();
+
+  if(type==='ville'){
+    ['porte','muraille','breche'].forEach(function(obj){
+      var cats=OBJ_CATS[obj];
+      // Sélectionner 5 joueurs des catégories correspondantes
+      var pool=[];
+      cats.forEach(function(c){
+        (catBuckets[c]||[]).forEach(function(m){
+          if(remaining.indexOf(m)>=0) pool.push(m);
+        });
+      });
+      // Trier par score d'unité pour cet objectif
+      var priority=OBJ_UNITS.ville[obj]||[];
+      pool.sort(function(a,b){return memberUnitScore(b,priority)-memberUnitScore(a,priority);});
+      var grp=pool.slice(0,5);
+      // Ajouter un chef si possible
+      var chef=grp.find(function(m){return m.chefGroupe;});
+      if(!chef){
+        var extChef=remaining.find(function(m){return m.chefGroupe&&grp.indexOf(m)<0;});
+        if(extChef&&grp.length<5) grp.unshift(extChef);
+      }
+      groups.push({obj:obj,members:grp});
+      remaining=remaining.filter(function(m){return grp.indexOf(m)<0;});
+    });
+    // Refill — reste en groupes de 5
+    while(remaining.length>0){
+      groups.push({obj:'refill',members:remaining.splice(0,5)});
+    }
+  } else {
+    // Village — distribuer équitablement en groupes de 5
+    var allSorted=members.slice().sort(function(a,b){
+      return memberUnitScore(b,OBJ_UNITS.village.cavalerie)-memberUnitScore(a,OBJ_UNITS.village.cavalerie);
+    });
+    // Serpentine pour équilibrer
+    var nbG=Math.ceil(allSorted.length/5);
+    var grps=[];for(var i=0;i<nbG;i++)grps.push([]);
+    allSorted.forEach(function(m,idx){
+      var gi=idx%nbG;
+      grps[gi].push(m);
+    });
+    grps.forEach(function(g){groups.push({obj:'breche',members:g});});
+  }
+  return groups;
+}
+
+function getBestPrio(m){
+  var units=(m.units||[]).map(function(u){return u.name;});
+  var best=99;
+  units.forEach(function(u){var meta=UNIT_META[u];if(meta&&meta.prio<best)best=meta.prio;});
+  return best;
+}
+
+// Composition cible par objectif: {role: [unités prioritaires]}
+var OBJ_ROLES = {
+  porte: [
+    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
+    {role:'Anti-cav',  count:1, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
+    {role:'Exotique',  count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne','Grenadiers de Shenji','Berserkers','Claymores']}
+  ],
+  muraille: [
+    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
+    {role:'Anti-cav',  count:2, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
+    {role:'Exotique',  count:1, units:['Grenadiers de Shenji','Milice Zykalienne','Equipe de Lionroar','Siphonaros','Berserkers','Claymores']}
+  ],
+  breche: [
+    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
+    {role:'Anti-cav',  count:1, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
+    {role:'Exotique',  count:2, units:['Siphonaros','Equipe de Lionroar','Berserkers','Claymores','Milice Zykalienne','Grenadiers de Shenji']}
+  ],
+  refill: [
+    {role:'any', count:5, units:[]}
+  ]
+};
+
+// Trouver les meilleures unités d'un joueur pour un rôle donné
+function getBestUnitsForRole(m, roleUnits, count){
+  var memberUnitNames=(m.units||[]).map(function(u){return u.name;});
+  var result=[];
+  // 1. Unités du rôle que le joueur possède, dans l'ordre de priorité
+  roleUnits.forEach(function(u){
+    if(memberUnitNames.indexOf(u)>=0&&result.indexOf(u)<0) result.push(u);
+  });
+  // 2. Compléter avec les unités méta prio 1, 2, 3
+  if(result.length<count){
+    [1,2,3].forEach(function(prio){
+      memberUnitNames.forEach(function(u){
+        if(result.indexOf(u)<0&&UNIT_META[u]&&UNIT_META[u].prio===prio) result.push(u);
+      });
+    });
+  }
+  // 3. Compléter avec les autres unités du joueur par maîtrise décroissante
+  if(result.length<count){
+    var remaining=(m.units||[]).slice().sort(function(a,b){return b.mastery-a.mastery;})
+      .map(function(u){return u.name;})
+      .filter(function(u){return result.indexOf(u)<0;});
+    remaining.forEach(function(u){result.push(u);});
+  }
+  return result.slice(0,count);
+}
+
+function assignMemberToRole(m, roleSlots){
+  // Trouver quel rôle convient le mieux à ce membre
+  var memberUnitNames=(m.units||[]).map(function(u){return u.name;});
+  var bestRole=null;var bestScore=0;
+  roleSlots.forEach(function(slot){
+    if(slot.assigned>=slot.count) return;
+    var score=0;
+    slot.units.forEach(function(u,i){
+      if(memberUnitNames.indexOf(u)>=0) score+=slot.units.length-i;
+    });
+    // Bonus si méta prio 1
+    memberUnitNames.forEach(function(u){
+      if(UNIT_META[u]&&UNIT_META[u].prio===1) score+=0.5;
+    });
+    if(score>bestScore||(bestRole===null&&slot.assigned<slot.count)){
+      bestScore=score;bestRole=slot;
+    }
+  });
+  // Si aucun rôle disponible, prendre le premier non plein
+  if(!bestRole) bestRole=roleSlots.find(function(s){return s.assigned<s.count;})||roleSlots[0];
+  return bestRole;
+}
+
+function buildGroups(type, members){
+  var groups=simulateBuild(type,members);
+  var warGroups=DB.groups.filter(function(x){return x.warId===GRP_WAR_ID&&!x.archived;});
+  var usedOrders=warGroups.map(function(x){return x.order||0;});
+  var nextOrder=1;while(usedOrders.indexOf(nextOrder)>=0)nextOrder++;
+
+  var objToType={'porte':'elite','muraille':'elite','breche':'standard','refill':'refill'};
+
+  groups.forEach(function(grp){
+    var chef=grp.members.find(function(m){return m.chefGroupe;})||grp.members[0];
+    var unitAssignments={};
+    var classAssignments={};
+
+    // Préparer les slots de rôles pour ce groupe
+    var roleSlots=(OBJ_ROLES[grp.obj]||OBJ_ROLES.refill).map(function(r){
+      return{role:r.role,count:r.count,units:r.units,assigned:0,members:[]};
+    });
+
+    // Trier les membres par score décroissant (meilleures unités d'abord)
+    var sorted=grp.members.slice().sort(function(a,b){
+      var sa=0,sb=0;
+      var allUnits=[];
+      roleSlots.forEach(function(s){allUnits=allUnits.concat(s.units);});
+      (a.units||[]).forEach(function(u){if(allUnits.indexOf(u.name)>=0)sa++;});
+      (b.units||[]).forEach(function(u){if(allUnits.indexOf(u.name)>=0)sb++;});
+      return sb-sa;
+    });
+
+    // Assigner chaque membre à un rôle
+    var memberRoles={};
+    sorted.forEach(function(m){
+      var slot=assignMemberToRole(m,roleSlots);
+      if(slot){slot.assigned++;slot.members.push(m);memberRoles[m.id]=slot;}
+    });
+
+    // Remplir les unités de chaque membre selon son rôle
+    grp.members.forEach(function(m){
+      var slot=memberRoles[m.id];
+      var roleUnits=slot?slot.units:[];
+      var bestUnits=getBestUnitsForRole(m,roleUnits,3);
+      unitAssignments[m.id]=bestUnits.concat(['','','']).slice(0,3);
+      // Classe par défaut
+      var firstClass=(m.classes&&m.classes[0])||m.classe||'';
+      if(firstClass) classAssignments[m.id]=firstClass;
+    });
+
+    var g={
+      id:'g'+Date.now()+Math.floor(Math.random()*9999),
+      name:'Groupe '+nextOrder,
+      type:objToType[grp.obj]||'standard',
+      description:'',
+      leaderId:chef?chef.id:'',
+      minMastery:DB.minMastery,
+      members:grp.members.map(function(m){return m.id;}),
+      unitAssignments:unitAssignments,
+      classAssignments:classAssignments,
+      mission:'',
+      objective:grp.obj==='refill'?null:grp.obj,
+      archived:false,
+      warId:GRP_WAR_ID,
+      order:nextOrder
+    };
+    nextOrder++;
+    usedOrders.push(g.order);
+    DB.groups.push(g);
+    sbSaveGroup(g);
+  });
+
+  setTimeout(function(){reRenderGrpPage();},500);
+  alert('✅ '+groups.length+' groupe(s) généré(s) ! Unités et classes assignées automatiquement. Ajustements manuels possibles.');
+}
+
 // ════════════════════════════════════════════════════════════════
 // PAGE: GUERRES — VOTE
 // ════════════════════════════════════════════════════════════════
