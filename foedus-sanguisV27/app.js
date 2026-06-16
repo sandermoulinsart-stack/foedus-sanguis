@@ -6701,7 +6701,8 @@ function sbGroupToLocal(r){
     objective:r.objective||null, minMastery:r.min_mastery||1,
     members:r.members||[], unitAssignments:r.unit_assignments||{},
     mission:r.mission||'', archived:r.archived||false,
-    warId:r.war_id||null, classAssignments:r.class_assignments||{}
+    warId:r.war_id||null, classAssignments:r.class_assignments||{},
+    order:r.order||0
   };
 }
 function localGroupToSb(g){
@@ -6711,7 +6712,8 @@ function localGroupToSb(g){
     objective:g.objective||null, min_mastery:g.minMastery||1,
     members:g.members||[], unit_assignments:g.unitAssignments||{},
     mission:g.mission||'', archived:g.archived||false,
-    war_id:g.warId||null, class_assignments:g.classAssignments||{}
+    war_id:g.warId||null, class_assignments:g.classAssignments||{},
+    order:g.order||0
   };
 }
 function sbWarToLocal(r){
