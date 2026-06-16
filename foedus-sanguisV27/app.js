@@ -4235,13 +4235,15 @@ function openNewGrp(){
     +'<div class="fg"><label class="fl">Lier à une guerre</label><select class="fs" id="ng-war"><option value="">— Aucune —</option>'+wars.map(function(w){return'<option value="'+w.id+'"'+(GRP_WAR_ID===w.id?' selected':'')+'>'+esc(w.title)+' ('+w.date+')</option>'}).join('')+'</select></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Créer',cls:'btn bg',fn:function(){
       var warId=gVal('ng-war')||GRP_WAR_ID||null;
-      var warGroups=warId?DB.groups.filter(function(x){return x.warId===warId&&!x.archived}):[];
-      var usedOrders=warGroups.map(function(x){return x.order||0});
+      // Inclure TOUS les groupes de la guerre (archivés ou non) pour éviter les doublons
+      var allWarGroups=warId?DB.groups.filter(function(x){return x.warId===warId}):[];
+      var usedOrders=allWarGroups.map(function(x){return x.order||0});
       var nextOrder=1;while(usedOrders.indexOf(nextOrder)>=0)nextOrder++;
       var autoName='Groupe '+nextOrder;
       var g={id:'g'+Date.now(),name:autoName,type:gVal('ng-type'),description:gVal('ng-d'),leaderId:gVal('ng-l'),minMastery:safeInt(gVal('ng-m'),DB.minMastery),members:[],unitAssignments:{},mission:'',objective:null,archived:false,warId:warId,order:nextOrder};
+      DB.groups.push(g); // Pousser AVANT de fermer la modale
       if(warId)GRP_WAR_ID=warId;
-      DB.groups.push(g);sbSaveGroup(g);CM();go('grp');
+      sbSaveGroup(g);CM();go('grp');
     }}]);
 }
 
