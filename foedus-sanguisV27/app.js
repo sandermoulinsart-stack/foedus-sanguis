@@ -3528,7 +3528,7 @@ function pgUnit(){
   var infoH='<div style="background:rgba(201,162,39,.07);border:1px solid var(--golddim);border-radius:4px;padding:14px 18px;margin-bottom:20px;line-height:1.8">'
     +'<div style="font-family:\'Cinzel\',serif;font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">⚔️ COMMENT CHOISIR TES UNITÉS</div>'
     +'<div style="font-size:12px;color:var(--tx2);display:flex;flex-direction:column;gap:5px">'
-    +'<div>📋 Sélectionne jusqu\'à <strong style="color:var(--tx1)">10 unités</strong> qui correspondent à tes préférences et aux exigences de la <strong style="color:var(--tx1)">méta actuelle</strong>.</div>'
+    +'<div>📋 Sélectionne jusqu\'à <strong style="color:var(--tx1)">15 unités</strong> qui correspondent à tes préférences et aux exigences de la <strong style="color:var(--tx1)">méta actuelle</strong>.</div>'
     +'<div>⭐ Les étoiles représentent ta <strong style="color:var(--tx1)">maîtrise</strong> de l\'unité ainsi que ta <strong style="color:var(--tx1)">préférence</strong> pour la jouer.</div>'
     +'<div>⚠️ Tu ne peux pas avoir <strong style="color:var(--red3)">5 étoiles partout</strong> — réserve les hautes maîtrises à tes vraies unités de prédilection.</div>'
     +'</div>'
