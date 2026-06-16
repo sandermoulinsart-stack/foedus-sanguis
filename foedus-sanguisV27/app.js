@@ -3734,6 +3734,9 @@ function getPlacedMemberIds(warId, excludeGroupId){
   getWarLinkedGroups(warId).forEach(function(g){
     if(g.id!==excludeGroupId)(g.members||[]).forEach(function(mid){placed.push(mid);});
   });
+  // Les RL de guerre sont aussi considérés comme placés
+  var war=(DB.voteWars||[]).find(function(w){return w.id===warId;});
+  if(war&&war.rl)(war.rl||[]).forEach(function(id){placed.push(id);});
   return placed;
 }
 
