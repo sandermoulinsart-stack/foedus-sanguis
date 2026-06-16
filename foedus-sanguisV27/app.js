@@ -3588,7 +3588,7 @@ function pgUnit(){
 
   return infoH
     +'<div class="g2">'
-    +'<div><div class="pan"><div class="ph"><span class="ptl">Mes Unités ('+myU.length+'/10)</span></div><div class="pb">'+listH+'</div></div></div>'
+    +'<div><div class="pan"><div class="ph"><span class="ptl">Mes Unités ('+myU.length+'/15)</span></div><div class="pb">'+listH+'</div></div></div>'
     +'<div><div class="pan"><div class="ph"><span class="ptl">Catalogue</span>'+(myU.length>=10?'<span style="font-size:11px;color:var(--red3);margin-left:auto">⚠️ Maximum atteint</span>':'')+'</div><div class="pb">'+filterH+catH+'</div></div></div>'
     +'</div>';
 }
@@ -3647,8 +3647,8 @@ function confirmAddUnit(btn){
   var name=btn.dataset.name;
   var mastery=parseInt(btn.dataset.mas)||1;
   CU.units = CU.units||[];
-  if(CU.units.length>=10){
-    alert('Maximum 10 unités. Retire une unité avant d\'en ajouter une nouvelle.');
+  if(CU.units.length>=15){
+    alert('Maximum 15 unités. Retire une unité avant d\'en ajouter une nouvelle.');
     CM();return;
   }
   CU.units.push({name:name, mastery:mastery});
