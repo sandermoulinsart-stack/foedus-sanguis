@@ -4236,7 +4236,8 @@ function openNewGrp(){
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Créer',cls:'btn bg',fn:function(){
       var warId=gVal('ng-war')||GRP_WAR_ID||null;
       var warGroups=warId?DB.groups.filter(function(x){return x.warId===warId&&!x.archived}):[];
-      var nextOrder=warGroups.length?Math.max.apply(null,warGroups.map(function(x){return x.order||0}))+1:1;
+      var usedOrders=warGroups.map(function(x){return x.order||0});
+      var nextOrder=1;while(usedOrders.indexOf(nextOrder)>=0)nextOrder++;
       var autoName='Groupe '+nextOrder;
       var g={id:'g'+Date.now(),name:autoName,type:gVal('ng-type'),description:gVal('ng-d'),leaderId:gVal('ng-l'),minMastery:safeInt(gVal('ng-m'),DB.minMastery),members:[],unitAssignments:{},mission:'',objective:null,archived:false,warId:warId,order:nextOrder};
       if(warId)GRP_WAR_ID=warId;
