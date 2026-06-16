@@ -4044,10 +4044,13 @@ function renderGroupCard(g, war){
             var u=units[ui]||'';
             if(canEditSlots){
               var eu=uBM(mid,g.minMastery);
+              // Exclure les unités déjà sélectionnées dans les autres slots du même membre
+              var otherUnits=units.filter(function(_,oi){return oi!==ui&&units[oi];});
+              var euFiltered=eu.filter(function(eu2){return !otherUnits.some(function(ou){return ou===eu2.name;})||u===eu2.name;});
               var selColor=u?unitRarityStyle(u).color:'var(--tx2)';
               return'<select onchange="setUnitElColor(this)" data-gid="'+g.id+'" data-mid="'+mid+'" data-ui="'+ui+'" style="width:100%;font-size:8px;background:var(--bg1);border:1px solid var(--b1);color:'+selColor+';border-radius:2px;padding:1px">'
                 +'<option value="" style="color:var(--tx3)">U'+(ui+1)+'...</option>'
-                +eu.map(function(eu2){var rs2=unitRarityStyle(eu2.name);return'<option value="'+esc(eu2.name)+'"'+(u===eu2.name?' selected':'')+' style="color:'+rs2.color+';background:var(--bg1)">'+esc(eu2.name)+'</option>';}).join('')
+                +euFiltered.map(function(eu2){var rs2=unitRarityStyle(eu2.name);return'<option value="'+esc(eu2.name)+'"'+(u===eu2.name?' selected':'')+' style="color:'+rs2.color+';background:var(--bg1)">'+esc(eu2.name)+'</option>';}).join('')
                 +'</select>';
             } else {
               return u?'<div style="font-size:8px;color:var(--gold);background:var(--bg1);padding:1px 4px;border-radius:2px;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u)+'</div>':'';
