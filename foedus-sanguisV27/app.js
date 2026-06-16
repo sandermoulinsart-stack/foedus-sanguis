@@ -2307,7 +2307,7 @@ function linkGroupToWar(gid){
           sbSaveWar(w);
         }
       }
-      sDB();CM();go('grp');
+      sDB();CM();reRenderGrpPage();
     }}]);
 }
 
@@ -2319,11 +2319,11 @@ function archiveGrpW(el){
     var warGroups=DB.groups.filter(function(x){return(DB.voteWars||[]).some(function(w){return w.linkedGroupId===x.id&&w.id===linkedWar.id})});
     if(warGroups.length>1&&confirm('Archiver tous les groupes liés à "'+linkedWar.title+'" ('+warGroups.length+' groupes) ?')){
       warGroups.forEach(function(x){x.archived=true;sbSaveGroup(x)});
-      sDB();go('grp');return;
+      sDB();reRenderGrpPage();return;
     }
   }
   g.archived=!g.archived;
-  sbSaveGroup(g);go('grp');
+  sbSaveGroup(g);reRenderGrpPage();
 }
 function toggleGrpArchive(headerEl){
   var body=document.getElementById('grp-archive-body');
@@ -4120,7 +4120,7 @@ function renderGrpArchive(){
 function setObjEl(el){
   var g=gG(el.dataset.gid);if(!g)return;
   g.objective=el.dataset.obj||null;
-  sbSaveGroup(g);go('grp');
+  sbSaveGroup(g);reRenderGrpPage();
 }
 function setUnitElColor(el){
   var rs=el.value?unitRarityStyle(el.value):{color:'var(--tx2)'};
@@ -4147,7 +4147,7 @@ function saveMissionEl(el){
 }
 function archiveSingleGrp(el){
   var g=gG(el.dataset.id);if(!g)return;
-  g.archived=!g.archived;sbSaveGroup(g);go('grp');
+  g.archived=!g.archived;sbSaveGroup(g);reRenderGrpPage();
 }
 
 function archiveWarGroups(){
@@ -4160,7 +4160,7 @@ function archiveWarGroups(){
   DB.groupSessions=DB.groupSessions||[];
   DB.groupSessions.push(snap);
   groups.forEach(function(g){g.archived=true;sbSaveGroup(g);});
-  sDB();go('grp');
+  sDB();reRenderGrpPage();
 }
 function deleteSnapshot(id){
   if(!confirm('Supprimer ce snapshot ?'))return;
@@ -4212,7 +4212,7 @@ function editGrp(id){
       g.name=gVal('eg-n').trim()||g.name;g.type=gVal('eg-type');
       g.description=gVal('eg-d');g.leaderId=gVal('eg-l');
       g.minMastery=safeInt(gVal('eg-m'),g.minMastery);
-      sbSaveGroup(g);CM();go('grp');
+      sbSaveGroup(g);CM();reRenderGrpPage();
     }}]);
 }
 
@@ -4243,7 +4243,7 @@ function openNewGrp(){
       var g={id:'g'+Date.now(),name:autoName,type:gVal('ng-type'),description:gVal('ng-d'),leaderId:gVal('ng-l'),minMastery:safeInt(gVal('ng-m'),DB.minMastery),members:[],unitAssignments:{},mission:'',objective:null,archived:false,warId:warId,order:nextOrder};
       DB.groups.push(g); // Pousser AVANT de fermer la modale
       if(warId)GRP_WAR_ID=warId;
-      sbSaveGroup(g);CM();go('grp');
+      sbSaveGroup(g);CM();reRenderGrpPage();
     }}]);
 }
 
