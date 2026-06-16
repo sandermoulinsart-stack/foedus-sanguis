@@ -4099,10 +4099,29 @@ function renderGroupCard(g, war){
 
 // ── Archive section ──
 function renderGrpArchive(){
-  var archived=DB.groups.filter(function(g){return g.archived});
+  var archived=DB.groups.filter(function(g){return g.archived;});
   var snapshots=DB.groupSessions||[];
   if(!archived.length&&!snapshots.length)return'';
   var total=archived.length+snapshots.length;
+  var warMap={};
+  archived.forEach(function(g){var wid=g.warId||'nowar';if(!warMap[wid])warMap[wid]=[];warMap[wid].push(g);});
+  var warBlocks=Object.keys(warMap).map(function(wid){
+    var war=(DB.voteWars||[]).find(function(w){return w.id===wid;});
+    var warName=war?esc(war.title):'Guerre inconnue';
+    var warDate=war?' <span style="font-size:11px;color:var(--tx3)">'+esc(war.date)+'</span>':'';
+    var warGroups=warMap[wid].slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
+    var uid='aw'+wid.replace(/[^a-z0-9]/gi,'').substring(0,12);
+    return'<div style="margin-bottom:12px;border:1px solid var(--b1);border-radius:4px;overflow:hidden">'
+      +'<div style="background:var(--bg2);padding:8px 14px;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="(function(){var e=document.getElementById(\''+uid+'\');e.style.display=e.style.display===\'none\'?\'block\':\'none\';})()">'
+      +'<span style="font-size:13px;font-weight:700;color:var(--tx2);font-family:Cinzel,serif">⚔️ '+warName+'</span>'+warDate
+      +'<span style="margin-left:auto;font-size:11px;color:var(--tx4)">'+warGroups.length+' groupe(s)</span>'
+      +(HR('officier')?'<button class="btn bol bsm" style="font-size:10px;margin-left:8px" onclick="openGrpCompactArchive(\''+wid+'\');event.stopPropagation()">👁 Vue RL</button>':'')
+      +'</div>'
+      +'<div id="'+uid+'" style="display:none;padding:12px">'
+      +warGroups.map(function(g){return renderGroupCard(g,null);}).join('')
+      +'</div>'
+      +'</div>';
+  }).join('');
   return'<div class="pan" style="margin-top:8px">'
     +'<div class="ph" style="cursor:pointer" onclick="toggleGrpArchive(this)">'
     +'<span class="ptl" style="color:var(--tx3)">📁 Archives ('+total+')</span>'
@@ -4113,12 +4132,44 @@ function renderGrpArchive(){
       return'<div style="padding:10px 14px;border:1px solid var(--b1);border-radius:3px;margin-bottom:8px">'
         +'<div class="fbt mb12"><span class="cin fw7" style="color:var(--gold)">📦 '+esc(s.title||'Snapshot')+'</span><span class="td txs">'+esc(s.date||'')+'</span></div>'
         +'<div class="td tsm">'+esc((s.groups||[]).length)+' groupe(s) archivé(s)</div>'
-        +(HR('officier')?'<button class="btn bred bsm" style="margin-top:8px" onclick="deleteSnapshot(\''+s.id+'\')">Supprimer</button>':'')
+        +(HR('officier')?'<button class="btn bred bsm" style="margin-top:8px" onclick="deleteSnapshot(\''+s.id+'\')" >Supprimer</button>':'')
         +'</div>';
     }).join('')
-    +archived.map(function(g){return renderGroupCard(g,null)}).join('')
+    +warBlocks
     +'</div></div>';
 }
+
+function openGrpCompactArchive(warId){
+  var groups=DB.groups.filter(function(g){return g.warId===warId&&g.archived;})
+    .sort(function(a,b){return (a.order||0)-(b.order||0);});
+  var war=(DB.voteWars||[]).find(function(w){return w.id===warId;});
+  var warName=war?war.title:'Guerre';
+  if(!groups.length){alert('Aucun groupe archivé pour cette guerre.');return;}
+  var grpBlocks=groups.map(function(g,idx){
+    var lead=gM(g.leaderId);
+    var members=(g.members||[]).map(function(mid){return gM(mid);}).filter(Boolean);
+    var typeIcon=g.type==='elite'?'👑':g.type==='refill'?'🔄':'⚔️';
+    var obj=g.objective&&OBJECTIVES[g.objective]?OBJECTIVES[g.objective]:null;
+    var borderColor=g.type==='elite'?'var(--gold)':g.type==='refill'?'var(--teal2)':obj?obj.border:'var(--b2)';
+    return'<div style="margin-bottom:10px;padding:10px 12px;background:var(--bg1);border-radius:4px;border-left:3px solid '+borderColor+'">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
+      +'<span style="font-size:12px;font-weight:700;color:var(--tx2)">'+typeIcon+' G'+(g.order||idx+1)+'</span>'
+      +(obj?'<span style="font-size:10px;font-weight:700;color:'+obj.color+';border:1px solid '+obj.border+';padding:1px 7px;border-radius:3px;font-family:Cinzel,serif">'+obj.icon+' '+obj.label+'</span>':'<span style="font-size:10px;color:var(--tx4);font-style:italic">Sans objectif</span>')
+      +(lead?'<span style="font-size:11px;color:var(--gold);margin-left:auto">🗡️ '+esc(lead.username)+'</span>':'')
+      +'</div>'
+      +(members.length
+        ?'<div style="display:flex;flex-wrap:wrap;gap:4px">'
+          +members.map(function(m){var isLead=m.id===g.leaderId;return'<span style="font-size:11px;padding:2px 7px;background:var(--bg2);border-radius:2px;color:'+(isLead?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(isLead?' 🗡️':'')+'</span>';}).join('')
+          +'</div>'
+        :'<div style="font-size:11px;color:var(--tx4)">Aucun membre</div>')
+      +'</div>';
+  }).join('');
+  OM('👁 Vue RL — '+esc(warName),
+    '<div style="max-height:70vh;overflow-y:auto">'+grpBlocks+'</div>',
+    [{lbl:'Fermer',cls:'bol',fn:CM}]
+  );
+}
+
 
 // ════════════════════════════════════════════════════════════════
 // ACTIONS GROUPES
