@@ -3940,14 +3940,18 @@ function openGrpCompact(){
       +'</div></div>';
   }
 
-  var grpBlocks=groups.map(function(g,idx){
+  var grpBlocks=groups.sort(function(a,b){return (a.order||0)-(b.order||0);}).map(function(g,idx){
     var lead=gM(g.leaderId);
     var members=(g.members||[]).map(function(mid){return gM(mid);}).filter(Boolean);
     var typeIcon=g.type==='elite'?'👑':g.type==='refill'?'🔄':'⚔️';
-    return'<div style="margin-bottom:10px;padding:10px 12px;background:var(--bg1);border-radius:4px;border-left:3px solid '+(g.type==='elite'?'var(--gold)':g.type==='refill'?'var(--teal2)':'var(--b2)')+'">'
-      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
-      +'<span style="font-size:11px;font-weight:700;color:var(--tx3)">'+typeIcon+' '+(g.order||idx+1)+'</span>'
-      +'<span style="font-size:13px;font-weight:700;color:var(--tx1)">'+esc(g.name)+'</span>'
+    var obj=g.objective&&OBJECTIVES[g.objective]?OBJECTIVES[g.objective]:null;
+    var objColor=obj?obj.color:'var(--tx3)';
+    var objBorder=obj?obj.border:'var(--b2)';
+    var borderColor=g.type==='elite'?'var(--gold)':g.type==='refill'?'var(--teal2)':obj?objBorder:'var(--b2)';
+    return'<div style="margin-bottom:10px;padding:10px 12px;background:var(--bg1);border-radius:4px;border-left:3px solid '+borderColor+'">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
+      +'<span style="font-size:12px;font-weight:700;color:var(--tx2)">'+typeIcon+' G'+(g.order||idx+1)+'</span>'
+      +(obj?'<span style="font-size:10px;font-weight:700;color:'+obj.color+';border:1px solid '+obj.border+';padding:1px 7px;border-radius:3px;font-family:Cinzel,serif">'+obj.icon+' '+obj.label+'</span>':'<span style="font-size:10px;color:var(--tx4);font-style:italic">Sans objectif</span>')
       +(lead?'<span style="font-size:11px;color:var(--gold);margin-left:auto">🗡️ '+esc(lead.username)+'</span>':'')
       +'</div>'
       +(members.length
@@ -4230,11 +4234,10 @@ function openNewGrp(){
     +'<div class="fg"><label class="fl">Maîtrise min.</label><select class="fs" id="ng-m">'+[1,2,3,4,5].map(function(n){return'<option value="'+n+'"'+(n===DB.minMastery?' selected':'')+'>'+n+'★</option>'}).join('')+'</select></div></div>'
     +'<div class="fg"><label class="fl">Lier à une guerre</label><select class="fs" id="ng-war"><option value="">— Aucune —</option>'+wars.map(function(w){return'<option value="'+w.id+'"'+(GRP_WAR_ID===w.id?' selected':'')+'>'+esc(w.title)+' ('+w.date+')</option>'}).join('')+'</select></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Créer',cls:'btn bg',fn:function(){
-      var name=gVal('ng-n').trim();if(!name)return alert('Nom requis');
       var warId=gVal('ng-war')||GRP_WAR_ID||null;
       var warGroups=warId?DB.groups.filter(function(x){return x.warId===warId&&!x.archived}):[];
       var nextOrder=warGroups.length?Math.max.apply(null,warGroups.map(function(x){return x.order||0}))+1:1;
-      var autoName=name||(warId?'Groupe '+nextOrder:name);
+      var autoName='Groupe '+nextOrder;
       var g={id:'g'+Date.now(),name:autoName,type:gVal('ng-type'),description:gVal('ng-d'),leaderId:gVal('ng-l'),minMastery:safeInt(gVal('ng-m'),DB.minMastery),members:[],unitAssignments:{},mission:'',objective:null,archived:false,warId:warId,order:nextOrder};
       if(warId)GRP_WAR_ID=warId;
       DB.groups.push(g);sbSaveGroup(g);CM();go('grp');
