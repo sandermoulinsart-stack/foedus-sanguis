@@ -2417,6 +2417,9 @@ function go(p){
   document.querySelectorAll('.ni').forEach(function(n){n.classList.remove('active');});
   var el=document.querySelector('.ni[data-page="'+p+'"]');
   if(el)el.classList.add('active');
+  document.querySelectorAll('.bn-item').forEach(function(n){n.classList.remove('active');});
+  var bn=document.querySelector('#bottom-nav .bn-item[data-page="'+p+'"]');
+  if(bn)bn.classList.add('active');
   var t=PG[p]||[p,''];
   document.getElementById('ttl').textContent=t[0];
   document.getElementById('tsub').textContent=t[1];
