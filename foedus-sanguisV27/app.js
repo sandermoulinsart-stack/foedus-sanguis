@@ -2959,7 +2959,7 @@ function openHillRulesW(){
 function setHillBg(input){
   if(!input.files||!input.files[0])return;
   var file=input.files[0];
-  // Compresser l'image avant stockage
+  // Compresser l'image avant upload
   var img=new Image();
   var url=URL.createObjectURL(file);
   img.onload=function(){
@@ -2969,14 +2969,27 @@ function setHillBg(input){
     canvas.width=Math.round(img.width*ratio);
     canvas.height=Math.round(img.height*ratio);
     canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-    var b64=canvas.toDataURL('image/jpeg',0.75);
     URL.revokeObjectURL(url);
-    DB.hillBg=b64;
-    // Sauvegarder dans une clé séparée pour ne pas mélanger avec l'état du roi
-    sbSaveSettings('hill_bg', b64).then(function(){
-        var w=document.getElementById('hill-widget');
-        if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
-      }).catch(function(e){console.warn('[hillBg]',e);alert('Image trop lourde, essayez une image plus petite.');});
+    // Convertir en blob pour upload dans Supabase Storage
+    canvas.toBlob(function(blob){
+      var formData=new FormData();
+      formData.append('file',blob,'hill_bg.jpg');
+      // Upload dans le bucket media
+      fetch(SB_URL+'/storage/v1/object/media/hill_bg.jpg',{
+        method:'POST',
+        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'x-upsert':'true'},
+        body:blob
+      }).then(function(r){
+        if(!r.ok) throw new Error('Upload failed');
+        // Sauvegarder l'URL publique (pas le base64) dans house_settings
+        var publicUrl=SB_URL+'/storage/v1/object/public/media/hill_bg.jpg?t='+Date.now();
+        DB.hillBg=publicUrl;
+        sbSaveSettings('hill_bg', publicUrl).then(function(){
+          var w=document.getElementById('hill-widget');
+          if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
+        });
+      }).catch(function(e){console.warn('[hillBg]',e);alert('Erreur upload image. Essayez une image plus petite.');});
+    },'image/jpeg',0.75);
   };
   img.src=url;
 }
