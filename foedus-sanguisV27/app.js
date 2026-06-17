@@ -4421,6 +4421,7 @@ function openGrpBuilder(){
     +'<div style="font-size:18px">🏰</div><div style="font-size:12px;font-weight:700;color:var(--gold)">Ville</div>'
     +'<div style="font-size:10px;color:var(--tx3)">Muraille · Porte · Brèche · Refill</div></div>'
     +'<div id="bt-village" data-type="village" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:12px;border:2px solid var(--b2);border-radius:4px;cursor:pointer;text-align:center;background:var(--bg1)">'
+    +'<div style="font-size:18px">🌿</div><div style="font-size:12px;font-weight:700;color:var(--tx2)">Village</div>'
     +'<div style="font-size:10px;color:var(--tx3)">Cavalerie prioritaire</div></div>'
     +'</div></div>'
     +'<div id="build-preview" style="margin-top:12px;color:var(--tx3);font-size:12px;font-style:italic">Choisissez un type pour voir la prévisualisation.</div>'
