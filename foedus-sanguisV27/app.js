@@ -381,9 +381,6 @@ function sbLoad(){
     DB.hillKing       = hillRow ? (hillRow.value||{}) : {};
     var hillBgRow=(res[12]||[]).find(function(r){return r.key==='hill_bg';});
     DB.hillBg         = hillBgRow ? (hillBgRow.value||'') : '';
-    var unitMetaRow=(res[12]||[]).find(function(r){return r.key==='unit_meta';});
-    var storedMeta=unitMetaRow?(typeof unitMetaRow.value==='string'?JSON.parse(unitMetaRow.value||'{}'):unitMetaRow.value||{}):{};  
-    DB.unitMeta=Object.assign({},UNIT_META,storedMeta);
     var hillHistRow=(res[12]||[]).find(function(r){return r.key==='hill_history';});
     DB.hillHistory    = hillHistRow ? (hillHistRow.value||[]) : [];
     SB_READY = true;
@@ -675,7 +672,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings('main', {house_name:DB.houseName, min_mastery:DB.minMastery, active_war_id:DB.activeWarId||null}).catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[],unitMeta:{}}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[]}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -2417,9 +2414,6 @@ function go(p){
   document.querySelectorAll('.ni').forEach(function(n){n.classList.remove('active');});
   var el=document.querySelector('.ni[data-page="'+p+'"]');
   if(el)el.classList.add('active');
-  document.querySelectorAll('.bn-item').forEach(function(n){n.classList.remove('active');});
-  var bn=document.querySelector('#bottom-nav .bn-item[data-page="'+p+'"]');
-  if(bn)bn.classList.add('active');
   var t=PG[p]||[p,''];
   document.getElementById('ttl').textContent=t[0];
   document.getElementById('tsub').textContent=t[1];
@@ -2478,47 +2472,22 @@ var TAG_LBL={
   general:'💬 Général'
 };
 function pgHome(){
-  // ── Données ────────────────────────────────────────────────
-  var actifs=DB.members.filter(function(m){return m.status==='actif'&&!m.isGuest;}).length;
-  var gardes=DB.members.filter(function(m){return m.sanguin;}).length;
-  var openWars=(DB.voteWars||[]).filter(function(w){return w.status==='open';});
-  var pendingRec=(DB.members||[]).filter(function(m){return m.status==='attente';}).length;
-  var onlineCount=(DB.presence||[]).filter(function(p){
-    return p.last_seen&&(Date.now()-new Date(p.last_seen).getTime())<2*60*1000;
-  }).length;
 
-  // ── Bannière urgence guerre ─────────────────────────────────
-  var urgentWarBanner='';
-  var unvotedWars=openWars.filter(function(w){
-    if(w.votes&&w.votes[CU.id])return false;
-    if(!w.date)return false;
-    var warTime=parseLocalDateTime(w.date,w.time);
-    var hoursUntil=(warTime-Date.now())/(1000*60*60);
-    return hoursUntil>=0&&hoursUntil<=48;
-  });
-  if(unvotedWars.length){
-    urgentWarBanner='<div style="background:rgba(139,26,10,.3);border:2px solid var(--red2);border-radius:3px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
-      +'<span style="font-size:20px">⚔️</span>'
-      +'<div style="flex:1;min-width:160px"><div style="font-family:Cinzel,serif;font-size:12px;font-weight:700;color:var(--red3);letter-spacing:1px">VOTE EN ATTENTE</div>'
-      +'<div style="font-size:11px;color:var(--tx2);margin-top:2px">'+unvotedWars.map(function(w){return esc(w.title);}).join(' · ')+'</div></div>'
-      +'<button class="btn bsm" onclick="go(\'vote\')" style="background:var(--red2);border:none;color:#fff;flex-shrink:0">Voter maintenant →</button>'
-      +'</div>';
-  }
-
-  // ── Mon groupe (guerre active) ──────────────────────────────
+  // Mon groupe card
   var myGroupHTML='';
-  var activeWar=openWars[0]||null;
+  var activeWar=(DB.voteWars||[]).find(function(w){return w.status==='open'});
   if(activeWar){
-    var myGrp=DB.groups.find(function(g){return!g.archived&&g.warId===activeWar.id&&(g.members||[]).indexOf(CU.id)>=0;});
+    var myGrp=DB.groups.find(function(g){return!g.archived&&g.warId===activeWar.id&&(g.members||[]).indexOf(CU.id)>=0});
+    // RL sur accueil
     var activeWarRLIds=activeWar.rl||[];
     var activeWarRLMembers=activeWarRLIds.map(function(id){return gM(id);}).filter(Boolean);
     if(activeWarRLMembers.length){
-      myGroupHTML+='<div class="home-card hc-gold" style="margin-bottom:12px">'
-        +'<div class="hc-head"><span class="hc-icon">🎖️</span><span class="hc-title">RL — '+esc(activeWar.title)+'</span></div>'
-        +'<div class="hc-body"><div style="display:flex;flex-wrap:wrap;gap:6px">'
+      myGroupHTML+='<div class="pan" style="margin-bottom:14px;border-top:2px solid var(--gold)">'
+        +'<div class="ph"><span class="ptl">🎖️ RL — '+esc(activeWar.title)+'</span></div>'
+        +'<div class="pb"><div style="display:flex;flex-wrap:wrap;gap:6px">'
         +activeWarRLMembers.map(function(m){
-          return'<div style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:rgba(0,0,0,.3);border:1px solid var(--golddim);border-radius:2px">'
-            +avaHTML(m,20)+'<span style="font-size:12px;font-weight:700;color:var(--gold)">'+esc(m.username)+'</span>'
+          return'<div style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--bg1);border:1px solid var(--golddim);border-radius:3px">'
+            +avaHTML(m,22)+'<span style="font-size:12px;font-weight:700;color:var(--gold)">'+esc(m.username)+'</span>'
             +(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')
             +'</div>';
         }).join('')
@@ -2527,174 +2496,217 @@ function pgHome(){
     if(myGrp){
       var myLead=gM(myGrp.leaderId);
       var myUnits=(myGrp.unitAssignments&&myGrp.unitAssignments[CU.id])||[];
-      myGroupHTML+='<div class="home-card hc-gold" style="margin-bottom:12px">'
-        +'<div class="hc-head"><span class="hc-icon">⚔️</span><span class="hc-title">Mon groupe — '+esc(activeWar.title)+'</span></div>'
-        +'<div class="hc-body">'
-        +'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">'
-        +'<div><div class="td txs">Groupe</div><div class="cin fw7" style="font-size:13px;color:var(--gold)">'+esc(myGrp.name)+'</div></div>'
-        +(myLead?'<div><div class="td txs">Chef</div><div style="display:flex;align-items:center;gap:6px">'+avaHTML(myLead,20)+'<span class="cin fw7" style="font-size:12px">'+esc(myLead.username)+'</span></div></div>':'')
+      var obj=myGrp.objective&&typeof OBJECTIVES!=='undefined'?OBJECTIVES[myGrp.objective]:null;
+      myGroupHTML+='<div class="pan" style="margin-bottom:18px;border-top:2px solid var(--gold)">'
+        +'<div class="ph"><span class="ptl">⚔️ Mon groupe — '+esc(activeWar.title)+'</span>'+(obj&&typeof objTag!=='undefined'?objTag(myGrp.objective):'')+'</div>'
+        +'<div class="pb">'
+        +'<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px">'
+        +'<div><div class="td txs">Groupe</div><div class="cin fw7" style="font-size:14px;color:var(--gold)">'+esc(myGrp.name)+'</div></div>'
+        +(myLead?'<div><div class="td txs">Chef</div><div style="display:flex;align-items:center;gap:6px">'+avaHTML(myLead,22)+'<span class="cin fw7" style="font-size:12px">'+esc(myLead.username)+'</span></div></div>':'')
         +'</div>'
-        +(myUnits.filter(Boolean).length
-          ?'<div style="display:flex;gap:5px;flex-wrap:wrap">'+myUnits.filter(Boolean).map(function(u,i){return'<span style="background:rgba(0,0,0,.3);border:1px solid var(--golddim);border-radius:2px;padding:3px 8px;font-size:11px;color:var(--gold)">U'+(i+1)+': '+esc(u)+'</span>';}).join('')+'</div>'
-          :'<div class="td tsm">Aucune unité assignée pour l\'instant.</div>'
-        )
+        +(myUnits.filter(Boolean).length?'<div><div class="td txs" style="margin-bottom:6px">Mes unités assignées</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+myUnits.filter(Boolean).map(function(u,i){return'<span style="background:var(--bg1);border:1px solid var(--golddim);border-radius:2px;padding:4px 10px;font-size:12px;color:var(--gold)">U'+(i+1)+': '+esc(u)+'</span>'}).join('')+'</div></div>':'<div class="td tsm" style="margin-bottom:10px">Aucune unité assignée pour l\'instant.</div>')
+        +'<div class="div"></div>'
+        +'<div><div class="td txs" style="margin-bottom:8px">Membres du groupe ('+myGrp.members.length+')</div>'
+        +'<div style="display:flex;flex-wrap:wrap;gap:8px">'
+        +myGrp.members.map(function(mid){
+          var mb=gM(mid);if(!mb)return'';
+          var isMe=mid===CU.id;
+          var units=(myGrp.unitAssignments&&myGrp.unitAssignments[mid])||[];
+          return'<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg1);border:1px solid '+(isMe?'var(--golddim)':'var(--b1)')+';border-radius:3px">'
+            +avaHTML(mb,24)
+            +'<div><div style="font-size:11px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(mb.username)+(isMe?' (moi)':'')+(mb.chefGroupe?' 🗡️':'')+(mb.sanguin?' 🩸':'')+(mb.grandChampion?' 🏆':'')+'</div>'
+            +(units.filter(Boolean).length?'<div style="font-size:9px;color:var(--tx3)">'+units.filter(Boolean).join(' · ')+'</div>':'')
+            +'</div></div>';
+        }).join('')
+        +'</div></div>'
         +'</div></div>';
     }
   }
 
-  // ── Bannières admin ─────────────────────────────────────────
-  if(HR('evenement')||HR('recrutement')||HR('formation')||HR('officier'))
-    document.getElementById('tact').innerHTML='<button class="btn bg bsm" onclick="openBannerMgr()">Bannières</button>';
+  if(HR('evenement')||HR('recrutement')||HR('formation')||HR('officier'))document.getElementById('tact').innerHTML='<button class="btn bg bsm" onclick="openBannerMgr()">Bannières</button>';
   var actBanAll=(DB.banners||[]).filter(function(b){return b.active;});
   var actBan=actBanAll.slice(0,4);
   var extraBan=actBanAll.slice(4);
-  var banHtml=actBan.map(function(b){
-    return'<div class="banner ban-'+(b.type||'info')+'" style="'+(b.image?'flex-direction:column;align-items:stretch;padding:0;overflow:hidden':'')+'">'
-      +(b.image?'<img src="'+esc(b.image)+'" style="width:100%;max-height:300px;object-fit:contain;display:block;background:var(--bg1)">':'')
-      +'<div style="padding:'+(b.image?'10px 14px':'0')+';display:flex;align-items:center;gap:10px;flex:1">'
-      +'<div class="ban-content"><div class="ban-title">'+esc(b.title)+'</div><div class="ban-txt">'+esc(b.text)+'</div>'
-      +(b.ctaLabel&&b.ctaPage?'<div style="margin-top:6px"><button class="btn bg bsm" data-page="'+b.ctaPage+'" onclick="go(this.dataset.page)">'+esc(b.ctaLabel)+' →</button></div>':'')
-      +'</div>'
-      +(HR('officier')||HR('evenement')||HR('recrutement')||HR('formation')?'<button class="ban-close" data-id="'+b.id+'" onclick="dismissBanner(this.dataset.id)">✕</button>':'')
-      +'</div></div>';
-  }).join('');
   var extraBanHtml='';
-  if(extraBan.length){
-    extraBanHtml='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin-bottom:12px">';
+  if(typeof extraBan!=='undefined'&&extraBan.length>0){
+    extraBanHtml='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:10px">';
     extraBan.forEach(function(b){
-      extraBanHtml+='<div data-link="'+(b.ctaPage||'')+'" onclick="goDeep(this.dataset.link)" style="cursor:pointer;background:var(--bg3);border:1px solid var(--golddim);border-left:3px solid var(--gold);border-radius:2px;padding:8px 10px">'
+      extraBanHtml+='<div onclick="goDeep(this.dataset.link)" data-link="'+(b.ctaPage||'')+'" style="cursor:pointer;background:var(--bg3);border:1px solid var(--golddim);border-left:3px solid var(--gold);border-radius:3px;padding:8px 10px"><div style="font-size:9px;font-weight:700;color:var(--gold)">ANNONCE</div><div style="font-size:12px;font-weight:600;color:var(--tx1)">'+esc(b.title)+'</div></div>';
+    });
+    extraBanHtml+='</div>';
+  }
+  if(typeof extraBan!=='undefined'&&extraBan.length){
+    extraBanHtml='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:10px">';
+    extraBan.forEach(function(b){
+      extraBanHtml+='<div data-link="'+(b.ctaPage||'')+'" onclick="goDeep(this.dataset.link)" style="cursor:pointer;background:var(--bg3);border:1px solid var(--golddim);border-left:3px solid var(--gold);border-radius:3px;padding:8px 10px">'
         +'<div style="font-size:9px;font-weight:700;color:var(--gold)">ANNONCE</div>'
         +'<div style="font-size:12px;font-weight:600;color:var(--tx1)">'+esc(b.title)+'</div>'
         +'</div>';
     });
     extraBanHtml+='</div>';
   }
-
-  // ── À la une ────────────────────────────────────────────────
-  var featuredHTML='';
-  var featuredItems=[];
-  (DB.events||[]).filter(function(e){return e.featured;}).forEach(function(e){
-    featuredItems.push({type:'Événement',title:e.title+(e.date?' ('+e.date+')':''),action:'cal:'+e.id,color:'var(--gold)',icon:'📅'});
-  });
-  (DB.tournaments||[]).filter(function(t){return t.featured;}).forEach(function(t){
-    featuredItems.push({type:'Tournoi',title:t.title+(t.date?' ('+t.date+')':''),action:'cal:tour:'+t.id,color:'#ce93d8',icon:'🏆'});
-  });
-  var smallItems=[];
-  (DB.forumThreads||[]).filter(function(t){return t.featured&&typeof TAG_LBL!=='undefined'&&Object.keys(TAG_LBL).indexOf(t.tag)>=0;}).forEach(function(t){
-    smallItems.push({type:'Forum',title:t.title,action:'for:'+t.id,color:'var(--teal2)',icon:'💬'});
-  });
-  (DB.forumThreads||[]).filter(function(t){return t.featured&&typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(t.tag)>=0;}).forEach(function(t){
-    smallItems.push({type:'Discussion',title:t.title,action:'form:'+t.id,color:'#ce93d8',icon:'📚'});
-  });
-  (DB.formations||[]).filter(function(f){return f.featured;}).forEach(function(f){
-    smallItems.push({type:'Formation',title:f.title,action:'form:'+f.id,color:'#ce93d8',icon:'📋'});
-  });
-  var bigEvents=featuredItems.slice(0,4);
-  var allSmall=smallItems.concat(featuredItems.slice(4).map(function(i){return i;}));
-  bigEvents.forEach(function(item){
-    featuredHTML+='<div class="home-card hc-gold" style="margin-bottom:8px">'
-      +'<div class="hc-head" style="border-left:3px solid '+item.color+'"><span style="font-size:11px;color:'+item.color+';font-weight:700;font-family:Cinzel,serif;letter-spacing:1px">'+item.icon+' '+item.type.toUpperCase()+'</span>'
-      +'<span class="ptl" style="margin-left:8px;font-size:12px">'+esc(item.title)+'</span>'
-      +'<button class="btn bol bsm" style="margin-left:auto;flex-shrink:0" data-link="'+item.action+'" onclick="goDeep(this.dataset.link)">Voir →</button>'
+  var banHtml=actBan.map(function(b){
+    return'<div class="banner ban-'+esc(b.type||'info')+'" style="'+(b.image?'flex-direction:column;align-items:stretch;padding:0;overflow:hidden':'')+'">'
+      +(b.image?'<img src="'+esc(b.image)+'" style="width:100%;max-height:400px;object-fit:contain;display:block;border-radius:3px 3px 0 0;background:var(--bg1)">':'')
+      +'<div style="padding:'+(b.image?'12px 16px':'0')+';display:flex;align-items:center;gap:12px;flex:1">'
+      +'<div class="ban-content"><div class="ban-title">'+esc(b.title)+'</div><div class="ban-txt">'+esc(b.text)+'</div>'
+      +(b.ctaLabel&&b.ctaPage?'<div style="margin-top:8px"><button class="btn bg bsm" data-page="'+b.ctaPage+'" onclick="go(this.dataset.page)">'+esc(b.ctaLabel)+' \u2192</button></div>':'')
+      +'</div>'
+      +(HR('officier')||HR('evenement')||HR('recrutement')||HR('formation')?'<button class="ban-close" data-id="'+b.id+'" onclick="dismissBanner(this.dataset.id)">✕</button>':'')
       +'</div></div>';
-  });
-  if(allSmall.length){
-    featuredHTML+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin-bottom:14px">';
-    allSmall.forEach(function(item){
-      featuredHTML+='<div onclick="goDeep(this.dataset.link)" data-link="'+item.action+'" style="cursor:pointer;background:var(--bg3);border:1px solid var(--b1);border-left:3px solid '+item.color+';border-radius:2px;padding:8px 10px">'
-        +'<div style="font-size:9px;font-weight:700;color:'+item.color+'">'+item.icon+' '+esc(item.type).toUpperCase()+'</div>'
-        +'<div style="font-size:12px;font-weight:600;color:var(--tx1);line-height:1.3;margin-top:3px">'+esc(item.title)+'</div>'
-        +'<div style="font-size:10px;color:var(--teal2);margin-top:3px">Voir →</div>'
-        +'</div>';
-    });
-    featuredHTML+='</div>';
-  }
+  }).join('');
 
-  // ── Guerres ouvertes ────────────────────────────────────────
+  var actifs=DB.members.filter(function(m){return m.status==='actif'&&!m.isGuest;}).length;
+  var gardes=DB.members.filter(function(m){return m.sanguin;}).length;
+  var onlineCount=(DB.presence||[]).filter(function(p){
+    return p.last_seen && (Date.now()-new Date(p.last_seen).getTime()) < 2*60*1000;
+  }).length;
+  var statsH='<div class="stats-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">'    +'<div class="stat"><div class="sn">'+DB.members.length+'</div><div class="sl">Membres</div></div>'    +'<div class="stat"><div class="sn">'+actifs+'</div><div class="sl">Actifs</div></div>'    +'<div class="stat"><div class="sn">'+gardes+'</div><div class="sl">Gardes Sanguins</div></div>'    +'<div class="stat"><div class="sn" style="display:flex;align-items:center;justify-content:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:#66bb6a;display:inline-block;box-shadow:0 0 6px #66bb6a"></span>'+onlineCount+'</div><div class="sl">En ligne</div></div>'    +'</div>';
+  var evtHtml=''; // Retiré — les événements sont affichés via "À la une"
+
+  // Guerres ouvertes — affichage auto jusqu'à clôture
+  var openWars=(DB.voteWars||[]).filter(function(w){return w.status==='open'});
   var warHtml=openWars.map(function(w){
     var stats={present:0,absent:0};
     Object.values(w.votes||{}).forEach(function(v){if(v.vote==='present')stats.present++;else if(v.vote==='absent')stats.absent++;});
     var myVote=(w.votes||{})[CU.id];
-    return'<div class="home-card hc-red" style="margin-bottom:10px">'
-      +'<div class="hc-head"><span class="hc-icon">⚔️</span>'
-      +'<span class="hc-title">'+esc(w.title)+'</span>'
-      +'<span class="badge bc" style="font-size:9px">Vote ouvert</span>'
-      +(myVote?'<span class="badge '+(myVote.vote==='present'?'bok':'bof')+'" style="font-size:9px">'+(myVote.vote==='present'?'✅ Présent':'❌ Absent')+'</span>':'')
-      +'<div style="margin-left:auto"><button class="btn bg bsm" onclick="goVote()">Voter →</button></div>'
+    return'<div class="pan" style="margin-bottom:14px;border-left:3px solid var(--gold)">'
+      +'<div class="ph"><span style="font-size:16px;margin-right:8px">⚔️</span>'
+      +'<span class="ptl">'+esc(w.title)+'</span>'
+      +'<span class="badge bc" style="margin-left:8px;font-size:9px">Vote ouvert</span>'
+      +(myVote?'<span class="badge '+(myVote.vote==='present'?'bok':myVote.vote==='absent'?'bof':'bof')+'" style="margin-left:8px;font-size:9px">'+(myVote.vote==='present'?'✅ Présent':myVote.vote==='absent'?'❌ Absent':'')+'</span>':'')
+      +'<div style="margin-left:auto"><button class="btn bg bsm" onclick="goVote()">Voter \u2192</button></div>'
       +'</div>'
-      +'<div class="hc-body" style="display:flex;gap:14px;font-size:12px;flex-wrap:wrap">'
+      +'<div style="padding:10px 18px;display:flex;gap:16px;font-size:12px;flex-wrap:wrap">'
       +'<span>📅 '+esc(w.date)+' à '+esc(w.time)+'</span>'
       +'<span style="color:#66bb6a">✅ '+stats.present+' présent(s)</span>'
       +'<span style="color:var(--red3)">❌ '+stats.absent+' absent(s)</span>'
       +'</div></div>';
   }).join('');
 
-  // ── Grille de navigation principale ─────────────────────────
-  var recBadge=pendingRec>0?'<span class="hc-badge-pill" style="background:var(--red2)">'+pendingRec+'</span>':'';
-  var voteBadge=unvotedWars.length?'<span class="hc-badge-pill" style="background:var(--red2)">!</span>':'';
+  // "À la une" — contenus épinglés par les responsables
+  var featuredHTML='';
+  // Formations à la une
+  (DB.formations||[]).filter(function(f){return f.featured;}).forEach(function(f){
+    featuredHTML+='<div class="pan" style="margin-bottom:14px;border-left:3px solid #64b5f6">'
+      +'<div class="ph"><span style="font-size:14px;margin-right:8px">📚</span>'
+      +'<span class="ptl" style="color:#64b5f6">Formation — '+esc(f.title)+'</span>'
+      +'<button class="btn bol bsm" style="margin-left:auto" data-fid="'+f.id+'" onclick="goDeepForm(this)">Voir \u2192</button>'
+      +'</div>'
+      +(f.image?'<img src="'+esc(f.image)+'" style="width:100%;max-height:120px;object-fit:cover">':'')
+      +(f.desc?'<div style="padding:10px 18px;font-size:13px;color:var(--tx2)">'+esc(f.desc)+'</div>':'')
+      +'</div>';
+  });
+  // Événements à la une
+  (DB.events||[]).filter(function(e){return e.featured;}).forEach(function(e){
+    featuredHTML+='<div class="pan" style="margin-bottom:14px;border-left:3px solid var(--gold)">'
+      +'<div class="ph"><span style="font-size:14px;margin-right:8px">📅</span>'
+      +'<span class="ptl">'+esc(e.title)+'</span>'
+      +'<button class="btn bol bsm" style="margin-left:auto" data-eid="'+e.id+'" onclick="goDeepCal(this)">Voir \u2192</button>'
+      +'</div>'
+      +'<div style="padding:10px 18px;font-size:12px;color:var(--tx3)">'+esc(e.date)+' à '+esc(e.time)+'</div>'
+      +'</div>';
+  });
+  // Threads forum à la une
+  (DB.forumThreads||[]).filter(function(t){return t.featured&&Object.keys(TAG_LBL).indexOf(t.tag)>=0;}).forEach(function(t){
+    featuredHTML+='<div class="pan" style="margin-bottom:14px;border-left:3px solid var(--teal2)">'
+      +'<div class="ph"><span style="font-size:14px;margin-right:8px">💬</span>'
+      +'<span class="ptl" style="color:var(--teal2)">Forum — '+esc(t.title)+'</span>'
+      +'<button class="btn bol bsm" style="margin-left:auto" data-tid="'+t.id+'" onclick="goDeepFor(this)">Voir \u2192</button>'
+      +'</div></div>';
+  });
+  // Discussions formation à la une
+  if(typeof TAG_LBL_FORM!=='undefined'){
+    (DB.forumThreads||[]).filter(function(t){
+      return t.featured&&Object.keys(TAG_LBL_FORM).indexOf(t.tag)>=0;
+    }).forEach(function(t){
+      featuredHTML+='<div class="pan" style="margin-bottom:14px;border-left:3px solid #64b5f6">'
+        +'<div class="ph"><span style="font-size:14px;margin-right:8px">📚</span>'
+        +'<span class="ptl" style="color:#64b5f6">Formation — '+esc(t.title)+'</span>'
+        +'<button class="btn bol bsm" style="margin-left:auto" data-tid="'+t.id+'" onclick="goDeepFormThread(this)">Lire \u2192</button>'
+        +'</div></div>';
+    });
+  }
 
-  var navGrid='<div class="home-nav-grid">'
-    // Membres
-    +'<div class="hnav-card" onclick="go(\'mbr\')" style="--hc:#e8943a">'
-    +'<div class="hnav-icon">🛡️</div>'
-    +'<div class="hnav-title">Membres</div>'
-    +'<div class="hnav-sub">'+actifs+' actifs</div>'
-    +'</div>'
-    // Groupes combat
-    +'<div class="hnav-card" onclick="go(\'grp\')" style="--hc:#ef5350">'
-    +'<div class="hnav-icon">⚔️</div>'
-    +'<div class="hnav-title">Groupes</div>'
-    +'<div class="hnav-sub">Combat</div>'
-    +'</div>'
-    // Vote guerre
-    +'<div class="hnav-card" onclick="go(\'vote\')" style="--hc:#ffd54f">'
-    +'<div class="hnav-icon">📋</div>'
-    +'<div class="hnav-title">Vote'+voteBadge+'</div>'
-    +'<div class="hnav-sub">'+openWars.length+' guerre(s)</div>'
-    +'</div>'
-    // Forum
-    +'<div class="hnav-card" onclick="go(\'for\')" style="--hc:#7090a8">'
-    +'<div class="hnav-icon">💬</div>'
-    +'<div class="hnav-title">Forum</div>'
-    +'<div class="hnav-sub">Discussions</div>'
-    +'</div>'
-    // Formation
-    +'<div class="hnav-card" onclick="go(\'form\')" style="--hc:#ce93d8">'
-    +'<div class="hnav-icon">📖</div>'
-    +'<div class="hnav-title">Formation</div>'
-    +'<div class="hnav-sub">Tactiques</div>'
-    +'</div>'
-    // Calendrier
-    +'<div class="hnav-card" onclick="go(\'cal\')" style="--hc:#80cbc4">'
-    +'<div class="hnav-icon">📅</div>'
-    +'<div class="hnav-title">Calendrier</div>'
-    +'<div class="hnav-sub">Événements</div>'
-    +'</div>'
-    // Mes unités
-    +'<div class="hnav-card" onclick="go(\'unit\')" style="--hc:#64b5f6">'
-    +'<div class="hnav-icon">🗡️</div>'
-    +'<div class="hnav-title">Mes unités</div>'
-    +'<div class="hnav-sub">15 max</div>'
-    +'</div>'
-    // Recrutement (admin only)
-    +(HR('recrutement')||HR('officier')
-      ?'<div class="hnav-card" onclick="go(\'rec\')" style="--hc:#ff8a65">'
-       +'<div class="hnav-icon">📯</div>'
-       +'<div class="hnav-title">Recrutement'+recBadge+'</div>'
-       +'<div class="hnav-sub">Candidatures</div>'
-       +'</div>'
-      :'')
-    +'</div>';
+  featuredHTML='';
+  var featuredItems=[];
 
-  // ── Stats en haut ────────────────────────────────────────────
-  var statsH='<div class="home-stats">'
-    +'<div class="hstat"><div class="hstat-n">'+DB.members.length+'</div><div class="hstat-l">Membres</div></div>'
-    +'<div class="hstat"><div class="hstat-n">'+actifs+'</div><div class="hstat-l">Actifs</div></div>'
-    +'<div class="hstat"><div class="hstat-n">'+gardes+'</div><div class="hstat-l">Sanguins</div></div>'
-    +'<div class="hstat"><div class="hstat-n" style="display:flex;align-items:center;justify-content:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#66bb6a;display:inline-block"></span>'+onlineCount+'</div><div class="hstat-l">En ligne</div></div>'
-    +'</div>';
+  // Événements → grandes bannières (max 4)
+  (DB.events||[]).filter(function(e){return e.featured;}).forEach(function(e){
+    featuredItems.push({type:'event',label:'Événement',title:e.title+(e.date?' ('+e.date+')':''),action:'cal:'+e.id,color:'var(--gold)'});
+  });
 
-  return urgentWarBanner+statsH+navGrid+warHtml+myGroupHTML+banHtml+extraBanHtml+featuredHTML+hillHTML();
+  // Tournois à la une → grandes bannières (avec événements)
+  (DB.tournaments||[]).filter(function(t){return t.featured;}).forEach(function(t){
+    featuredItems.push({type:'event',label:'Tournoi',title:'🏆 '+t.title+(t.date?' ('+t.date+')':''),action:'cal:tour:'+t.id,color:'#ce93d8'});
+  });
+
+  // Forum, Formation, Discussion → toujours petites cartes
+  var smallItems=[];
+  (DB.forumThreads||[]).filter(function(t){
+    return t.featured&&typeof TAG_LBL!=='undefined'&&Object.keys(TAG_LBL).indexOf(t.tag)>=0;
+  }).forEach(function(t){
+    smallItems.push({type:'Forum',title:t.title,action:'for:'+t.id,color:'var(--teal2)',icon:'💬'});
+  });
+  (DB.forumThreads||[]).filter(function(t){
+    return t.featured&&typeof TAG_LBL_FORM!=='undefined'&&Object.keys(TAG_LBL_FORM).indexOf(t.tag)>=0;
+  }).forEach(function(t){
+    smallItems.push({type:'Discussion',title:t.title,action:'form:'+t.id,color:'#ce93d8',icon:'📚'});
+  });
+  (DB.formations||[]).filter(function(f){return f.featured;}).forEach(function(f){
+    smallItems.push({type:'Formation',title:f.title,action:'form:'+f.id,color:'#ce93d8',icon:'📋'});
+  });
+
+  // Grandes bannières manuelles (max 4) — warHtml et myGroupHTML gérés séparément
+  var bigEvents=featuredItems.slice(0,4);
+  var overflowEvents=featuredItems.slice(4).map(function(i){i.icon='📅';return i;});
+  var allSmall=smallItems.concat(overflowEvents);
+
+  // Render grandes bannières
+  bigEvents.forEach(function(item){
+    featuredHTML+='<div class="pan" style="margin-bottom:10px;border-left:3px solid '+item.color+'">'
+      +'<div class="ph" style="padding:10px 14px">'
+      +'<span style="font-size:11px;color:'+item.color+';font-weight:700">📅 Événement</span>'
+      +'<span class="ptl" style="font-size:13px;margin-left:8px">'+esc(item.title)+'</span>'
+      +'<button class="btn bol bsm" style="margin-left:auto;flex-shrink:0" data-link="'+item.action+'" onclick="goDeep(this.dataset.link)">Voir →</button>'
+      +'</div></div>';
+  });
+
+  // Render petites cartes
+  if(allSmall.length>0){
+    featuredHTML+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:10px">';
+    allSmall.forEach(function(item){
+      featuredHTML+='<div onclick="goDeep(this.dataset.link)" data-link="'+item.action+'"'
+        +' style="cursor:pointer;background:var(--bg3);border:1px solid var(--b1);border-left:3px solid '+item.color+';border-radius:3px;padding:8px 10px;display:flex;flex-direction:column;gap:4px">'
+        +'<div style="font-size:9px;font-weight:700;color:'+item.color+'">'+esc(item.icon||'')+'  '+esc(item.type).toUpperCase()+'</div>'
+        +'<div style="font-size:12px;font-weight:600;color:var(--tx1);line-height:1.3">'+esc(item.title)+'</div>'
+        +'<div style="font-size:10px;color:var(--teal2);margin-top:2px">Voir →</div>'
+        +'</div>';
+    });
+    featuredHTML+='</div>';
+  }
+
+  // Bandeau d'urgence — affiché 48h avant la guerre si pas encore voté
+  var urgentWarBanner='';
+  var openWarsU=(DB.voteWars||[]).filter(function(w){return w.status==='open';});
+  var unvotedWars=openWarsU.filter(function(w){
+    if(w.votes&&w.votes[CU.id]) return false;
+    if(!w.date) return false;
+    var warTime=parseLocalDateTime(w.date,w.time);
+    var hoursUntil=(warTime-Date.now())/(1000*60*60);
+    return hoursUntil>=0&&hoursUntil<=48;
+  });
+  if(unvotedWars.length){
+    urgentWarBanner='<div style="background:rgba(139,26,10,.25);border:2px solid var(--red2);border-radius:4px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+      +'<span style="font-size:22px">⚔️</span>'
+      +'<div style="flex:1;min-width:200px">'
+      +'<div style="font-family:Cinzel,serif;font-size:13px;font-weight:700;color:var(--red3);letter-spacing:1px">VOTE EN ATTENTE</div>'
+      +'<div style="font-size:12px;color:var(--tx2);margin-top:3px">'+unvotedWars.map(function(w){return esc(w.title)+' — '+esc(w.date||'');}).join(' · ')+'</div>'
+      +'</div>'
+      +'<button class="btn bg bsm" onclick="go(\'vote\')" style="background:var(--red2);border-color:var(--red2);flex-shrink:0">Voter maintenant →</button>'
+      +'</div>';
+  }
+  return urgentWarBanner+statsH+warHtml+myGroupHTML+banHtml+extraBanHtml+featuredHTML+hillHTML();
 }
 
 function hillHTML(){
@@ -4392,55 +4404,37 @@ function openGrpBuilder(){
     alert('Pas assez de présents pour générer des groupes (minimum 5).');return;
   }
 
-  // Calculer le nb de groupes attendus
-  var nbGroups=3+Math.ceil(Math.max(0,available.length-15)/5); // Porte+Muraille+Brèche + Refill
-  if(available.length<5) nbGroups=1;
-
   var html='<div style="font-size:13px">'
     +'<div style="background:var(--bg1);border:1px solid var(--golddim);border-radius:4px;padding:10px 14px;margin-bottom:14px">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:4px">⚙️ Comment fonctionne le constructeur ?</div>'
+    +'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px">⚙️ Comment fonctionne le constructeur ?</div>'
     +'<div style="font-size:11px;color:var(--tx2);line-height:1.6">'
-    +'<b>1.</b> Chaque joueur est classé selon ses unités méta (Prio 1 en priorité).<br>'
-    +'<b>2.</b> Chaque groupe respecte la composition : <b>6 Boucliers · 4 Anti-cav · 2 Exotiques · 2 Pushers · 1 Cav</b> (sur 15 unités).<br>'
-    +'<b>3.</b> Choisissez un type global puis ajustez les exceptions par groupe si besoin.<br>'
-    +'<b>4.</b> Les chefs de groupe et unités sont assignés automatiquement. Tout reste modifiable ensuite.'
+    +'<b>1.</b> Chaque joueur est classé selon ses unités les plus fortes (méta Prio 1 en priorité).<br>'
+    +'<b>2.</b> Les joueurs sont répartis par catégorie (Bouclier, Anti-cav, Cavalerie…) en respectant les <b>pourcentages cibles</b> du type de guerre.<br>'
+    +'<b>3.</b> Si un joueur dépasse le quota de sa catégorie, ses autres unités sont analysées pour le placer ailleurs.<br>'
+    +'<b>4.</b> Les groupes sont formés : <b>Porte</b> (Exotiques/Pushers), <b>Muraille</b> (Boucliers/Anti-cav), <b>Brèche</b> (Pushers/Anti-cav), <b>Refill</b> (reste, groupes de 5).<br>'
+    +'<b>5.</b> Les chefs de groupe sont automatiquement désignés leaders. Les groupes restent <b>modifiables manuellement</b> après génération.'
     +'</div></div>'
-    +'<div style="margin-bottom:12px;color:var(--tx3);font-size:11px">'+available.length+' joueurs disponibles · RL exclus · ~'+nbGroups+' groupe(s) attendu(s)</div>'
-    +'<div class="fg"><label class="fl">Mode de sélection</label>'
-    +'<div style="display:flex;gap:8px;margin-bottom:12px">'
-    +'<div id="bm-mix" data-mode="mix" onclick="selectBuildMode(this.dataset.mode)" style="flex:1;padding:10px;border:2px solid var(--gold);border-radius:4px;cursor:pointer;text-align:center;background:rgba(201,162,39,.1)">'
-    +'<div style="font-size:16px">🔀</div><div style="font-size:12px;font-weight:700;color:var(--gold)">Mixte</div>'
-    +'<div style="font-size:10px;color:var(--tx3)">Tous niveaux mélangés</div></div>'
-    +'<div id="bm-expert" data-mode="expert" onclick="selectBuildMode(this.dataset.mode)" style="flex:1;padding:10px;border:2px solid var(--b2);border-radius:4px;cursor:pointer;text-align:center;background:var(--bg1)">'
-    +'<div style="font-size:16px">⭐</div><div style="font-size:12px;font-weight:700;color:var(--tx2)">Expert</div>'
-    +'<div style="font-size:10px;color:var(--tx3)">1200+ en groupes 1·2·3</div></div>'
-    +'</div></div>'
-    +'<div class="fg"><label class="fl">Type global</label>'
-    +'<div style="display:flex;gap:8px;margin-bottom:12px">'
-    +'<div id="bt-ville" data-type="ville" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:10px;border:2px solid var(--gold);border-radius:4px;cursor:pointer;text-align:center;background:rgba(201,162,39,.1)">'
-    +'<div style="font-size:16px">🏰</div><div style="font-size:12px;font-weight:700;color:var(--gold)">Ville</div>'
+    +'<div style="margin-bottom:14px;color:var(--tx3);font-size:11px">'+available.length+' joueurs disponibles · RL exclus</div>'
+    +'<div class="fg"><label class="fl">Type de guerre</label>'
+    +'<div style="display:flex;gap:8px">'
+    +'<div id="bt-ville" data-type="ville" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:12px;border:2px solid var(--gold);border-radius:4px;cursor:pointer;text-align:center;background:rgba(201,162,39,.1)">'
+    +'<div style="font-size:18px">🏰</div><div style="font-size:12px;font-weight:700;color:var(--gold)">Ville</div>'
     +'<div style="font-size:10px;color:var(--tx3)">Muraille · Porte · Brèche · Refill</div></div>'
-    +'<div id="bt-village" data-type="village" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:10px;border:2px solid var(--b2);border-radius:4px;cursor:pointer;text-align:center;background:var(--bg1)">'
-    +'<div style="font-size:16px">🌿</div><div style="font-size:12px;font-weight:700;color:var(--tx2)">Village</div>'
+    +'<div id="bt-village" data-type="village" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:12px;border:2px solid var(--b2);border-radius:4px;cursor:pointer;text-align:center;background:var(--bg1)">'
+    +'<div style="font-size:18px">🌿</div><div style="font-size:12px;font-weight:700;color:var(--tx2)">Village</div>'
     +'<div style="font-size:10px;color:var(--tx3)">Cavalerie prioritaire</div></div>'
     +'</div></div>'
-    +'<div id="exceptions-block" style="display:none;margin-bottom:12px">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:6px">🔀 Exceptions par groupe <span style="color:var(--tx4);font-weight:400">(optionnel)</span></div>'
-    +'<div id="exceptions-list"></div>'
-    +'</div>'
-    +'<div id="build-preview" style="margin-top:8px;color:var(--tx3);font-size:12px;font-style:italic">Choisissez un type pour voir la prévisualisation.</div>'
+    +'<div id="build-preview" style="margin-top:12px;color:var(--tx3);font-size:12px;font-style:italic">Choisissez un type pour voir la prévisualisation.</div>'
     +'</div>';
 
   window._buildType=null;
-  window._buildMode='mix';
   window._buildPresents=available;
-  window._buildExceptions={};
 
   OM('⚔️ Constructeur de Groupes', html, [
     {lbl:'Annuler',cls:'bol',fn:CM},
     {lbl:'⚔️ Générer les groupes',cls:'btn bg',fn:function(){
       if(!window._buildType){alert('Choisissez un type de guerre.');return;}
-      buildGroups(window._buildType, window._buildPresents, window._buildExceptions||{}, window._buildMode||'mix');
+      buildGroups(window._buildType, window._buildPresents);
       CM();
     }}
   ]);
@@ -4456,72 +4450,26 @@ function selectBuildType(type){
     vgEl.style.borderColor=type==='village'?'var(--gold)':'var(--b2)';
     vgEl.style.background=type==='village'?'rgba(201,162,39,.1)':'var(--bg1)';
   }
-  var members=window._buildPresents||[];
-  var groups=simulateBuild(type,members,window._buildMode||'mix');
-  window._buildSimulated=groups;
-
-  // Afficher les exceptions
-  var excBlock=document.getElementById('exceptions-block');
-  var excList=document.getElementById('exceptions-list');
-  if(excBlock&&excList){
-    excBlock.style.display='block';
-    var altType=type==='ville'?'village':'ville';
-    var altLabel=type==='ville'?'🌿 Village':'🏰 Ville';
-    excList.innerHTML=groups.map(function(g,i){
-      var isRefill=g.obj==='refill';
-      var objLabel=isRefill?'🔄 Refill':(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].icon+' '+OBJECTIVES[g.obj].label:g.obj);
-      var borderCol=isRefill?'var(--teal2)':(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].border:'var(--b2)');
-      return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 10px;background:var(--bg1);border-radius:3px;border-left:3px solid '+borderCol+'">'
-        +'<span style="font-size:11px;font-weight:700;color:var(--tx2);min-width:110px">G'+(i+1)+' — '+objLabel+'</span>'
-        +'<span style="font-size:10px;color:var(--tx3)">'+g.members.map(function(m){return esc(m.username);}).join(', ')+'</span>'
-        +(isRefill?''
-          :'<label style="margin-left:auto;font-size:10px;color:var(--tx3);display:flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer">'
-          +'<input type="checkbox" onchange="setBuildException('+i+',this.checked,this.dataset.alt)" data-alt="'+altType+'" style="cursor:pointer"> Exc. : '+altLabel
-          +'</label>')
-        +'</div>';
-    }).join('');
-  }
-
   // Prévisualisation
   var prev=document.getElementById('build-preview');
-  if(prev){
-    var html='<div style="font-size:11px;color:var(--tx3);margin-bottom:4px">Prévisualisation (type global — avant exceptions) :</div><div>';
-    groups.forEach(function(g){
-      var obj=OBJECTIVES[g.obj];
-      html+='<div style="margin-bottom:4px;padding:5px 8px;background:var(--bg1);border-radius:3px;border-left:3px solid '+(obj?obj.border:'var(--b2)')+'">'
-        +'<span style="font-size:11px;font-weight:700;color:'+(obj?obj.color:'var(--tx2)')+'">'+(obj?obj.icon+' '+obj.label:'🔄 Refill')+'</span>'
-        +' <span style="font-size:10px;color:var(--tx3)">'+g.members.map(function(m){return esc(m.username);}).join(', ')+'</span>'
-        +'</div>';
-    });
-    html+='</div>';
-    prev.innerHTML=html;
-  }
+  if(!prev)return;
+  var members=window._buildPresents||[];
+  var groups=simulateBuild(type,members);
+  var html='<div style="margin-top:4px">';
+  groups.forEach(function(g){
+    html+='<div style="margin-bottom:6px;padding:6px 10px;background:var(--bg1);border-radius:3px;border-left:3px solid '+(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].border:'var(--b2)')+'">'
+      +'<span style="font-size:11px;font-weight:700;color:'+(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].color:'var(--tx2)')+'">'+( OBJECTIVES[g.obj]?OBJECTIVES[g.obj].icon+' '+OBJECTIVES[g.obj].label:'🔄 Refill')+' ('+g.members.length+' joueurs)</span>'
+      +'<div style="font-size:10px;color:var(--tx3);margin-top:3px">'+g.members.map(function(m){return esc(m.username);}).join(', ')+'</div>'
+      +'</div>';
+  });
+  html+='</div>';
+  prev.innerHTML=html;
 }
 
-function selectBuildMode(mode){
-  window._buildMode=mode;
-  var mixEl=document.getElementById('bm-mix');
-  var expEl=document.getElementById('bm-expert');
-  if(mixEl&&expEl){
-    mixEl.style.borderColor=mode==='mix'?'var(--gold)':'var(--b2)';
-    mixEl.style.background=mode==='mix'?'rgba(201,162,39,.1)':'var(--bg1)';
-    expEl.style.borderColor=mode==='expert'?'var(--gold)':'var(--b2)';
-    expEl.style.background=mode==='expert'?'rgba(201,162,39,.1)':'var(--bg1)';
-  }
-  // Re-simuler si un type est déjà sélectionné
-  if(window._buildType) selectBuildType(window._buildType);
-}
-
-function setBuildException(idx, checked, altType){
-  window._buildExceptions=window._buildExceptions||{};
-  if(checked) window._buildExceptions[idx]=altType;
-  else delete window._buildExceptions[idx];
-}
-
-// Composition cible par groupe (5 joueurs × 3 unités = 15 unités)
+// Pourcentages cibles par catégorie
 var PCT_TARGETS = {
-  ville:   {Bouclier:6, 'Anti-cav':4, Cavalerie:1, Exotique:2, Pusher:2, Ranged:0, Utilitaire:0},
-  village: {Bouclier:5, 'Anti-cav':4, Cavalerie:3, Exotique:2, Pusher:2, Ranged:0, Utilitaire:0}
+  ville:   {Bouclier:0.40, 'Anti-cav':0.25, Cavalerie:0.05, Exotique:0.15, Pusher:0.15, Ranged:0, Utilitaire:0},
+  village: {Bouclier:0.30, 'Anti-cav':0.25, Cavalerie:0.20, Exotique:0.10, Pusher:0.15, Ranged:0, Utilitaire:0}
 };
 
 // Objectifs Ville: catégories associées
@@ -4544,14 +4492,13 @@ function getBestCat(m, type){
   }
   // Fallback: première unité dans ses unités perso
   if(units.length>0){
-    var meta2=(DB.unitMeta||UNIT_META)[units[0]];
+    var meta2=UNIT_META[units[0]];
     if(meta2) return meta2.cat;
   }
   return 'Pusher'; // défaut
 }
 
-function simulateBuild(type, members, mode){
-  mode=mode||'mix';
+function simulateBuild(type, members){
   var n=members.length;
   var targets=PCT_TARGETS[type]||PCT_TARGETS.ville;
 
@@ -4615,62 +4562,27 @@ function simulateBuild(type, members, mode){
   var groups=[];
   var remaining=members.slice();
 
-  // Identifier chefs de groupe et gardes sanguins
-  var chefs=members.filter(function(m){return m.chefGroupe;});
-  var sanguins=members.filter(function(m){return m.sanguin;});
-
-  // Mode expert: séparer joueurs 1200+ et les autres
-  // Chefs et sanguins sont TOUJOURS dans eliteMembers (groupes 1,2,3)
-  var eliteMembers=members.slice(), normalMembers=[];
-  if(mode==='expert'){
-    eliteMembers=members.filter(function(m){return (m.playerLevel||0)>=1200||m.chefGroupe||m.sanguin;});
-    normalMembers=members.filter(function(m){return (m.playerLevel||0)<1200&&!m.chefGroupe&&!m.sanguin;});
-    if(eliteMembers.length<15){
-      var needed=15-eliteMembers.length;
-      var extra=normalMembers.slice(0,needed);
-      eliteMembers=eliteMembers.concat(extra);
-      normalMembers=normalMembers.slice(needed);
-    }
-  } else {
-    // Mode mixte: seuls les chefs de groupe sont prioritaires pour groupes 1,2,3
-    // Les sanguins sont mélangés normalement
-    var chefMembers=members.filter(function(m){return m.chefGroupe;});
-    var otherMembers=members.filter(function(m){return !m.chefGroupe;});
-    eliteMembers=chefMembers.concat(otherMembers);
-  }
-
   if(type==='ville'){
-    var chefsUsed=[];
     ['porte','muraille','breche'].forEach(function(obj){
       var cats=OBJ_CATS[obj];
+      // Sélectionner 5 joueurs des catégories correspondantes
       var pool=[];
-      var poolSource=mode==='expert'?eliteMembers:eliteMembers;
       cats.forEach(function(c){
         (catBuckets[c]||[]).forEach(function(m){
-          if(remaining.indexOf(m)>=0&&poolSource.indexOf(m)>=0) pool.push(m);
+          if(remaining.indexOf(m)>=0) pool.push(m);
         });
       });
-      if(pool.length<5){
-        remaining.forEach(function(m){if(pool.indexOf(m)<0)pool.push(m);});
-      }
-      // Trier: chefs > sanguins > score unités
+      // Trier par score d'unité pour cet objectif
       var priority=OBJ_UNITS.ville[obj]||[];
-      pool.sort(function(a,b){
-        var sanguinBonus=mode==='expert'?50:0;
-        var wa=(a.chefGroupe?100:0)+(a.sanguin?sanguinBonus:0)+memberUnitScore(a,priority);
-        var wb=(b.chefGroupe?100:0)+(b.sanguin?sanguinBonus:0)+memberUnitScore(b,priority);
-        return wb-wa;
-      });
+      pool.sort(function(a,b){return memberUnitScore(b,priority)-memberUnitScore(a,priority);});
       var grp=pool.slice(0,5);
-      // S'assurer qu'un chef non encore utilisé est dans le groupe comme leader
-      var grpChef=grp.find(function(m){return m.chefGroupe&&chefsUsed.indexOf(m.id)<0;});
-      if(!grpChef){
-        var extChef=remaining.find(function(m){return m.chefGroupe&&chefsUsed.indexOf(m.id)<0&&grp.indexOf(m)<0;});
-        if(extChef){grp.pop();grp.unshift(extChef);}
-        grpChef=grp.find(function(m){return m.chefGroupe;});
+      // Ajouter un chef si possible
+      var chef=grp.find(function(m){return m.chefGroupe;});
+      if(!chef){
+        var extChef=remaining.find(function(m){return m.chefGroupe&&grp.indexOf(m)<0;});
+        if(extChef&&grp.length<5) grp.unshift(extChef);
       }
-      if(grpChef) chefsUsed.push(grpChef.id);
-      groups.push({obj:obj,members:grp,leaderId:grpChef?grpChef.id:(grp[0]?grp[0].id:null)});
+      groups.push({obj:obj,members:grp});
       remaining=remaining.filter(function(m){return grp.indexOf(m)<0;});
     });
     // Refill — reste en groupes de 5
@@ -4697,47 +4609,29 @@ function simulateBuild(type, members, mode){
 function getBestPrio(m){
   var units=(m.units||[]).map(function(u){return u.name;});
   var best=99;
-  units.forEach(function(u){var meta=(DB.unitMeta||UNIT_META)[u];if(meta&&meta.prio<best)best=meta.prio;});
+  units.forEach(function(u){var meta=UNIT_META[u];if(meta&&meta.prio<best)best=meta.prio;});
   return best;
 }
 
-// Composition cible par objectif (15 unités par groupe = 5 joueurs × 3 unités)
-// Chaque rôle indique le nb d'UNITÉS requis (pas de joueurs)
+// Composition cible par objectif: {role: [unités prioritaires]}
 var OBJ_ROLES = {
   porte: [
-    {role:'Bouclier', count:6, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Prévôts lanciers','Paladins Symmachéens']},
-    {role:'Anti-cav',  count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
-    {role:'Exotique',  count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne']},
-    {role:'Pusher',    count:2, units:['Berserkers','Claymores','Fauchefers','Skjaldmös','Zélote']},
-    {role:'Cavalerie', count:1, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs']}
+    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
+    {role:'Anti-cav',  count:1, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
+    {role:'Exotique',  count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne','Grenadiers de Shenji','Berserkers','Claymores']}
   ],
   muraille: [
-    {role:'Bouclier', count:6, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Prévôts lanciers','Paladins Symmachéens']},
-    {role:'Anti-cav',  count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
-    {role:'Exotique',  count:2, units:['Grenadiers de Shenji','Milice Zykalienne','Siphonaros']},
-    {role:'Pusher',    count:2, units:['Fauchefers','Berserkers','Claymores','Skjaldmös','Zélote']},
-    {role:'Cavalerie', count:1, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs']}
+    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
+    {role:'Anti-cav',  count:2, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
+    {role:'Exotique',  count:1, units:['Grenadiers de Shenji','Milice Zykalienne','Equipe de Lionroar','Siphonaros','Berserkers','Claymores']}
   ],
   breche: [
-    {role:'Bouclier', count:6, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Prévôts lanciers','Paladins Symmachéens']},
-    {role:'Anti-cav',  count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
-    {role:'Exotique',  count:2, units:['Siphonaros','Equipe de Lionroar','Milice Zykalienne']},
-    {role:'Pusher',    count:2, units:['Fauchefers','Berserkers','Claymores','Skjaldmös','Zélote']},
-    {role:'Cavalerie', count:1, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs']}
+    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
+    {role:'Anti-cav',  count:1, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
+    {role:'Exotique',  count:2, units:['Siphonaros','Equipe de Lionroar','Berserkers','Claymores','Milice Zykalienne','Grenadiers de Shenji']}
   ],
   refill: [
-    {role:'Bouclier', count:6, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Prévôts lanciers']},
-    {role:'Anti-cav',  count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers']},
-    {role:'Exotique',  count:1, units:['Grenadiers de Shenji','Siphonaros','Milice Zykalienne']},
-    {role:'Pusher',    count:3, units:['Fauchefers','Berserkers','Claymores','Skjaldmös']},
-    {role:'Cavalerie', count:1, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs']}
-  ],
-  village_grp: [
-    {role:'Bouclier', count:5, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Prévôts lanciers']},
-    {role:'Anti-cav',  count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Lanciers avec esponton']},
-    {role:'Cavalerie', count:3, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs','Coutiliers','Pistoleros Reitar','Éclaireurs tête-de-fer']},
-    {role:'Exotique',  count:2, units:['Milice Zykalienne','Grenadiers de Shenji','Siphonaros']},
-    {role:'Pusher',    count:1, units:['Fauchefers','Berserkers','Claymores']}
+    {role:'any', count:5, units:[]}
   ]
 };
 
@@ -4790,24 +4684,16 @@ function assignMemberToRole(m, roleSlots){
   return bestRole;
 }
 
-function buildGroups(type, members, exceptions, mode){
-  mode=mode||'mix';
-  exceptions=exceptions||{};
-  var groups=simulateBuild(type,members,mode);
+function buildGroups(type, members){
+  var groups=simulateBuild(type,members);
+  var warGroups=DB.groups.filter(function(x){return x.warId===GRP_WAR_ID&&!x.archived;});
   var usedOrders=warGroups.map(function(x){return x.order||0;});
   var nextOrder=1;while(usedOrders.indexOf(nextOrder)>=0)nextOrder++;
 
   var objToType={'porte':'elite','muraille':'elite','breche':'standard','refill':'refill'};
 
-  groups.forEach(function(grp,grpIdx){
-    // Appliquer l'exception de type si définie
-    var grpType=exceptions[grpIdx]||type;
-    var grpRoles=OBJ_ROLES[grp.obj]||OBJ_ROLES.refill;
-    if(grpType!==type&&grp.obj!=='refill'){
-      // Exception: utiliser composition Village pour ce groupe
-      grpRoles=OBJ_ROLES.village_grp||OBJ_ROLES.refill;
-    }
-    var chef=grp.leaderId?{id:grp.leaderId}:(grp.members.find(function(m){return m.chefGroupe;})||grp.members[0]);
+  groups.forEach(function(grp){
+    var chef=grp.members.find(function(m){return m.chefGroupe;})||grp.members[0];
     var unitAssignments={};
     var classAssignments={};
 
@@ -6712,65 +6598,12 @@ function pgParam(){
       +'</div><div class="pb"><p class="td tsm">Historique des changements de rôles et actions sensibles.</p></div></div>'
     : '';
 
-  // Bloc gestion Unités META (officiers+)
-  var unitMetaBlock='';
-  if(HR('officier')){
-    var cats=['Bouclier','Anti-cav','Cavalerie','Exotique','Pusher','Ranged','Utilitaire'];
-    var meta=DB.unitMeta||UNIT_META;
-    var unitRows=Object.keys(meta).sort().map(function(name){
-      var u=meta[name];
-      return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 0;border-bottom:1px solid var(--b1)">'
-        +'<span style="font-size:12px;color:var(--tx1);flex:1">'+esc(name)+'</span>'
-        +'<select data-unit="'+esc(name)+'" data-field="cat" onchange="updateUnitMeta(this)" style="font-size:11px;background:var(--bg1);border:1px solid var(--b1);color:var(--tx2);padding:2px 4px;border-radius:2px">'
-        +cats.map(function(c){return'<option value="'+c+'"'+(u.cat===c?' selected':'')+'>'+c+'</option>';}).join('')
-        +'</select>'
-        +'<select data-unit="'+esc(name)+'" data-field="prio" onchange="updateUnitMeta(this)" style="font-size:11px;background:var(--bg1);border:1px solid var(--b1);color:var(--tx2);padding:2px 4px;border-radius:2px">'
-        +[1,2,3].map(function(p){return'<option value="'+p+'"'+(u.prio===p?' selected':'')+'>Prio '+p+'</option>';}).join('')
-        +'</select>'
-        +'</div>';
-    }).join('');
-    unitMetaBlock='<div class="pan"><div class="ph" style="cursor:pointer" onclick="toggleUnitMetaPanel(this)">'
-      +'<span class="ptl">⚔️ Classification Unités META</span>'
-      +'<span style="margin-left:auto;font-size:11px;color:var(--tx4)">▼ Afficher</span>'
-      +'</div>'
-      +'<div id="unit-meta-panel" style="display:none"><div class="pb">'
-      +'<p style="font-size:11px;color:var(--tx3);margin-bottom:12px">Modifiez la catégorie et la priorité de chaque unité. Utilisé par le Constructeur de groupes.</p>'
-      +unitRows
-      +'</div></div></div>';
-  }
-
-  return diagBlock + auditBlock + unitMetaBlock
+  return diagBlock + auditBlock
     +'<div class="pan"><div class="ph"><span class="ptl">⚙️ Configuration</span></div><div class="pb">'
     +'<div class="fg"><label class="fl">Nom de la Maison</label><input class="fi" id="p-name" value="'+esc(DB.houseName)+'" style="max-width:300px"></div>'
     +'<div class="fg"><label class="fl">Maîtrise minimum par défaut</label><select class="fs" id="p-mas" style="max-width:200px">'+[1,2,3,4,5].map(function(n){return'<option value="'+n+'"'+(n===DB.minMastery?' selected':'')+'>'+n+'★</option>';}).join('')+'</select></div>'
     +'<button class="btn bg" onclick="saveParams()">Sauvegarder</button></div></div>'
     +'<div class="pan"><div class="ph"><span class="ptl">🚪 Session</span></div><div class="pb"><p class="td tsm" style="margin-bottom:16px">Connecté: <strong>'+esc(CU.username)+'</strong></p><button class="btn bol" onclick="doLogout()">Se déconnecter</button></div></div>';
-}
-
-function toggleUnitMetaPanel(el){
-  var panel=document.getElementById('unit-meta-panel');
-  if(!panel)return;
-  var open=panel.style.display==='none';
-  panel.style.display=open?'block':'none';
-  var chev=el.querySelector('span:last-child');
-  if(chev)chev.textContent=open?'▲ Masquer':'▼ Afficher';
-}
-
-function updateUnitMeta(sel){
-  var name=sel.dataset.unit;
-  var field=sel.dataset.field;
-  var val=field==='prio'?parseInt(sel.value):sel.value;
-  DB.unitMeta=DB.unitMeta||Object.assign({},UNIT_META);
-  if(!DB.unitMeta[name]) DB.unitMeta[name]={cat:'Pusher',prio:3};
-  DB.unitMeta[name][field]=val;
-  // Sauvegarder uniquement les différences avec UNIT_META statique
-  var diff={};
-  Object.keys(DB.unitMeta).forEach(function(n){
-    var base=UNIT_META[n];
-    var curr=DB.unitMeta[n];
-    if(!base||base.cat!==curr.cat||base.prio!==curr.prio) diff[n]=curr;
-  });
-  sbSaveSettings('unit_meta', diff).catch(function(e){console.warn('[unitMeta]',e);});
 }
 
 function openAuditLogW(){
