@@ -381,6 +381,9 @@ function sbLoad(){
     DB.hillKing       = hillRow ? (hillRow.value||{}) : {};
     var hillBgRow=(res[12]||[]).find(function(r){return r.key==='hill_bg';});
     DB.hillBg         = hillBgRow ? (hillBgRow.value||'') : '';
+    var unitMetaRow=(res[12]||[]).find(function(r){return r.key==='unit_meta';});
+    var storedMeta=unitMetaRow?JSON.parse(unitMetaRow.value||'{}'):{};
+    DB.unitMeta=Object.assign({},UNIT_META,storedMeta);
     var hillHistRow=(res[12]||[]).find(function(r){return r.key==='hill_history';});
     DB.hillHistory    = hillHistRow ? (hillHistRow.value||[]) : [];
     SB_READY = true;
@@ -672,7 +675,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings('main', {house_name:DB.houseName, min_mastery:DB.minMastery, active_war_id:DB.activeWarId||null}).catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[]}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[],unitMeta:{}}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -4556,7 +4559,7 @@ function getBestCat(m, type){
   }
   // Fallback: première unité dans ses unités perso
   if(units.length>0){
-    var meta2=UNIT_META[units[0]];
+    var meta2=(DB.unitMeta||UNIT_META)[units[0]];
     if(meta2) return meta2.cat;
   }
   return 'Pusher'; // défaut
@@ -4709,7 +4712,7 @@ function simulateBuild(type, members, mode){
 function getBestPrio(m){
   var units=(m.units||[]).map(function(u){return u.name;});
   var best=99;
-  units.forEach(function(u){var meta=UNIT_META[u];if(meta&&meta.prio<best)best=meta.prio;});
+  units.forEach(function(u){var meta=(DB.unitMeta||UNIT_META)[u];if(meta&&meta.prio<best)best=meta.prio;});
   return best;
 }
 
@@ -6724,12 +6727,65 @@ function pgParam(){
       +'</div><div class="pb"><p class="td tsm">Historique des changements de rôles et actions sensibles.</p></div></div>'
     : '';
 
-  return diagBlock + auditBlock
+  // Bloc gestion Unités META (officiers+)
+  var unitMetaBlock='';
+  if(HR('officier')){
+    var cats=['Bouclier','Anti-cav','Cavalerie','Exotique','Pusher','Ranged','Utilitaire'];
+    var meta=DB.unitMeta||UNIT_META;
+    var unitRows=Object.keys(meta).sort().map(function(name){
+      var u=meta[name];
+      return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 0;border-bottom:1px solid var(--b1)">'
+        +'<span style="font-size:12px;color:var(--tx1);flex:1">'+esc(name)+'</span>'
+        +'<select data-unit="'+esc(name)+'" data-field="cat" onchange="updateUnitMeta(this)" style="font-size:11px;background:var(--bg1);border:1px solid var(--b1);color:var(--tx2);padding:2px 4px;border-radius:2px">'
+        +cats.map(function(c){return'<option value="'+c+'"'+(u.cat===c?' selected':'')+'>'+c+'</option>';}).join('')
+        +'</select>'
+        +'<select data-unit="'+esc(name)+'" data-field="prio" onchange="updateUnitMeta(this)" style="font-size:11px;background:var(--bg1);border:1px solid var(--b1);color:var(--tx2);padding:2px 4px;border-radius:2px">'
+        +[1,2,3].map(function(p){return'<option value="'+p+'"'+(u.prio===p?' selected':'')+'>Prio '+p+'</option>';}).join('')
+        +'</select>'
+        +'</div>';
+    }).join('');
+    unitMetaBlock='<div class="pan"><div class="ph" style="cursor:pointer" onclick="toggleUnitMetaPanel(this)">'
+      +'<span class="ptl">⚔️ Classification Unités META</span>'
+      +'<span style="margin-left:auto;font-size:11px;color:var(--tx4)">▼ Afficher</span>'
+      +'</div>'
+      +'<div id="unit-meta-panel" style="display:none"><div class="pb">'
+      +'<p style="font-size:11px;color:var(--tx3);margin-bottom:12px">Modifiez la catégorie et la priorité de chaque unité. Utilisé par le Constructeur de groupes.</p>'
+      +unitRows
+      +'</div></div></div>';
+  }
+
+  return diagBlock + auditBlock + unitMetaBlock
     +'<div class="pan"><div class="ph"><span class="ptl">⚙️ Configuration</span></div><div class="pb">'
     +'<div class="fg"><label class="fl">Nom de la Maison</label><input class="fi" id="p-name" value="'+esc(DB.houseName)+'" style="max-width:300px"></div>'
     +'<div class="fg"><label class="fl">Maîtrise minimum par défaut</label><select class="fs" id="p-mas" style="max-width:200px">'+[1,2,3,4,5].map(function(n){return'<option value="'+n+'"'+(n===DB.minMastery?' selected':'')+'>'+n+'★</option>';}).join('')+'</select></div>'
     +'<button class="btn bg" onclick="saveParams()">Sauvegarder</button></div></div>'
     +'<div class="pan"><div class="ph"><span class="ptl">🚪 Session</span></div><div class="pb"><p class="td tsm" style="margin-bottom:16px">Connecté: <strong>'+esc(CU.username)+'</strong></p><button class="btn bol" onclick="doLogout()">Se déconnecter</button></div></div>';
+}
+
+function toggleUnitMetaPanel(el){
+  var panel=document.getElementById('unit-meta-panel');
+  if(!panel)return;
+  var open=panel.style.display==='none';
+  panel.style.display=open?'block':'none';
+  var chev=el.querySelector('span:last-child');
+  if(chev)chev.textContent=open?'▲ Masquer':'▼ Afficher';
+}
+
+function updateUnitMeta(sel){
+  var name=sel.dataset.unit;
+  var field=sel.dataset.field;
+  var val=field==='prio'?parseInt(sel.value):sel.value;
+  DB.unitMeta=DB.unitMeta||Object.assign({},UNIT_META);
+  if(!DB.unitMeta[name]) DB.unitMeta[name]={cat:'Pusher',prio:3};
+  DB.unitMeta[name][field]=val;
+  // Sauvegarder uniquement les différences avec UNIT_META statique
+  var diff={};
+  Object.keys(DB.unitMeta).forEach(function(n){
+    var base=UNIT_META[n];
+    var curr=DB.unitMeta[n];
+    if(!base||base.cat!==curr.cat||base.prio!==curr.prio) diff[n]=curr;
+  });
+  sbSaveSettings('unit_meta', diff).catch(function(e){console.warn('[unitMeta]',e);});
 }
 
 function openAuditLogW(){
