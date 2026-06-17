@@ -4418,6 +4418,15 @@ function openGrpBuilder(){
     +'<b>4.</b> Les chefs de groupe et unités sont assignés automatiquement. Tout reste modifiable ensuite.'
     +'</div></div>'
     +'<div style="margin-bottom:12px;color:var(--tx3);font-size:11px">'+available.length+' joueurs disponibles · RL exclus · ~'+nbGroups+' groupe(s) attendu(s)</div>'
+    +'<div class="fg"><label class="fl">Mode de sélection</label>'
+    +'<div style="display:flex;gap:8px;margin-bottom:12px">'
+    +'<div id="bm-mix" data-mode="mix" onclick="selectBuildMode(this.dataset.mode)" style="flex:1;padding:10px;border:2px solid var(--gold);border-radius:4px;cursor:pointer;text-align:center;background:rgba(201,162,39,.1)">'
+    +'<div style="font-size:16px">🔀</div><div style="font-size:12px;font-weight:700;color:var(--gold)">Mixte</div>'
+    +'<div style="font-size:10px;color:var(--tx3)">Tous niveaux mélangés</div></div>'
+    +'<div id="bm-expert" data-mode="expert" onclick="selectBuildMode(this.dataset.mode)" style="flex:1;padding:10px;border:2px solid var(--b2);border-radius:4px;cursor:pointer;text-align:center;background:var(--bg1)">'
+    +'<div style="font-size:16px">⭐</div><div style="font-size:12px;font-weight:700;color:var(--tx2)">Expert</div>'
+    +'<div style="font-size:10px;color:var(--tx3)">1200+ en groupes 1·2·3</div></div>'
+    +'</div></div>'
     +'<div class="fg"><label class="fl">Type global</label>'
     +'<div style="display:flex;gap:8px;margin-bottom:12px">'
     +'<div id="bt-ville" data-type="ville" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:10px;border:2px solid var(--gold);border-radius:4px;cursor:pointer;text-align:center;background:rgba(201,162,39,.1)">'
@@ -4435,6 +4444,7 @@ function openGrpBuilder(){
     +'</div>';
 
   window._buildType=null;
+  window._buildMode='mix';
   window._buildPresents=available;
   window._buildExceptions={};
 
@@ -4442,7 +4452,7 @@ function openGrpBuilder(){
     {lbl:'Annuler',cls:'bol',fn:CM},
     {lbl:'⚔️ Générer les groupes',cls:'btn bg',fn:function(){
       if(!window._buildType){alert('Choisissez un type de guerre.');return;}
-      buildGroups(window._buildType, window._buildPresents, window._buildExceptions||{});
+      buildGroups(window._buildType, window._buildPresents, window._buildExceptions||{}, window._buildMode||'mix');
       CM();
     }}
   ]);
@@ -4459,7 +4469,7 @@ function selectBuildType(type){
     vgEl.style.background=type==='village'?'rgba(201,162,39,.1)':'var(--bg1)';
   }
   var members=window._buildPresents||[];
-  var groups=simulateBuild(type,members);
+  var groups=simulateBuild(type,members,window._buildMode||'mix');
   window._buildSimulated=groups;
 
   // Afficher les exceptions
@@ -4470,13 +4480,16 @@ function selectBuildType(type){
     var altType=type==='ville'?'village':'ville';
     var altLabel=type==='ville'?'🌿 Village':'🏰 Ville';
     excList.innerHTML=groups.map(function(g,i){
-      var obj=g.obj==='refill'?'Refill':(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].icon+' '+OBJECTIVES[g.obj].label:g.obj);
-      return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 10px;background:var(--bg1);border-radius:3px">'
-        +'<span style="font-size:11px;color:var(--tx2);min-width:100px">G'+(i+1)+' — '+obj+'</span>'
+      var isRefill=g.obj==='refill';
+      var objLabel=isRefill?'🔄 Refill':(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].icon+' '+OBJECTIVES[g.obj].label:g.obj);
+      var borderCol=isRefill?'var(--teal2)':(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].border:'var(--b2)');
+      return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 10px;background:var(--bg1);border-radius:3px;border-left:3px solid '+borderCol+'">'
+        +'<span style="font-size:11px;font-weight:700;color:var(--tx2);min-width:110px">G'+(i+1)+' — '+objLabel+'</span>'
         +'<span style="font-size:10px;color:var(--tx3)">'+g.members.map(function(m){return esc(m.username);}).join(', ')+'</span>'
-        +'<label style="margin-left:auto;font-size:10px;color:var(--tx3);display:flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer">'
-        +'<input type="checkbox" onchange="setBuildException('+i+',this.checked,this.dataset.alt)" data-alt="'+altType+'" style="cursor:pointer"> Exception : '+altLabel
-        +'</label>'
+        +(isRefill?''
+          :'<label style="margin-left:auto;font-size:10px;color:var(--tx3);display:flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer">'
+          +'<input type="checkbox" onchange="setBuildException('+i+',this.checked,this.dataset.alt)" data-alt="'+altType+'" style="cursor:pointer"> Exc. : '+altLabel
+          +'</label>')
         +'</div>';
     }).join('');
   }
@@ -4495,6 +4508,20 @@ function selectBuildType(type){
     html+='</div>';
     prev.innerHTML=html;
   }
+}
+
+function selectBuildMode(mode){
+  window._buildMode=mode;
+  var mixEl=document.getElementById('bm-mix');
+  var expEl=document.getElementById('bm-expert');
+  if(mixEl&&expEl){
+    mixEl.style.borderColor=mode==='mix'?'var(--gold)':'var(--b2)';
+    mixEl.style.background=mode==='mix'?'rgba(201,162,39,.1)':'var(--bg1)';
+    expEl.style.borderColor=mode==='expert'?'var(--gold)':'var(--b2)';
+    expEl.style.background=mode==='expert'?'rgba(201,162,39,.1)':'var(--bg1)';
+  }
+  // Re-simuler si un type est déjà sélectionné
+  if(window._buildType) selectBuildType(window._buildType);
 }
 
 function setBuildException(idx, checked, altType){
@@ -4535,7 +4562,8 @@ function getBestCat(m, type){
   return 'Pusher'; // défaut
 }
 
-function simulateBuild(type, members){
+function simulateBuild(type, members, mode){
+  mode=mode||'mix';
   var n=members.length;
   var targets=PCT_TARGETS[type]||PCT_TARGETS.ville;
 
@@ -4599,27 +4627,62 @@ function simulateBuild(type, members){
   var groups=[];
   var remaining=members.slice();
 
+  // Identifier chefs de groupe et gardes sanguins
+  var chefs=members.filter(function(m){return m.chefGroupe;});
+  var sanguins=members.filter(function(m){return m.sanguin;});
+
+  // Mode expert: séparer joueurs 1200+ et les autres
+  // Chefs et sanguins sont TOUJOURS dans eliteMembers (groupes 1,2,3)
+  var eliteMembers=members.slice(), normalMembers=[];
+  if(mode==='expert'){
+    eliteMembers=members.filter(function(m){return (m.playerLevel||0)>=1200||m.chefGroupe||m.sanguin;});
+    normalMembers=members.filter(function(m){return (m.playerLevel||0)<1200&&!m.chefGroupe&&!m.sanguin;});
+    if(eliteMembers.length<15){
+      var needed=15-eliteMembers.length;
+      var extra=normalMembers.slice(0,needed);
+      eliteMembers=eliteMembers.concat(extra);
+      normalMembers=normalMembers.slice(needed);
+    }
+  } else {
+    // Mode mixte: seuls les chefs de groupe sont prioritaires pour groupes 1,2,3
+    // Les sanguins sont mélangés normalement
+    var chefMembers=members.filter(function(m){return m.chefGroupe;});
+    var otherMembers=members.filter(function(m){return !m.chefGroupe;});
+    eliteMembers=chefMembers.concat(otherMembers);
+  }
+
   if(type==='ville'){
+    var chefsUsed=[];
     ['porte','muraille','breche'].forEach(function(obj){
       var cats=OBJ_CATS[obj];
-      // Sélectionner 5 joueurs des catégories correspondantes
       var pool=[];
+      var poolSource=mode==='expert'?eliteMembers:eliteMembers;
       cats.forEach(function(c){
         (catBuckets[c]||[]).forEach(function(m){
-          if(remaining.indexOf(m)>=0) pool.push(m);
+          if(remaining.indexOf(m)>=0&&poolSource.indexOf(m)>=0) pool.push(m);
         });
       });
-      // Trier par score d'unité pour cet objectif
-      var priority=OBJ_UNITS.ville[obj]||[];
-      pool.sort(function(a,b){return memberUnitScore(b,priority)-memberUnitScore(a,priority);});
-      var grp=pool.slice(0,5);
-      // Ajouter un chef si possible
-      var chef=grp.find(function(m){return m.chefGroupe;});
-      if(!chef){
-        var extChef=remaining.find(function(m){return m.chefGroupe&&grp.indexOf(m)<0;});
-        if(extChef&&grp.length<5) grp.unshift(extChef);
+      if(pool.length<5){
+        remaining.forEach(function(m){if(pool.indexOf(m)<0)pool.push(m);});
       }
-      groups.push({obj:obj,members:grp});
+      // Trier: chefs > sanguins > score unités
+      var priority=OBJ_UNITS.ville[obj]||[];
+      pool.sort(function(a,b){
+        var sanguinBonus=mode==='expert'?50:0;
+        var wa=(a.chefGroupe?100:0)+(a.sanguin?sanguinBonus:0)+memberUnitScore(a,priority);
+        var wb=(b.chefGroupe?100:0)+(b.sanguin?sanguinBonus:0)+memberUnitScore(b,priority);
+        return wb-wa;
+      });
+      var grp=pool.slice(0,5);
+      // S'assurer qu'un chef non encore utilisé est dans le groupe comme leader
+      var grpChef=grp.find(function(m){return m.chefGroupe&&chefsUsed.indexOf(m.id)<0;});
+      if(!grpChef){
+        var extChef=remaining.find(function(m){return m.chefGroupe&&chefsUsed.indexOf(m.id)<0&&grp.indexOf(m)<0;});
+        if(extChef){grp.pop();grp.unshift(extChef);}
+        grpChef=grp.find(function(m){return m.chefGroupe;});
+      }
+      if(grpChef) chefsUsed.push(grpChef.id);
+      groups.push({obj:obj,members:grp,leaderId:grpChef?grpChef.id:(grp[0]?grp[0].id:null)});
       remaining=remaining.filter(function(m){return grp.indexOf(m)<0;});
     });
     // Refill — reste en groupes de 5
@@ -4675,11 +4738,11 @@ var OBJ_ROLES = {
     {role:'Cavalerie', count:1, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs']}
   ],
   refill: [
-    {role:'Bouclier', count:5, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons']},
+    {role:'Bouclier', count:6, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Prévôts lanciers']},
     {role:'Anti-cav',  count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers']},
-    {role:'Exotique',  count:2, units:['Grenadiers de Shenji','Siphonaros','Milice Zykalienne']},
-    {role:'Pusher',    count:2, units:['Fauchefers','Berserkers','Claymores']},
-    {role:'Cavalerie', count:2, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs']}
+    {role:'Exotique',  count:1, units:['Grenadiers de Shenji','Siphonaros','Milice Zykalienne']},
+    {role:'Pusher',    count:3, units:['Fauchefers','Berserkers','Claymores','Skjaldmös']},
+    {role:'Cavalerie', count:1, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs']}
   ],
   village_grp: [
     {role:'Bouclier', count:5, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Prévôts lanciers']},
@@ -4739,9 +4802,10 @@ function assignMemberToRole(m, roleSlots){
   return bestRole;
 }
 
-function buildGroups(type, members, exceptions){
+function buildGroups(type, members, exceptions, mode){
+  mode=mode||'mix';
   exceptions=exceptions||{};
-  var groups=simulateBuild(type,members);
+  var groups=simulateBuild(type,members,mode);
   var usedOrders=warGroups.map(function(x){return x.order||0;});
   var nextOrder=1;while(usedOrders.indexOf(nextOrder)>=0)nextOrder++;
 
@@ -4755,7 +4819,7 @@ function buildGroups(type, members, exceptions){
       // Exception: utiliser composition Village pour ce groupe
       grpRoles=OBJ_ROLES.village_grp||OBJ_ROLES.refill;
     }
-    var chef=grp.members.find(function(m){return m.chefGroupe;})||grp.members[0];
+    var chef=grp.leaderId?{id:grp.leaderId}:(grp.members.find(function(m){return m.chefGroupe;})||grp.members[0]);
     var unitAssignments={};
     var classAssignments={};
 
