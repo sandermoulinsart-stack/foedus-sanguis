@@ -4404,37 +4404,45 @@ function openGrpBuilder(){
     alert('Pas assez de présents pour générer des groupes (minimum 5).');return;
   }
 
+  // Calculer le nb de groupes attendus
+  var nbGroups=3+Math.ceil(Math.max(0,available.length-15)/5); // Porte+Muraille+Brèche + Refill
+  if(available.length<5) nbGroups=1;
+
   var html='<div style="font-size:13px">'
     +'<div style="background:var(--bg1);border:1px solid var(--golddim);border-radius:4px;padding:10px 14px;margin-bottom:14px">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:6px">⚙️ Comment fonctionne le constructeur ?</div>'
+    +'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:4px">⚙️ Comment fonctionne le constructeur ?</div>'
     +'<div style="font-size:11px;color:var(--tx2);line-height:1.6">'
-    +'<b>1.</b> Chaque joueur est classé selon ses unités les plus fortes (méta Prio 1 en priorité).<br>'
-    +'<b>2.</b> Les joueurs sont répartis par catégorie (Bouclier, Anti-cav, Cavalerie…) en respectant les <b>pourcentages cibles</b> du type de guerre.<br>'
-    +'<b>3.</b> Si un joueur dépasse le quota de sa catégorie, ses autres unités sont analysées pour le placer ailleurs.<br>'
-    +'<b>4.</b> Les groupes sont formés : <b>Porte</b> (Exotiques/Pushers), <b>Muraille</b> (Boucliers/Anti-cav), <b>Brèche</b> (Pushers/Anti-cav), <b>Refill</b> (reste, groupes de 5).<br>'
-    +'<b>5.</b> Les chefs de groupe sont automatiquement désignés leaders. Les groupes restent <b>modifiables manuellement</b> après génération.'
+    +'<b>1.</b> Chaque joueur est classé selon ses unités méta (Prio 1 en priorité).<br>'
+    +'<b>2.</b> Chaque groupe respecte la composition : <b>6 Boucliers · 4 Anti-cav · 2 Exotiques · 2 Pushers · 1 Cav</b> (sur 15 unités).<br>'
+    +'<b>3.</b> Choisissez un type global puis ajustez les exceptions par groupe si besoin.<br>'
+    +'<b>4.</b> Les chefs de groupe et unités sont assignés automatiquement. Tout reste modifiable ensuite.'
     +'</div></div>'
-    +'<div style="margin-bottom:14px;color:var(--tx3);font-size:11px">'+available.length+' joueurs disponibles · RL exclus</div>'
-    +'<div class="fg"><label class="fl">Type de guerre</label>'
-    +'<div style="display:flex;gap:8px">'
-    +'<div id="bt-ville" data-type="ville" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:12px;border:2px solid var(--gold);border-radius:4px;cursor:pointer;text-align:center;background:rgba(201,162,39,.1)">'
-    +'<div style="font-size:18px">🏰</div><div style="font-size:12px;font-weight:700;color:var(--gold)">Ville</div>'
+    +'<div style="margin-bottom:12px;color:var(--tx3);font-size:11px">'+available.length+' joueurs disponibles · RL exclus · ~'+nbGroups+' groupe(s) attendu(s)</div>'
+    +'<div class="fg"><label class="fl">Type global</label>'
+    +'<div style="display:flex;gap:8px;margin-bottom:12px">'
+    +'<div id="bt-ville" data-type="ville" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:10px;border:2px solid var(--gold);border-radius:4px;cursor:pointer;text-align:center;background:rgba(201,162,39,.1)">'
+    +'<div style="font-size:16px">🏰</div><div style="font-size:12px;font-weight:700;color:var(--gold)">Ville</div>'
     +'<div style="font-size:10px;color:var(--tx3)">Muraille · Porte · Brèche · Refill</div></div>'
-    +'<div id="bt-village" data-type="village" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:12px;border:2px solid var(--b2);border-radius:4px;cursor:pointer;text-align:center;background:var(--bg1)">'
-    +'<div style="font-size:18px">🌿</div><div style="font-size:12px;font-weight:700;color:var(--tx2)">Village</div>'
+    +'<div id="bt-village" data-type="village" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:10px;border:2px solid var(--b2);border-radius:4px;cursor:pointer;text-align:center;background:var(--bg1)">'
+    +'<div style="font-size:16px">🌿</div><div style="font-size:12px;font-weight:700;color:var(--tx2)">Village</div>'
     +'<div style="font-size:10px;color:var(--tx3)">Cavalerie prioritaire</div></div>'
     +'</div></div>'
-    +'<div id="build-preview" style="margin-top:12px;color:var(--tx3);font-size:12px;font-style:italic">Choisissez un type pour voir la prévisualisation.</div>'
+    +'<div id="exceptions-block" style="display:none;margin-bottom:12px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:6px">🔀 Exceptions par groupe <span style="color:var(--tx4);font-weight:400">(optionnel)</span></div>'
+    +'<div id="exceptions-list"></div>'
+    +'</div>'
+    +'<div id="build-preview" style="margin-top:8px;color:var(--tx3);font-size:12px;font-style:italic">Choisissez un type pour voir la prévisualisation.</div>'
     +'</div>';
 
   window._buildType=null;
   window._buildPresents=available;
+  window._buildExceptions={};
 
   OM('⚔️ Constructeur de Groupes', html, [
     {lbl:'Annuler',cls:'bol',fn:CM},
     {lbl:'⚔️ Générer les groupes',cls:'btn bg',fn:function(){
       if(!window._buildType){alert('Choisissez un type de guerre.');return;}
-      buildGroups(window._buildType, window._buildPresents);
+      buildGroups(window._buildType, window._buildPresents, window._buildExceptions||{});
       CM();
     }}
   ]);
@@ -4450,26 +4458,55 @@ function selectBuildType(type){
     vgEl.style.borderColor=type==='village'?'var(--gold)':'var(--b2)';
     vgEl.style.background=type==='village'?'rgba(201,162,39,.1)':'var(--bg1)';
   }
-  // Prévisualisation
-  var prev=document.getElementById('build-preview');
-  if(!prev)return;
   var members=window._buildPresents||[];
   var groups=simulateBuild(type,members);
-  var html='<div style="margin-top:4px">';
-  groups.forEach(function(g){
-    html+='<div style="margin-bottom:6px;padding:6px 10px;background:var(--bg1);border-radius:3px;border-left:3px solid '+(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].border:'var(--b2)')+'">'
-      +'<span style="font-size:11px;font-weight:700;color:'+(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].color:'var(--tx2)')+'">'+( OBJECTIVES[g.obj]?OBJECTIVES[g.obj].icon+' '+OBJECTIVES[g.obj].label:'🔄 Refill')+' ('+g.members.length+' joueurs)</span>'
-      +'<div style="font-size:10px;color:var(--tx3);margin-top:3px">'+g.members.map(function(m){return esc(m.username);}).join(', ')+'</div>'
-      +'</div>';
-  });
-  html+='</div>';
-  prev.innerHTML=html;
+  window._buildSimulated=groups;
+
+  // Afficher les exceptions
+  var excBlock=document.getElementById('exceptions-block');
+  var excList=document.getElementById('exceptions-list');
+  if(excBlock&&excList){
+    excBlock.style.display='block';
+    var altType=type==='ville'?'village':'ville';
+    var altLabel=type==='ville'?'🌿 Village':'🏰 Ville';
+    excList.innerHTML=groups.map(function(g,i){
+      var obj=g.obj==='refill'?'Refill':(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].icon+' '+OBJECTIVES[g.obj].label:g.obj);
+      return'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 10px;background:var(--bg1);border-radius:3px">'
+        +'<span style="font-size:11px;color:var(--tx2);min-width:100px">G'+(i+1)+' — '+obj+'</span>'
+        +'<span style="font-size:10px;color:var(--tx3)">'+g.members.map(function(m){return esc(m.username);}).join(', ')+'</span>'
+        +'<label style="margin-left:auto;font-size:10px;color:var(--tx3);display:flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer">'
+        +'<input type="checkbox" onchange="setBuildException('+i+',this.checked,this.dataset.alt)" data-alt="'+altType+'" style="cursor:pointer"> Exception : '+altLabel
+        +'</label>'
+        +'</div>';
+    }).join('');
+  }
+
+  // Prévisualisation
+  var prev=document.getElementById('build-preview');
+  if(prev){
+    var html='<div style="font-size:11px;color:var(--tx3);margin-bottom:4px">Prévisualisation (type global — avant exceptions) :</div><div>';
+    groups.forEach(function(g){
+      var obj=OBJECTIVES[g.obj];
+      html+='<div style="margin-bottom:4px;padding:5px 8px;background:var(--bg1);border-radius:3px;border-left:3px solid '+(obj?obj.border:'var(--b2)')+'">'
+        +'<span style="font-size:11px;font-weight:700;color:'+(obj?obj.color:'var(--tx2)')+'">'+(obj?obj.icon+' '+obj.label:'🔄 Refill')+'</span>'
+        +' <span style="font-size:10px;color:var(--tx3)">'+g.members.map(function(m){return esc(m.username);}).join(', ')+'</span>'
+        +'</div>';
+    });
+    html+='</div>';
+    prev.innerHTML=html;
+  }
 }
 
-// Pourcentages cibles par catégorie
+function setBuildException(idx, checked, altType){
+  window._buildExceptions=window._buildExceptions||{};
+  if(checked) window._buildExceptions[idx]=altType;
+  else delete window._buildExceptions[idx];
+}
+
+// Composition cible par groupe (5 joueurs × 3 unités = 15 unités)
 var PCT_TARGETS = {
-  ville:   {Bouclier:0.40, 'Anti-cav':0.25, Cavalerie:0.05, Exotique:0.15, Pusher:0.15, Ranged:0, Utilitaire:0},
-  village: {Bouclier:0.30, 'Anti-cav':0.25, Cavalerie:0.20, Exotique:0.10, Pusher:0.15, Ranged:0, Utilitaire:0}
+  ville:   {Bouclier:6, 'Anti-cav':4, Cavalerie:1, Exotique:2, Pusher:2, Ranged:0, Utilitaire:0},
+  village: {Bouclier:5, 'Anti-cav':4, Cavalerie:3, Exotique:2, Pusher:2, Ranged:0, Utilitaire:0}
 };
 
 // Objectifs Ville: catégories associées
@@ -4613,25 +4650,43 @@ function getBestPrio(m){
   return best;
 }
 
-// Composition cible par objectif: {role: [unités prioritaires]}
+// Composition cible par objectif (15 unités par groupe = 5 joueurs × 3 unités)
+// Chaque rôle indique le nb d'UNITÉS requis (pas de joueurs)
 var OBJ_ROLES = {
   porte: [
-    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
-    {role:'Anti-cav',  count:1, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
-    {role:'Exotique',  count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne','Grenadiers de Shenji','Berserkers','Claymores']}
+    {role:'Bouclier', count:6, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Prévôts lanciers','Paladins Symmachéens']},
+    {role:'Anti-cav',  count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
+    {role:'Exotique',  count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne']},
+    {role:'Pusher',    count:2, units:['Berserkers','Claymores','Fauchefers','Skjaldmös','Zélote']},
+    {role:'Cavalerie', count:1, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs']}
   ],
   muraille: [
-    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
-    {role:'Anti-cav',  count:2, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
-    {role:'Exotique',  count:1, units:['Grenadiers de Shenji','Milice Zykalienne','Equipe de Lionroar','Siphonaros','Berserkers','Claymores']}
+    {role:'Bouclier', count:6, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Prévôts lanciers','Paladins Symmachéens']},
+    {role:'Anti-cav',  count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
+    {role:'Exotique',  count:2, units:['Grenadiers de Shenji','Milice Zykalienne','Siphonaros']},
+    {role:'Pusher',    count:2, units:['Fauchefers','Berserkers','Claymores','Skjaldmös','Zélote']},
+    {role:'Cavalerie', count:1, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs']}
   ],
   breche: [
-    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
-    {role:'Anti-cav',  count:1, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
-    {role:'Exotique',  count:2, units:['Siphonaros','Equipe de Lionroar','Berserkers','Claymores','Milice Zykalienne','Grenadiers de Shenji']}
+    {role:'Bouclier', count:6, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Prévôts lanciers','Paladins Symmachéens']},
+    {role:'Anti-cav',  count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
+    {role:'Exotique',  count:2, units:['Siphonaros','Equipe de Lionroar','Milice Zykalienne']},
+    {role:'Pusher',    count:2, units:['Fauchefers','Berserkers','Claymores','Skjaldmös','Zélote']},
+    {role:'Cavalerie', count:1, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs']}
   ],
   refill: [
-    {role:'any', count:5, units:[]}
+    {role:'Bouclier', count:5, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons']},
+    {role:'Anti-cav',  count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers']},
+    {role:'Exotique',  count:2, units:['Grenadiers de Shenji','Siphonaros','Milice Zykalienne']},
+    {role:'Pusher',    count:2, units:['Fauchefers','Berserkers','Claymores']},
+    {role:'Cavalerie', count:2, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs']}
+  ],
+  village_grp: [
+    {role:'Bouclier', count:5, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Prévôts lanciers']},
+    {role:'Anti-cav',  count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Lanciers avec esponton']},
+    {role:'Cavalerie', count:3, units:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs','Coutiliers','Pistoleros Reitar','Éclaireurs tête-de-fer']},
+    {role:'Exotique',  count:2, units:['Milice Zykalienne','Grenadiers de Shenji','Siphonaros']},
+    {role:'Pusher',    count:1, units:['Fauchefers','Berserkers','Claymores']}
   ]
 };
 
@@ -4684,15 +4739,22 @@ function assignMemberToRole(m, roleSlots){
   return bestRole;
 }
 
-function buildGroups(type, members){
+function buildGroups(type, members, exceptions){
+  exceptions=exceptions||{};
   var groups=simulateBuild(type,members);
-  var warGroups=DB.groups.filter(function(x){return x.warId===GRP_WAR_ID&&!x.archived;});
   var usedOrders=warGroups.map(function(x){return x.order||0;});
   var nextOrder=1;while(usedOrders.indexOf(nextOrder)>=0)nextOrder++;
 
   var objToType={'porte':'elite','muraille':'elite','breche':'standard','refill':'refill'};
 
-  groups.forEach(function(grp){
+  groups.forEach(function(grp,grpIdx){
+    // Appliquer l'exception de type si définie
+    var grpType=exceptions[grpIdx]||type;
+    var grpRoles=OBJ_ROLES[grp.obj]||OBJ_ROLES.refill;
+    if(grpType!==type&&grp.obj!=='refill'){
+      // Exception: utiliser composition Village pour ce groupe
+      grpRoles=OBJ_ROLES.village_grp||OBJ_ROLES.refill;
+    }
     var chef=grp.members.find(function(m){return m.chefGroupe;})||grp.members[0];
     var unitAssignments={};
     var classAssignments={};
