@@ -382,7 +382,7 @@ function sbLoad(){
     var hillBgRow=(res[12]||[]).find(function(r){return r.key==='hill_bg';});
     DB.hillBg         = hillBgRow ? (hillBgRow.value||'') : '';
     var unitMetaRow=(res[12]||[]).find(function(r){return r.key==='unit_meta';});
-    var storedMeta=unitMetaRow?JSON.parse(unitMetaRow.value||'{}'):{};
+    var storedMeta=unitMetaRow?(typeof unitMetaRow.value==='string'?JSON.parse(unitMetaRow.value||'{}'):unitMetaRow.value||{}):{};  
     DB.unitMeta=Object.assign({},UNIT_META,storedMeta);
     var hillHistRow=(res[12]||[]).find(function(r){return r.key==='hill_history';});
     DB.hillHistory    = hillHistRow ? (hillHistRow.value||[]) : [];
