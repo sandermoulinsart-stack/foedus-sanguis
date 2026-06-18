@@ -1085,9 +1085,9 @@ function startRealtime(){
         return;
       }
       // postgres_changes et INSERT/UPDATE/DELETE = changement de données
-      console.log('[Realtime] ← event:',ev,'topic:',topic);
-      // Si c'est house_settings — ne mettre à jour que le hill widget, pas tout l'app
       var tbl=(msg.payload&&msg.payload.data&&msg.payload.data.table)||'';
+      console.log('[Realtime] ← table:',tbl,'event:',ev);
+      // Reload ciblé par table — évite de recharger les 13 tables à chaque event
       if(tbl==='house_settings'){
         var rec=msg.payload&&msg.payload.data&&msg.payload.data.record;
         if(rec&&rec.key==='hill_king'){
@@ -1100,8 +1100,55 @@ function startRealtime(){
           var w=document.getElementById('hill-widget');
           if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
         }
-        return; // pas de reload global
+        // Autres clés settings : reload settings uniquement
+        if(rec&&rec.key!=='hill_king'&&rec.key!=='hill_bg'){
+          SB.from('house_settings').get().then(function(rows){
+            var r=rows||[];
+            var s=(r.find(function(x){return x.key==='main';})||{}).value||{};
+            DB.houseName=s.house_name||DB.houseName;
+            DB.minMastery=s.min_mastery||DB.minMastery;
+            DB.activeWarId=s.active_war_id||null;
+            DB.metaUnits=((r.find(function(x){return x.key==='meta_units';})||{}).value)||[];
+            DB.rhUsers=((r.find(function(x){return x.key==='rh_users';})||{}).value)||[];
+            DB.rhData=((r.find(function(x){return x.key==='rh_data';})||{}).value)||{};
+            DB.hillKing=((r.find(function(x){return x.key==='hill_king';})||{}).value)||{};
+            DB.hillBg=((r.find(function(x){return x.key==='hill_bg';})||{}).value)||'';
+            DB.hillHistory=((r.find(function(x){return x.key==='hill_history';})||{}).value)||[];
+            _rerender();
+          }).catch(function(e){console.warn('[Realtime] settings reload err',e);});
+        }
+        return;
       }
+      if(tbl==='vote_wars'){
+        SB.from('vote_wars').get().then(function(rows){
+          DB.voteWars=(rows||[]).map(sbWarToLocal);
+          _rerender();
+        }).catch(function(e){console.warn('[Realtime] vote_wars reload err',e);});
+        return;
+      }
+      if(tbl==='membres'){
+        SB.from('membres_public').get().then(function(rows){
+          var all=(rows||[]).map(sbMemberToLocal);
+          DB.members=all.filter(function(m){return m.status!=='attente';});
+          DB.guestMembers=DB.members.filter(function(m){return m.isGuest;});
+          DB.pendingMembers=all.filter(function(m){return m.status==='attente';});
+          // Vérifier que le compte connecté existe toujours
+          if(CU&&!DB.members.find(function(m){return m.id===CU.id;})){
+            console.warn('[Realtime] Compte supprimé — déconnexion');
+            doLogout(); return;
+          }
+          _rerender();
+        }).catch(function(e){console.warn('[Realtime] membres reload err',e);});
+        return;
+      }
+      if(tbl==='groupes'){
+        SB.from('groupes').get().then(function(rows){
+          DB.groups=(rows||[]).map(sbGroupToLocal);
+          _rerender();
+        }).catch(function(e){console.warn('[Realtime] groupes reload err',e);});
+        return;
+      }
+      // Fallback pour toute autre table non gérée
       _triggerReload();
     }catch(ex){ console.warn('[Realtime] parse err',ex); }
   };
