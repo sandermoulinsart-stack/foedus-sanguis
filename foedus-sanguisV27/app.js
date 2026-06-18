@@ -3799,6 +3799,7 @@ function getPlacedMemberIds(warId, excludeGroupId){
 // ════════════════════════════════════════════════════════════════
 // PAGE: GROUPES DE COMBAT
 // ════════════════════════════════════════════════════════════════
+function toggleArchiveWar(uid){var e=document.getElementById(uid);if(e)e.style.display=e.style.display==='none'?'block':'none';}
 function pgGrp(){
   var canOfficier=HR('officier');
   var wars=(DB.voteWars||[]).slice().sort(function(a,b){return b.date.localeCompare(a.date)});
@@ -4168,7 +4169,7 @@ function renderGrpArchive(){
     var warGroups=warMap[wid].slice().sort(function(a,b){return (a.order||0)-(b.order||0);});
     var uid='aw'+wid.replace(/[^a-z0-9]/gi,'').substring(0,12);
     return'<div style="margin-bottom:12px;border:1px solid var(--b1);border-radius:4px;overflow:hidden">'
-      +'<div style="background:var(--bg2);padding:8px 14px;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="(function(){var e=document.getElementById(\''+uid+'\');e.style.display=e.style.display===\'none\'?\'block\':\'none\';})()">'
+      +'<div style="background:var(--bg2);padding:8px 14px;display:flex;align-items:center;gap:8px;cursor:pointer" onclick="toggleArchiveWar(\''+uid+'\')">'+
       +'<span style="font-size:13px;font-weight:700;color:var(--tx2);font-family:Cinzel,serif">⚔️ '+warName+'</span>'+warDate
       +'<span style="margin-left:auto;font-size:11px;color:var(--tx4)">'+warGroups.length+' groupe(s)</span>'
       +(HR('officier')?'<button class="btn bol bsm" style="font-size:10px;margin-left:8px" onclick="openGrpCompactArchive(\''+wid+'\');event.stopPropagation()">👁 Vue RL</button>':'')
