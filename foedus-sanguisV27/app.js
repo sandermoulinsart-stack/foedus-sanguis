@@ -1090,15 +1090,11 @@ function startRealtime(){
       // Reload ciblé par table — évite de recharger les 13 tables à chaque event
       if(tbl==='house_settings'){
         var rec=msg.payload&&msg.payload.data&&msg.payload.data.record;
-        if(rec&&rec.key==='hill_king'){
-          DB.hillKing=rec.value||{};
-          var w=document.getElementById('hill-widget');
-          if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
-        }
-        if(rec&&rec.key==='hill_bg'){
-          DB.hillBg=rec.value||'';
-          var w=document.getElementById('hill-widget');
-          if(w){var n=document.createElement('div');n.innerHTML=hillHTML();w.parentNode.replaceChild(n.firstChild,w);}
+        if(rec&&(rec.key==='hill_king'||rec.key==='hill_bg')){
+          if(rec.key==='hill_king') DB.hillKing=rec.value||{};
+          if(rec.key==='hill_bg') DB.hillBg=rec.value||'';
+          var hw=document.getElementById('hill-widget');
+          if(hw){var hn=document.createElement('div');hn.innerHTML=hillHTML();hw.parentNode.replaceChild(hn.firstChild,hw);}
         }
         // Autres clés settings : reload settings uniquement
         if(rec&&rec.key!=='hill_king'&&rec.key!=='hill_bg'){
