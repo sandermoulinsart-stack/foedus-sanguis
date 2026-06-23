@@ -4997,6 +4997,8 @@ function selectBuildMode(mode){
     eEl.style.background=mode==='expert'?'rgba(201,162,39,.1)':'var(--bg1)';
     eEl.querySelector('div:nth-child(2)').style.color=mode==='expert'?'var(--gold)':'var(--tx2)';
   }
+  // Rafraîchir la prévisualisation si un type est déjà sélectionné
+  if(window._buildType) selectBuildType(window._buildType);
 }
 
 function selectBuildType(type){
