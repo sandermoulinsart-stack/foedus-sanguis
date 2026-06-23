@@ -11,8 +11,9 @@ const KEY_ROLES = {
   'meta_units':   ['admin', 'admin_assistant', 'baron', 'officier', 'formation'],
   'hill_king':    null, // tout le monde (jeu public)
   'hill_bg':      ['admin', 'admin_assistant', 'baron', 'officier'],
-  'hill_history': ['admin', 'admin_assistant', 'baron', 'officier'],
-  'main':         ['admin', 'admin_assistant']
+  'hill_history':    ['admin', 'admin_assistant', 'baron', 'officier'],
+  'main':            ['admin', 'admin_assistant'],
+  'builder_config':  ['admin', 'admin_assistant', 'baron', 'officier']
 };
 
 async function sbGet(table, params) {
