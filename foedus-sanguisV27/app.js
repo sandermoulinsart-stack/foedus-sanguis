@@ -4959,20 +4959,44 @@ function openGrpBuilder(){
     +'<div style="font-size:18px">🌿</div><div style="font-size:12px;font-weight:700;color:var(--tx2)">Village</div>'
     +'<div style="font-size:10px;color:var(--tx3)">Cavalerie prioritaire</div></div>'
     +'</div></div>'
+    +'<div class="fg" style="margin-top:12px"><label class="fl">Mode de répartition</label>'
+    +'<div style="display:flex;gap:8px">'
+    +'<div id="bm-mixte" onclick="selectBuildMode(\'mixte\')" style="flex:1;padding:10px;border:2px solid var(--gold);border-radius:4px;cursor:pointer;text-align:center;background:rgba(201,162,39,.1)">'
+    +'<div style="font-size:16px">⚖️</div><div style="font-size:12px;font-weight:700;color:var(--gold)">Mixte</div>'
+    +'<div style="font-size:10px;color:var(--tx3)">Niveaux équilibrés dans chaque groupe</div></div>'
+    +'<div id="bm-expert" onclick="selectBuildMode(\'expert\')" style="flex:1;padding:10px;border:2px solid var(--b2);border-radius:4px;cursor:pointer;text-align:center;background:var(--bg1)">'
+    +'<div style="font-size:16px">🏆</div><div style="font-size:12px;font-weight:700;color:var(--tx2)">Expert</div>'
+    +'<div style="font-size:10px;color:var(--tx3)">Meilleurs joueurs regroupés ensemble</div></div>'
+    +'</div></div>'
     +'<div id="build-preview" style="margin-top:12px;color:var(--tx3);font-size:12px;font-style:italic">Choisissez un type pour voir la prévisualisation.</div>'
     +'</div>';
 
   window._buildType=null;
+  window._buildMode='mixte';
   window._buildPresents=available;
 
   OM('⚔️ Constructeur de Groupes', html, [
     {lbl:'Annuler',cls:'bol',fn:CM},
     {lbl:'⚔️ Générer les groupes',cls:'btn bg',fn:function(){
       if(!window._buildType){alert('Choisissez un type de guerre.');return;}
-      buildGroups(window._buildType, window._buildPresents);
+      buildGroups(window._buildType, window._buildPresents, window._buildMode||'mixte');
       CM();
     }}
   ]);
+}
+
+function selectBuildMode(mode){
+  window._buildMode=mode;
+  var mEl=document.getElementById('bm-mixte');
+  var eEl=document.getElementById('bm-expert');
+  if(mEl&&eEl){
+    mEl.style.borderColor=mode==='mixte'?'var(--gold)':'var(--b2)';
+    mEl.style.background=mode==='mixte'?'rgba(201,162,39,.1)':'var(--bg1)';
+    mEl.querySelector('div:nth-child(2)').style.color=mode==='mixte'?'var(--gold)':'var(--tx2)';
+    eEl.style.borderColor=mode==='expert'?'var(--gold)':'var(--b2)';
+    eEl.style.background=mode==='expert'?'rgba(201,162,39,.1)':'var(--bg1)';
+    eEl.querySelector('div:nth-child(2)').style.color=mode==='expert'?'var(--gold)':'var(--tx2)';
+  }
 }
 
 function selectBuildType(type){
@@ -5033,11 +5057,14 @@ function getBestCat(m, type){
   return 'Pusher'; // défaut
 }
 
-function simulateBuild(type, members){
+function simulateBuild(type, members, mode){
+  mode=mode||'mixte';
   var n=members.length;
   var targets=PCT_TARGETS[type]||PCT_TARGETS.ville;
   // Use live config (editable by officiers)
   var liveRoles=getBuilderConfig();
+  // Sort members by playerLevel for mode application
+  var sorted=members.slice().sort(function(a,b){return (b.playerLevel||0)-(a.playerLevel||0);});
 
   // Calculer les quotas
   var quotas={};
@@ -5102,18 +5129,15 @@ function simulateBuild(type, members){
   if(type==='ville'){
     ['porte','muraille','breche'].forEach(function(obj){
       var cats=OBJ_CATS[obj];
-      // Sélectionner 5 joueurs des catégories correspondantes
       var pool=[];
       cats.forEach(function(c){
         (catBuckets[c]||[]).forEach(function(m){
           if(remaining.indexOf(m)>=0) pool.push(m);
         });
       });
-      // Trier par score d'unité pour cet objectif
       var priority=OBJ_UNITS.ville[obj]||[];
       pool.sort(function(a,b){return memberUnitScore(b,priority)-memberUnitScore(a,priority);});
       var grp=pool.slice(0,5);
-      // Ajouter un chef si possible
       var chef=grp.find(function(m){return m.chefGroupe;});
       if(!chef){
         var extChef=remaining.find(function(m){return m.chefGroupe&&grp.indexOf(m)<0;});
@@ -5122,23 +5146,52 @@ function simulateBuild(type, members){
       groups.push({obj:obj,members:grp});
       remaining=remaining.filter(function(m){return grp.indexOf(m)<0;});
     });
-    // Refill — reste en groupes de 5
-    while(remaining.length>0){
-      groups.push({obj:'refill',members:remaining.splice(0,5)});
+
+    // Refill — appliquer le mode Mixte ou Expert
+    if(mode==='expert'){
+      // Expert : trier par playerLevel décroissant, remplir groupe par groupe
+      remaining.sort(function(a,b){return (b.playerLevel||0)-(a.playerLevel||0);});
+      while(remaining.length>0){
+        groups.push({obj:'refill',members:remaining.splice(0,5)});
+      }
+    } else {
+      // Mixte (défaut) : serpentin pour équilibrer les niveaux dans chaque groupe
+      remaining.sort(function(a,b){return (b.playerLevel||0)-(a.playerLevel||0);});
+      var nbR=Math.ceil(remaining.length/5);
+      var refillGrps=[];for(var ri=0;ri<nbR;ri++)refillGrps.push([]);
+      remaining.forEach(function(m,idx){
+        // Serpentin : 0,1,2,3,4,4,3,2,1,0,0,1...
+        var row=Math.floor(idx/nbR);
+        var gi=row%2===0?idx%nbR:(nbR-1-idx%nbR);
+        refillGrps[gi].push(m);
+      });
+      refillGrps.forEach(function(g){groups.push({obj:'refill',members:g});});
     }
+
   } else {
-    // Village — distribuer équitablement en groupes de 5
+    // Village — distribuer selon mode
     var allSorted=members.slice().sort(function(a,b){
       return memberUnitScore(b,OBJ_UNITS.village.cavalerie)-memberUnitScore(a,OBJ_UNITS.village.cavalerie);
     });
-    // Serpentine pour équilibrer
     var nbG=Math.ceil(allSorted.length/5);
-    var grps=[];for(var i=0;i<nbG;i++)grps.push([]);
-    allSorted.forEach(function(m,idx){
-      var gi=idx%nbG;
-      grps[gi].push(m);
-    });
-    grps.forEach(function(g){groups.push({obj:'breche',members:g});});
+    var grps=[];for(var vi=0;vi<nbG;vi++)grps.push([]);
+
+    if(mode==='expert'){
+      // Expert : les meilleurs cavaliers ensemble
+      allSorted.sort(function(a,b){return (b.playerLevel||0)-(a.playerLevel||0);});
+      allSorted.forEach(function(m,idx){
+        grps[Math.floor(idx/5)].push(m);
+      });
+    } else {
+      // Mixte : serpentin niveau
+      allSorted.sort(function(a,b){return (b.playerLevel||0)-(a.playerLevel||0);});
+      allSorted.forEach(function(m,idx){
+        var row=Math.floor(idx/nbG);
+        var gi=row%2===0?idx%nbG:(nbG-1-idx%nbG);
+        grps[gi].push(m);
+      });
+    }
+    grps.forEach(function(g){groups.push({obj:'cavalerie',members:g});});
   }
   return groups;
 }
@@ -5234,8 +5287,9 @@ function assignMemberToRole(m, roleSlots){
   return bestRole;
 }
 
-function buildGroups(type, members){
-  var groups=simulateBuild(type,members);
+function buildGroups(type, members, mode){
+  mode=mode||'mixte';
+  var groups=simulateBuild(type,members,mode);
   var warGroups=DB.groups.filter(function(x){return x.warId===GRP_WAR_ID&&!x.archived;});
   var usedOrders=warGroups.map(function(x){return x.order||0;});
   var nextOrder=1;while(usedOrders.indexOf(nextOrder)>=0)nextOrder++;
