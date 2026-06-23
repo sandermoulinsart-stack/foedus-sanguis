@@ -5015,7 +5015,7 @@ function selectBuildType(type){
   var prev=document.getElementById('build-preview');
   if(!prev)return;
   var members=window._buildPresents||[];
-  var groups=simulateBuild(type,members);
+  var groups=simulateBuild(type,members,window._buildMode||'mixte');
   var html='<div style="margin-top:4px">';
   groups.forEach(function(g){
     html+='<div style="margin-bottom:6px;padding:6px 10px;background:var(--bg1);border-radius:3px;border-left:3px solid '+(OBJECTIVES[g.obj]?OBJECTIVES[g.obj].border:'var(--b2)')+'">'
