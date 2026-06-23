@@ -3584,7 +3584,7 @@ function pgUnit(){
   var infoH='<div style="background:rgba(201,162,39,.07);border:1px solid var(--golddim);border-radius:4px;padding:14px 18px;margin-bottom:20px;line-height:1.8">'
     +'<div style="font-family:\'Cinzel\',serif;font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">⚔️ COMMENT CHOISIR TES UNITÉS</div>'
     +'<div style="font-size:12px;color:var(--tx2);display:flex;flex-direction:column;gap:5px">'
-    +'<div>📋 Sélectionne jusqu\'à <strong style="color:var(--tx1)">15 unités</strong> qui correspondent à tes préférences et aux exigences de la <strong style="color:var(--tx1)">méta actuelle</strong>.</div>'
+    +'<div>📋 Sélectionne toutes les unités que tu maîtrises. Les unités taguées <strong style="color:var(--gold)">META</strong> sont prioritaires pour la <strong style="color:var(--tx1)">méta actuelle</strong>.</div>'
     +'<div>⭐ Les étoiles représentent ta <strong style="color:var(--tx1)">maîtrise</strong> de l\'unité ainsi que ta <strong style="color:var(--tx1)">préférence</strong> pour la jouer.</div>'
     +'<div>⚠️ Tu ne peux pas avoir <strong style="color:var(--red3)">5 étoiles partout</strong> — réserve les hautes maîtrises à tes vraies unités de prédilection.</div>'
     +'</div>'
@@ -3644,8 +3644,8 @@ function pgUnit(){
 
   return infoH
     +'<div class="g2">'
-    +'<div><div class="pan"><div class="ph"><span class="ptl">Mes Unités ('+myU.length+'/15)</span></div><div class="pb">'+listH+'</div></div></div>'
-    +'<div><div class="pan"><div class="ph"><span class="ptl">Catalogue</span>'+(myU.length>=10?'<span style="font-size:11px;color:var(--red3);margin-left:auto">⚠️ Maximum atteint</span>':'')+'</div><div class="pb">'+filterH+catH+'</div></div></div>'
+    +'<div><div class="pan"><div class="ph"><span class="ptl">Mes Unités ('+myU.length+')</span></div><div class="pb">'+listH+'</div></div></div>'
+    +'<div><div class="pan"><div class="ph"><span class="ptl">Catalogue</span></div><div class="pb">'+filterH+catH+'</div></div></div>'
     +'</div>';
 }
 
@@ -3703,10 +3703,6 @@ function confirmAddUnit(btn){
   var name=btn.dataset.name;
   var mastery=parseInt(btn.dataset.mas)||1;
   CU.units = CU.units||[];
-  if(CU.units.length>=15){
-    alert('Maximum 15 unités. Retire une unité avant d\'en ajouter une nouvelle.');
-    CM();return;
-  }
   CU.units.push({name:name, mastery:mastery});
   sbSaveMember(CU);
   CM();
@@ -4100,14 +4096,21 @@ function renderGroupCard(g, war){
           +[0,1,2].map(function(ui){
             var u=units[ui]||'';
             if(canEditSlots){
-              var eu=uBM(mid,g.minMastery);
+              // Toutes les unités du membre (sans filtre maîtrise pour ne rien exclure)
+              var euAll=(gM(mid)||{units:[]}).units||[];
               // Exclure les unités déjà sélectionnées dans les autres slots du même membre
               var otherUnits=units.filter(function(_,oi){return oi!==ui&&units[oi];});
-              var euFiltered=eu.filter(function(eu2){return !otherUnits.some(function(ou){return ou===eu2.name;})||u===eu2.name;});
+              var euFiltered=euAll.filter(function(eu2){return !otherUnits.some(function(ou){return ou===eu2.name;})||u===eu2.name;});
+              // Séparer META et non-META
+              var metaList=(DB.metaUnits||[]);
+              var euMeta=euFiltered.filter(function(eu2){return metaList.indexOf(eu2.name)>=0;});
+              var euNonMeta=euFiltered.filter(function(eu2){return metaList.indexOf(eu2.name)<0;});
               var selColor=u?unitRarityStyle(u).color:'var(--tx2)';
+              var optFn=function(eu2){var rs2=unitRarityStyle(eu2.name);var stars='\u2605'.repeat(eu2.mastery||0);return'<option value="'+esc(eu2.name)+'"'+(u===eu2.name?' selected':'')+' style="color:'+rs2.color+';background:var(--bg1)">'+esc(eu2.name)+' '+stars+'</option>';};
               return'<select onchange="setUnitElColor(this)" data-gid="'+g.id+'" data-mid="'+mid+'" data-ui="'+ui+'" style="width:100%;font-size:8px;background:var(--bg1);border:1px solid var(--b1);color:'+selColor+';border-radius:2px;padding:1px">'
                 +'<option value="" style="color:var(--tx3)">U'+(ui+1)+'...</option>'
-                +euFiltered.map(function(eu2){var rs2=unitRarityStyle(eu2.name);var stars='★'.repeat(eu2.mastery||0);return'<option value="'+esc(eu2.name)+'"'+(u===eu2.name?' selected':'')+' style="color:'+rs2.color+';background:var(--bg1)">'+esc(eu2.name)+' '+stars+'</option>';}).join('')
+                +(euMeta.length?'<optgroup label="★ META">'+euMeta.map(optFn).join('')+'</optgroup>':'')
+                +(euNonMeta.length?'<optgroup label="Autres">'+euNonMeta.map(optFn).join('')+'</optgroup>':'')
                 +'</select>';
             } else {
               return u?'<div style="font-size:8px;color:var(--gold);background:var(--bg1);padding:1px 4px;border-radius:2px;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(u)+'</div>':'';
