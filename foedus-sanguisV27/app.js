@@ -190,6 +190,32 @@ function localTournamentToSb(t){
 function sbSaveTournament(t){ return SB.from('tournaments').upsert(localTournamentToSb(t)); }
 function sbDeleteTournament(id){ return SB.from('tournaments').delete('id',id); }
 
+// ── Training mappers ──────────────────────────────────────
+function sbTrainingToLocal(r){
+  return {
+    id:r.id, title:r.title||'', description:r.description||'',
+    date:r.date||'', time:r.time||'',
+    status:r.status||'open',
+    registrations:r.registrations||{},
+    teams:r.teams||[],
+    teamSize:r.team_size||5,
+    createdBy:r.created_by||''
+  };
+}
+function localTrainingToSb(t){
+  return {
+    id:t.id, title:t.title, description:t.description||'',
+    date:t.date||'', time:t.time||'',
+    status:t.status||'open',
+    registrations:t.registrations||{},
+    teams:t.teams||[],
+    team_size:t.teamSize||5,
+    created_by:t.createdBy||''
+  };
+}
+function sbSaveTraining(t){ return SB.from('trainings').upsert(localTrainingToSb(t)); }
+function sbDeleteTraining(id){ return SB.from('trainings').delete('id',id); }
+
 
 function toggleSeedingMode(sel){
   var tw=document.getElementById('nt-teamsize-wrap');
@@ -338,6 +364,7 @@ function sbLoad(){
     SB.from('formations').get(),
     SB.from('events').get(),
     SB.from('tournaments').get().catch(function(e){console.warn('[SB] tournaments:',e);return[];}),
+    SB.from('trainings').get().catch(function(e){console.warn('[SB] trainings:',e);return[]}),
     SB.from('hierarchy').get().catch(function(e){console.warn('[SB] hierarchy:',e);return[];}),
     SB.from('presence').get().catch(function(e){console.warn('[SB] presence:',e);return[];}),
     SB.from('house_settings').get().catch(function(e){console.warn('[SB] settings:',e);return[];})
@@ -369,19 +396,20 @@ function sbLoad(){
     DB.formations     = formations.map(sbFormationToLocal);
     DB.events         = events.map(sbEventToLocal);
     DB.tournaments    = tournaments.map(sbTournamentToLocal);
-    DB.hierarchy      = (res[10]||[]);
-    DB.presence       = (res[11]||[]);
-    var settingsRow=(res[12]||[]).find(function(r){return r.key==='meta_units';});
+    DB.trainings      = (res[10]||[]).map(sbTrainingToLocal);
+    DB.hierarchy      = (res[11]||[]);
+    DB.presence       = (res[12]||[]);
+    var settingsRow=(res[13]||[]).find(function(r){return r.key==='meta_units';});
     DB.metaUnits      = settingsRow ? (settingsRow.value||[]) : [];
-    var rhRow=(res[12]||[]).find(function(r){return r.key==='rh_users';});
+    var rhRow=(res[13]||[]).find(function(r){return r.key==='rh_users';});
     DB.rhUsers        = rhRow ? (rhRow.value||[]) : [];
-    var rhDataRow=(res[12]||[]).find(function(r){return r.key==='rh_data';});
+    var rhDataRow=(res[13]||[]).find(function(r){return r.key==='rh_data';});
     DB.rhData         = rhDataRow ? (rhDataRow.value||{}) : {};
-    var hillRow=(res[12]||[]).find(function(r){return r.key==='hill_king';});
+    var hillRow=(res[13]||[]).find(function(r){return r.key==='hill_king';});
     DB.hillKing       = hillRow ? (hillRow.value||{}) : {};
-    var hillBgRow=(res[12]||[]).find(function(r){return r.key==='hill_bg';});
+    var hillBgRow=(res[13]||[]).find(function(r){return r.key==='hill_bg';});
     DB.hillBg         = hillBgRow ? (hillBgRow.value||'') : '';
-    var hillHistRow=(res[12]||[]).find(function(r){return r.key==='hill_history';});
+    var hillHistRow=(res[13]||[]).find(function(r){return r.key==='hill_history';});
     DB.hillHistory    = hillHistRow ? (hillHistRow.value||[]) : [];
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
@@ -672,7 +700,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings('main', {house_name:DB.houseName, min_mastery:DB.minMastery, active_war_id:DB.activeWarId||null}).catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[]}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],trainings:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[]}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -5729,15 +5757,16 @@ function pgCal(){
   if(canManage){
     document.getElementById('tact').innerHTML=
       (tab==='events'?'<button class="btn bg bsm" onclick="openNewEvent()">+ Événement</button>'
+      :tab==='trainings'&&(HR('evenement')||HR('officier'))?'<button class="btn bg bsm" onclick="openNewTraining()">+ Entraînement</button>'
       :'<button class="btn bg bsm" onclick="openNewTournament()">+ Tournoi</button>');
   }
   if(window._calDetail) return renderCalDetail(window._calDetail);
 
   var h='<div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--b1)">'
     +'<button onclick="setCalTab(\'events\')" class="ftab'+(tab==='events'?' ftab-a':'')+'">📅 Événements ('+(DB.events||[]).length+')</button>'
+    +'<button onclick="setCalTab(\'trainings\')" class="ftab'+(tab==='trainings'?' ftab-a':'')+'">🥊 Entraînement ('+(DB.trainings||[]).length+')</button>'
     +'<button onclick="setCalTab(\'tournaments\')" class="ftab'+(tab==='tournaments'?' ftab-a':'')+'">🏆 Tournois ('+(DB.tournaments||[]).length+')</button>'
     +'</div>';
-
   if(tab==='events'){
     var sorted=(DB.events||[]).slice().sort(function(a,b){return a.date.localeCompare(b.date);});
     if(!sorted.length) h+='<div class="td ta-c" style="padding:40px">Aucun événement.</div>';
@@ -5754,6 +5783,16 @@ function pgCal(){
           +'</div>':'')
         +'</div>';
     }).join('')+'</div></div>';
+  } else if(tab==='trainings'){
+    var trns=(DB.trainings||[]).slice().sort(function(a,b){return a.date.localeCompare(b.date);});
+    if(!trns.length) h+='<div class="td ta-c" style="padding:40px">Aucun entraînement planifié.</div>';
+    else h+='<div>'+trns.map(function(tr){
+      var statusColor=tr.status==='open'?'#66bb6a':tr.status==='ongoing'?'#f9a825':'var(--tx3)';
+      var statusLabel=tr.status==='open'?'Inscriptions ouvertes':tr.status==='ongoing'?'En cours':'Terminé';
+      var myIn=tr.registrations&&tr.registrations[CU.id];
+      var nbIn=Object.keys(tr.registrations||{}).filter(function(k){return tr.registrations[k];}).length;
+      return '<div class="pan" style="margin-bottom:12px;cursor:pointer" onclick="openCalDetail(this)" data-id="'+tr.id+'" data-type="training">'        +'<div class="ph"><span style="font-size:18px;margin-right:8px">🥊</span>'        +'<div style="flex:1"><div class="ptl">'+esc(tr.title)+'</div>'        +'<div style="font-size:11px;color:var(--tx3)">📅 '+esc(tr.date)+(tr.time?' à '+esc(tr.time):'')+'</div></div>'        +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'        +'<span style="font-size:10px;font-weight:700;color:'+statusColor+'">'+statusLabel+'</span>'        +(myIn?'<span class="badge bok" style="font-size:8px">✅ Inscrit</span>':'')        +'</div></div>'        +'<div style="padding:8px 16px;display:flex;gap:16px;font-size:11px;color:var(--tx3);border-top:1px solid var(--b1)">'        +'<span>👥 '+nbIn+' inscrit(s)</span>'        +(tr.teamSize?'<span>🏷️ '+tr.teamSize+' par équipe</span>':'')        +(tr.description?'<span style="color:var(--tx2)">'+esc(tr.description.slice(0,60))+(tr.description.length>60?'...':'')+'</span>':'')        +'</div>'        +(canManage?'<div style="padding:8px 16px;border-top:1px solid var(--b1);display:flex;gap:8px">'          +'<button class="btn bol bsm" onclick="editTrainingW(this);event.stopPropagation()" data-id="'+tr.id+'">✏️ Éditer</button>'          +'<button class="btn bred bsm" onclick="delTrainingW(this);event.stopPropagation()" data-id="'+tr.id+'">✕</button>'          +'</div>':'')        +'</div>';
+    }).join('')+'</div>';
   } else {
     var tours=(DB.tournaments||[]).slice().sort(function(a,b){return a.date.localeCompare(b.date);});
     if(!tours.length) h+='<div class="td ta-c" style="padding:40px">Aucun tournoi.</div>';
@@ -5825,8 +5864,11 @@ function openCalDetail(el){
   if(type==='event'){
     var e=(DB.events||[]).find(function(x){return x.id===id;});
     if(e){window._calDetail={type:'event',data:e};go('cal');}
-  } else {
+  } else if(type==='tournament'){
     var t=(DB.tournaments||[]).find(function(x){return x.id===id;});
+  } else if(type==='training'){
+    var tr=(DB.trainings||[]).find(function(x){return x.id===id;});
+    if(tr){window._calDetail={type:'training',data:tr};go('cal');}
     if(t){window._calDetail={type:'tournament',data:t};go('cal');}
   }
 }
@@ -5880,9 +5922,365 @@ function renderCalDetail(detail){
       +(e.description?'<div style="font-size:14px;line-height:1.8;white-space:pre-line;margin-bottom:12px">'+esc(e.description)+'</div>':'')
       +voteSection
       +'</div></div>';
-  } else {
+  } else if(detail.type==='tournament'){
     return backBtn + renderTournamentDetail(detail.data);
+  } else if(detail.type==='training'){
+    return backBtn + renderTrainingDetail(detail.data);
   }
+}
+
+
+// ══════════════════════════════════════════════════════
+// ENTRAÎNEMENTS
+// ══════════════════════════════════════════════════════
+
+function renderTrainingDetail(tr){
+  var canManage=HR('evenement')||HR('officier');
+  var myIn=tr.registrations&&tr.registrations[CU.id];
+  var registeredIds=Object.keys(tr.registrations||{}).filter(function(k){return tr.registrations[k];});
+  var registeredMembers=DB.members.filter(function(m){return registeredIds.indexOf(m.id)>=0;});
+  var statusColor=tr.status==='open'?'#66bb6a':tr.status==='ongoing'?'#f9a825':'var(--tx3)';
+  var statusLabel=tr.status==='open'?'Inscriptions ouvertes':tr.status==='ongoing'?'En cours':'Terminé';
+
+  // Inscription button
+  var regSection='';
+  if(tr.status==='open'){
+    regSection='<div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+      +'<button onclick="castTrainingReg(this)" data-id="'+tr.id+'" style="'
+      +(myIn?'background:rgba(56,142,60,.2);border-color:#388e3c;color:#66bb6a;':'')
+      +'padding:10px 24px;font-size:13px;font-family:Cinzel,serif;font-weight:700;cursor:pointer;border-radius:3px;border:1px solid var(--b2);color:var(--tx2);transition:all .2s" class="btn '+(myIn?'':'bol')+'">'
+      +(myIn?'✅ Inscrit — Retirer':'🙋 S\'inscrire')+'</button>'
+      +'<span style="font-size:12px;color:var(--tx3)">'+registeredIds.length+' inscrit(s)</span>'
+      +'</div>';
+  }
+
+  // Participants list
+  var partSection='<div style="background:rgba(46,125,50,.06);border:1px solid rgba(56,142,60,.25);border-radius:3px;padding:10px;margin-bottom:16px">'
+    +'<div style="font-size:10px;font-weight:700;color:#66bb6a;letter-spacing:1px;margin-bottom:8px">INSCRITS ('+registeredMembers.length+')</div>'
+    +(registeredMembers.length===0?'<div style="font-size:11px;color:var(--tx3)">Aucun inscrit pour l\'instant.</div>':'')
+    +registeredMembers.map(function(m){return'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'+avaHTML(m,20)+'<span style="font-size:12px;color:var(--tx1)">'+esc(m.username)+'</span></div>';}).join('')
+    +'</div>';
+
+  // Teams section
+  var teamsSection='';
+  if(tr.teams&&tr.teams.length){
+    teamsSection='<div style="margin-bottom:16px">'
+      +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:10px">ÉQUIPES</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">'
+      +tr.teams.map(function(team){
+        return'<div style="background:var(--bg2);border:1px solid var(--b2);border-radius:4px;padding:10px">'
+          +'<div style="font-family:Cinzel,serif;font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px">'+esc(team.name)+'</div>'
+          +(team.members||[]).map(function(tm){
+            var m=gM(tm.memberId);
+            var metaList=DB.metaUnits||[];
+            var units=tm.units||[];
+            return'<div style="margin-bottom:6px">'
+              +(m?'<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">'+avaHTML(m,16)+'<span style="font-size:11px;color:var(--tx1)">'+esc(m.username)+'</span></div>':'')
+              +'<div style="display:flex;gap:3px;flex-wrap:wrap;padding-left:21px">'
+              +[0,1,2].map(function(ui){
+                var u=units[ui]||'';
+                var isMeta=u&&metaList.indexOf(u)>=0;
+                if(!u) return'<span style="font-size:9px;color:var(--tx4);border:1px dashed var(--b1);padding:1px 5px;border-radius:2px">U'+(ui+1)+'</span>';
+                return'<span style="font-size:9px;padding:1px 5px;border-radius:2px;'+(isMeta?'background:rgba(201,162,39,.2);color:var(--gold);border:1px solid rgba(201,162,39,.4)':'background:var(--bg1);color:var(--tx2);border:1px solid var(--b1)')+'">'+(isMeta?'★ ':'')+esc(u)+'</span>';
+              }).join('')
+              +'</div></div>';
+          }).join('')
+          +'</div>';
+      }).join('')
+      +'</div></div>';
+  }
+
+  // My units assignment (if in a team)
+  var myTeam=null, myTeamIdx=-1, myMemberSlot=null;
+  if(tr.teams) tr.teams.forEach(function(team,ti){
+    team.members&&team.members.forEach(function(tm){
+      if(tm.memberId===CU.id){myTeam=team;myTeamIdx=ti;myMemberSlot=tm;}
+    });
+  });
+
+  var myUnitsSection='';
+  if(myTeam&&myMemberSlot){
+    var metaList=DB.metaUnits||[];
+    var myAllUnits=CU.units||[];
+    var myMetaUnits=myAllUnits.filter(function(u){return metaList.indexOf(u.name)>=0;});
+    var myOtherUnits=myAllUnits.filter(function(u){return metaList.indexOf(u.name)<0;});
+    var optFn=function(u){var rs=unitRarityStyle(u.name);return'<option value="'+esc(u.name)+'" style="color:'+rs.color+';background:var(--bg1)">'+esc(u.name)+' '+'★'.repeat(u.mastery||0)+'</option>';};
+    myUnitsSection='<div style="background:rgba(201,162,39,.07);border:1px solid var(--golddim);border-radius:4px;padding:14px;margin-bottom:16px">'
+      +'<div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:10px">⚔️ MES UNITÉS POUR CET ENTRAÎNEMENT ('+esc(myTeam.name)+')</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +[0,1,2].map(function(ui){
+        var curU=(myMemberSlot.units||[])[ui]||'';
+        var selColor=curU?unitRarityStyle(curU).color:'var(--tx2)';
+        return'<div style="flex:1;min-width:120px">'
+          +'<div style="font-size:9px;color:var(--tx3);margin-bottom:4px">Unité '+(ui+1)+'</div>'
+          +'<select onchange="setTrainingUnit(this)" data-trid="'+tr.id+'" data-ti="'+myTeamIdx+'" data-ui="'+ui+'" style="width:100%;font-size:11px;background:var(--bg1);border:1px solid var(--b2);color:'+selColor+';border-radius:3px;padding:4px">'
+          +'<option value="">— Choisir —</option>'
+          +(myMetaUnits.length?'<optgroup label="★ META">'+myMetaUnits.map(optFn).join('')+'</optgroup>':'')
+          +(myOtherUnits.length?'<optgroup label="Autres">'+myOtherUnits.map(optFn).join('')+'</optgroup>':'')
+          +'</select></div>';
+      }).join('')
+      +'</div>'
+      +'<button onclick="saveTrainingUnits(this)" data-trid="'+tr.id+'" data-ti="'+myTeamIdx+'" class="btn bg bsm" style="margin-top:10px">💾 Sauvegarder mes unités</button>'
+      +'</div>';
+    // Pre-select current values via postrender
+    setTimeout(function(){
+      [0,1,2].forEach(function(ui){
+        var sel=document.querySelector('select[data-trid="'+tr.id+'"][data-ti="'+myTeamIdx+'"][data-ui="'+ui+'"]');
+        if(sel){sel.value=(myMemberSlot.units||[])[ui]||'';setUnitElColor(sel);}
+      });
+    },50);
+  }
+
+  var h='<div class="pan" style="margin-bottom:12px">'
+    +'<div class="ph"><span style="font-size:18px;margin-right:8px">🥊</span>'
+    +'<span class="ptl" style="font-size:16px">'+esc(tr.title)+'</span>'
+    +'<span style="margin-left:8px;font-size:10px;font-weight:700;color:'+statusColor+'">'+statusLabel+'</span>'
+    +(canManage?'<div style="margin-left:auto;display:flex;gap:6px">'
+      +(tr.status!=='finished'?'<button class="btn bol bsm" onclick="openTrainingTeamBuilder(this.dataset.id)" data-id="'+tr.id+'">👥 Équipes</button>':'' )
+      +'<button class="btn bol bsm" onclick="cycleTrainingStatus(\''+tr.id+'\')" >'+(tr.status==='open'?'▶ Démarrer':tr.status==='ongoing'?'✅ Terminer':'🔄 Rouvrir')+'</button>'
+      +'<button class="btn bol bsm" onclick="editTrainingW2(this.dataset.id)" data-id="'+tr.id+'">✏️</button>'
+      +'</div>':'')
+    +'</div>'
+    +'<div class="pb">'
+    +'<div style="display:flex;gap:16px;font-size:12px;color:var(--tx3);margin-bottom:12px">'
+    +'<span>📅 '+esc(tr.date)+'</span><span>🕐 '+esc(tr.time)+'</span>'
+    +(tr.teamSize?'<span>👥 '+tr.teamSize+' par équipe</span>':'')
+    +'</div>'
+    +(tr.description?'<div style="font-size:14px;line-height:1.8;margin-bottom:12px">'+esc(tr.description)+'</div>':'')
+    +regSection
+    +myUnitsSection
+    +partSection
+    +teamsSection
+    +'</div></div>';
+  return h;
+}
+
+function castTrainingReg(btn){
+  var id=btn.dataset.id;
+  var tr=(DB.trainings||[]).find(function(x){return x.id===id;});
+  if(!tr||tr.status!=='open') return;
+  tr.registrations=tr.registrations||{};
+  if(tr.registrations[CU.id]) delete tr.registrations[CU.id];
+  else tr.registrations[CU.id]=true;
+  sbSaveTraining(tr).then(function(){window._calDetail={type:'training',data:tr};go('cal');}).catch(function(e){console.warn(e);});
+}
+
+function cycleTrainingStatus(id){
+  var tr=(DB.trainings||[]).find(function(x){return x.id===id;});
+  if(!tr) return;
+  var next=tr.status==='open'?'ongoing':tr.status==='ongoing'?'finished':'open';
+  if(!confirm('Passer le statut en "'+next+'" ?')) return;
+  tr.status=next;
+  sbSaveTraining(tr).then(function(){window._calDetail={type:'training',data:tr};go('cal');}).catch(function(e){console.warn(e);});
+}
+
+function setTrainingUnit(sel){
+  setUnitElColor(sel);
+}
+
+function saveTrainingUnits(btn){
+  var trid=btn.dataset.trid, ti=parseInt(btn.dataset.ti);
+  var tr=(DB.trainings||[]).find(function(x){return x.id===trid;});
+  if(!tr||!tr.teams[ti]) return;
+  var tm=tr.teams[ti].members.find(function(m){return m.memberId===CU.id;});
+  if(!tm) return;
+  tm.units=[0,1,2].map(function(ui){
+    var sel=document.querySelector('select[data-trid="'+trid+'"][data-ti="'+ti+'"][data-ui="'+ui+'"]');
+    return sel?sel.value:'';
+  });
+  sbSaveTraining(tr).then(function(){window._calDetail={type:'training',data:tr};go('cal');}).catch(function(e){alert('Erreur sauvegarde');console.warn(e);});
+}
+
+function openTrainingTeamBuilder(id){
+  var tr=(DB.trainings||[]).find(function(x){return x.id===id;});
+  if(!tr) return;
+  var registeredIds=Object.keys(tr.registrations||{}).filter(function(k){return tr.registrations[k];});
+  if(registeredIds.length<2){alert('Il faut au moins 2 inscrits pour former des équipes.');return;}
+  if(!tr.teams||!tr.teams.length){
+    var ts=tr.teamSize||5;
+    var nb=Math.max(2,Math.ceil(registeredIds.length/ts));
+    tr.teams=[];
+    for(var i=0;i<nb;i++) tr.teams.push({id:'trt'+Date.now()+i,name:'Équipe '+(i+1),members:[]});
+  }
+  renderTrainingTeamBuilder(tr);
+}
+
+function renderTrainingTeamBuilder(tr){
+  var registeredIds=Object.keys(tr.registrations||{}).filter(function(k){return tr.registrations[k];});
+  var teams=tr.teams||[];
+  var sel=window._trtSelected||null;
+  var assignedIds=[];
+  teams.forEach(function(team){(team.members||[]).forEach(function(m){assignedIds.push(m.memberId);});});
+  var unassigned=registeredIds.filter(function(id){return assignedIds.indexOf(id)<0;});
+
+  var html='<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+    +'<span style="font-size:11px;color:var(--tx3)">Cliquez un joueur puis une équipe pour l\'assigner.</span>'
+    +'<button onclick="autoFillTrainingTeams(\''+tr.id+'\')" class="btn bol bsm" style="margin-left:auto">⚡ Auto-répartir</button>'
+    +'</div>';
+
+  html+='<div style="margin-bottom:14px"><div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:6px">NON ASSIGNÉS ('+unassigned.length+')</div>';
+  html+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  unassigned.forEach(function(mid){
+    var m=gM(mid);
+    var isSelected=sel===mid;
+    html+='<div onclick="trtSelectPlayer(this)" data-trid="'+tr.id+'" data-pid="'+mid+'" style="cursor:pointer;border-radius:3px;padding:5px 10px;font-size:12px;display:flex;align-items:center;gap:6px;transition:all .15s;'
+      +(isSelected?'background:var(--golddim);border:2px solid var(--gold);color:var(--gold);':'background:var(--bg2);border:2px solid var(--b2);color:var(--tx1);')
+      +'">'
+      +(m?avaHTML(m,18):mid)+(m?esc(m.username):mid)
+      +(isSelected?'<span style="font-size:10px">✓</span>':'')
+      +'</div>';
+  });
+  html+='</div></div>';
+
+  html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px">';
+  teams.forEach(function(team,ti){
+    var canAdd=sel&&!false;
+    html+='<div onclick="trtDropToTeam(this)" data-trid="'+tr.id+'" data-ti="'+ti+'" style="background:var(--bg1);border:2px solid '+(canAdd&&sel?'var(--gold)':'var(--b2)')+';border-radius:4px;padding:10px;cursor:'+(canAdd&&sel?'pointer':'default')+';transition:border-color .15s">';
+    html+='<input style="width:100%;background:transparent;border:none;border-bottom:1px solid var(--b2);color:var(--gold);font-family:Cinzel,serif;font-size:11px;font-weight:700;padding:2px 0;margin-bottom:8px" value="'+esc(team.name)+'" onclick="event.stopPropagation()" onchange="renameTrtTeam(this)" data-trid="'+tr.id+'" data-ti="'+ti+'">';
+    if(!team.members||team.members.length===0){
+      html+='<div style="font-size:11px;color:var(--tx3);text-align:center;padding:6px 0">'+(sel?'👆 Cliquer pour ajouter':'Vide')+'</div>';
+    }
+    (team.members||[]).forEach(function(tm){
+      var m=gM(tm.memberId);
+      html+='<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px;font-size:11px;color:var(--tx1)">'
+        +(m?avaHTML(m,16):'')+(m?esc(m.username):tm.memberId)
+        +'<button onclick="trtRemovePlayer(this);event.stopPropagation()" data-trid="'+tr.id+'" data-pid="'+tm.memberId+'" data-ti="'+ti+'" style="margin-left:auto;background:none;border:none;color:var(--red3);cursor:pointer;font-size:11px;padding:0">✕</button>'
+        +'</div>';
+    });
+    html+='<div style="font-size:9px;color:var(--tx3);text-align:right;margin-top:4px">'+(team.members||[]).length+' membre(s)</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+
+  OM('Équipes — '+esc(tr.title), html,
+    [{lbl:'Annuler',cls:'bol',fn:function(){window._trtSelected=null;CM();}},
+     {lbl:'+ Équipe',cls:'btn bol',fn:function(){
+       tr.teams=tr.teams||[];
+       tr.teams.push({id:'trt'+Date.now(),name:'Équipe '+(tr.teams.length+1),members:[]});
+       window._trtSelected=null;
+       renderTrainingTeamBuilder(tr);
+     }},
+     {lbl:'💾 Sauvegarder',cls:'btn bg',fn:function(){
+       window._trtSelected=null;CM();
+       sbSaveTraining(tr).then(function(){window._calDetail={type:'training',data:tr};go('cal');}).catch(function(e){console.warn(e);});
+     }}]);
+}
+
+function trtSelectPlayer(el){
+  var pid=el.dataset.pid;
+  var tr=(DB.trainings||[]).find(function(x){return x.id===el.dataset.trid;});
+  if(!tr) return;
+  window._trtSelected=(window._trtSelected===pid)?null:pid;
+  renderTrainingTeamBuilder(tr);
+}
+
+function trtDropToTeam(el){
+  if(!window._trtSelected) return;
+  var tr=(DB.trainings||[]).find(function(x){return x.id===el.dataset.trid;});
+  if(!tr) return;
+  var ti=parseInt(el.dataset.ti);
+  var team=tr.teams[ti];
+  if(!team) return;
+  var alreadyIn=false;
+  tr.teams.forEach(function(te){(te.members||[]).forEach(function(m){if(m.memberId===window._trtSelected)alreadyIn=true;});});
+  if(alreadyIn) return;
+  team.members=team.members||[];
+  team.members.push({memberId:window._trtSelected,units:[]});
+  window._trtSelected=null;
+  renderTrainingTeamBuilder(tr);
+}
+
+function trtRemovePlayer(btn){
+  var tr=(DB.trainings||[]).find(function(x){return x.id===btn.dataset.trid;});
+  if(!tr) return;
+  var ti=parseInt(btn.dataset.ti);
+  tr.teams[ti].members=(tr.teams[ti].members||[]).filter(function(m){return m.memberId!==btn.dataset.pid;});
+  window._trtSelected=null;
+  renderTrainingTeamBuilder(tr);
+}
+
+function renameTrtTeam(inp){
+  var tr=(DB.trainings||[]).find(function(x){return x.id===inp.dataset.trid;});
+  if(!tr) return;
+  var ti=parseInt(inp.dataset.ti);
+  if(tr.teams[ti]) tr.teams[ti].name=inp.value;
+}
+
+function autoFillTrainingTeams(id){
+  var tr=(DB.trainings||[]).find(function(x){return x.id===id;});
+  if(!tr) return;
+  var registeredIds=Object.keys(tr.registrations||{}).filter(function(k){return tr.registrations[k];});
+  var ts=tr.teamSize||5;
+  var nb=Math.max(2,Math.ceil(registeredIds.length/ts));
+  // Shuffle
+  var ids=registeredIds.slice();
+  for(var i=ids.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var tmp=ids[i];ids[i]=ids[j];ids[j]=tmp;}
+  tr.teams=[];
+  for(var k=0;k<nb;k++){
+    tr.teams.push({id:'trt'+Date.now()+k,name:'Équipe '+(k+1),members:ids.slice(k*ts,(k+1)*ts).map(function(mid){return{memberId:mid,units:[]};})});
+  }
+  window._trtSelected=null;
+  renderTrainingTeamBuilder(tr);
+}
+
+function openNewTraining(){
+  var canManage=HR('evenement')||HR('officier');
+  if(!canManage) return;
+  OM('Nouvel entraînement',
+    '<div class="fg"><label class="fl">Titre</label><input class="fi" id="ntr-title"></div>'
+    +'<div class="fg"><label class="fl">Description</label><textarea class="ft" id="ntr-desc" style="min-height:60px"></textarea></div>'
+    +'<div class="fr2"><div class="fg"><label class="fl">Date</label><input class="fi" type="date" id="ntr-date" value="'+nowDate()+'"></div>'
+    +'<div class="fg"><label class="fl">Heure</label><input class="fi" type="time" id="ntr-time" value="20:00"></div></div>'
+    +'<div class="fg"><label class="fl">Membres par équipe</label><input class="fi" type="number" id="ntr-teamsize" value="5" min="1" max="30" style="max-width:100px"><span style="font-size:11px;color:var(--tx3);margin-left:8px">ex: 5 pour 5v5</span></div>',
+    [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Créer',cls:'btn bg',fn:function(){
+      var title=gVal('ntr-title').trim();if(!title)return alert('Titre requis');
+      var tr={
+        id:'tr'+Date.now(), title:title, description:gVal('ntr-desc'),
+        date:gVal('ntr-date'), time:gVal('ntr-time'),
+        teamSize:parseInt(gVal('ntr-teamsize'))||5,
+        status:'open', registrations:{}, teams:[],
+        createdBy:CU.username
+      };
+      DB.trainings=DB.trainings||[];
+      DB.trainings.push(tr);
+      sbSaveTraining(tr).catch(function(e){console.warn(e);});
+      CM();window._calDetail={type:'training',data:tr};go('cal');
+    }}]);
+}
+
+function editTrainingW(el){
+  var tr=(DB.trainings||[]).find(function(x){return x.id===el.dataset.id;});
+  if(!tr) return; editTrainingForm(tr);
+}
+function editTrainingW2(id){
+  var tr=(DB.trainings||[]).find(function(x){return x.id===id;});
+  if(!tr) return; editTrainingForm(tr);
+}
+function editTrainingForm(tr){
+  OM('Modifier l\'entraînement',
+    '<div class="fg"><label class="fl">Titre</label><input class="fi" id="etr-title" value="'+esc(tr.title)+'"></div>'
+    +'<div class="fg"><label class="fl">Description</label><textarea class="ft" id="etr-desc">'+esc(tr.description||'')+'</textarea></div>'
+    +'<div class="fr2"><div class="fg"><label class="fl">Date</label><input class="fi" type="date" id="etr-date" value="'+esc(tr.date)+'"></div>'
+    +'<div class="fg"><label class="fl">Heure</label><input class="fi" type="time" id="etr-time" value="'+esc(tr.time)+'"></div></div>'
+    +'<div class="fr2"><div class="fg"><label class="fl">Membres par équipe</label><input class="fi" type="number" id="etr-teamsize" value="'+(tr.teamSize||5)+'" min="1" max="30" style="max-width:100px"></div>'
+    +'<div class="fg"><label class="fl">Statut</label><select class="fs" id="etr-status"><option value="open"'+(tr.status==='open'?' selected':'')+'>Inscriptions ouvertes</option><option value="ongoing"'+(tr.status==='ongoing'?' selected':'')+'>En cours</option><option value="finished"'+(tr.status==='finished'?' selected':'')+'>Terminé</option></select></div></div>',
+    [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
+      tr.title=gVal('etr-title')||tr.title;
+      tr.description=gVal('etr-desc');
+      tr.date=gVal('etr-date'); tr.time=gVal('etr-time');
+      tr.teamSize=parseInt(gVal('etr-teamsize'))||tr.teamSize||5;
+      tr.status=gVal('etr-status');
+      sbSaveTraining(tr).catch(function(e){console.warn(e);});
+      CM();window._calDetail={type:'training',data:tr};go('cal');
+    }}]);
+}
+
+function delTrainingW(el){
+  if(!confirm('Supprimer cet entraînement ?')) return;
+  var id=el.dataset.id;
+  DB.trainings=(DB.trainings||[]).filter(function(x){return x.id!==id;});
+  sbDeleteTraining(id).catch(function(e){console.warn(e);});
+  window._calDetail=null; go('cal');
 }
 
 function renderTournamentDetail(t){
