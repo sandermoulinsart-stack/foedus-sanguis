@@ -4775,9 +4775,9 @@ var UNIT_META = {
 // Unités prioritaires par objectif
 var OBJ_UNITS = {
   ville: {
-    porte:   ['Equipe de Lionroar','Siphonaros','Berserkers','Claymores','Fauchefers','Piquiers vipères'],
-    muraille:['Grenadiers de Shenji','Fidèles Symmachéens','Lanciers impériaux','Mirmillons','Élus de Sparte','Phalange solaire'],
-    breche:  ['Fauchefers','Gardes au modao','Phalange solaire','Piquiers impériaux','Berserkers','Milice Zykalienne'],
+    porte:   ['Equipe de Lionroar','Siphonaros','Milice Zykalienne','Fauchefers','Berserkers','Claymores'],
+    muraille:['Grenadiers de Shenji','Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Phalange solaire','Gardes au modao'],
+    breche:  ['Fauchefers','Berserkers','Gardes au modao','Phalange solaire','Piquiers impériaux','Claymores'],
   },
   village: {
     cavalerie:['Chevaliers de la maison de York','Éclaireurs de Liao','Chevaucheurs','Coutiliers','Pistoleros Reitar','Éclaireurs tête-de-fer'],
@@ -5016,19 +5016,19 @@ function getBestPrio(m){
 // Composition cible par objectif: {role: [unités prioritaires]}
 var OBJ_ROLES = {
   porte: [
-    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
-    {role:'Anti-cav',  count:1, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
-    {role:'Exotique',  count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne','Grenadiers de Shenji','Berserkers','Claymores']}
+    {role:'Bouclier', count:1, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
+    {role:'Pusher',   count:2, units:['Fauchefers','Berserkers','Claymores','Milice Zykalienne','Piquiers vipères','Skjaldmös']},
+    {role:'Exotique', count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne','Grenadiers de Shenji']}
   ],
   muraille: [
     {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
-    {role:'Anti-cav',  count:2, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
-    {role:'Exotique',  count:1, units:['Grenadiers de Shenji','Milice Zykalienne','Equipe de Lionroar','Siphonaros','Berserkers','Claymores']}
+    {role:'Anti-cav', count:2, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
+    {role:'Exotique', count:1, units:['Grenadiers de Shenji','Milice Zykalienne','Siphonaros','Equipe de Lionroar']}
   ],
   breche: [
-    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
-    {role:'Anti-cav',  count:1, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
-    {role:'Exotique',  count:2, units:['Siphonaros','Equipe de Lionroar','Berserkers','Claymores','Milice Zykalienne','Grenadiers de Shenji']}
+    {role:'Bouclier', count:1, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
+    {role:'Pusher',   count:2, units:['Fauchefers','Berserkers','Claymores','Milice Zykalienne','Piquiers vipères','Skjaldmös']},
+    {role:'Exotique', count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne','Grenadiers de Shenji']}
   ],
   refill: [
     {role:'any', count:5, units:[]}
@@ -5036,28 +5036,41 @@ var OBJ_ROLES = {
 };
 
 // Trouver les meilleures unités d'un joueur pour un rôle donné
+// Priorité : META du rôle → META hors rôle (prio 1→2→3) → non-META par maîtrise
 function getBestUnitsForRole(m, roleUnits, count){
-  var memberUnitNames=(m.units||[]).map(function(u){return u.name;});
+  var memberUnits=(m.units||[]).slice().sort(function(a,b){return (a.mastery||0)<(b.mastery||0)?1:-1;});
+  var memberUnitNames=memberUnits.map(function(u){return u.name;});
+  var metaList=DB.metaUnits||[];
   var result=[];
-  // 1. Unités du rôle que le joueur possède, dans l'ordre de priorité
+
+  // 1. META du joueur qui correspondent au rôle, dans l'ordre du rôle
   roleUnits.forEach(function(u){
-    if(memberUnitNames.indexOf(u)>=0&&result.indexOf(u)<0) result.push(u);
+    if(memberUnitNames.indexOf(u)>=0&&result.indexOf(u)<0&&metaList.indexOf(u)>=0) result.push(u);
   });
-  // 2. Compléter avec les unités méta prio 1, 2, 3
+
+  // 2. META du joueur hors rôle, prio 1 → 2 → 3
   if(result.length<count){
     [1,2,3].forEach(function(prio){
       memberUnitNames.forEach(function(u){
-        if(result.indexOf(u)<0&&UNIT_META[u]&&UNIT_META[u].prio===prio) result.push(u);
+        if(result.indexOf(u)<0&&metaList.indexOf(u)>=0&&UNIT_META[u]&&UNIT_META[u].prio===prio) result.push(u);
       });
     });
   }
-  // 3. Compléter avec les autres unités du joueur par maîtrise décroissante
+
+  // 3. Unités du rôle non-META que le joueur possède
   if(result.length<count){
-    var remaining=(m.units||[]).slice().sort(function(a,b){return b.mastery-a.mastery;})
-      .map(function(u){return u.name;})
-      .filter(function(u){return result.indexOf(u)<0;});
-    remaining.forEach(function(u){result.push(u);});
+    roleUnits.forEach(function(u){
+      if(memberUnitNames.indexOf(u)>=0&&result.indexOf(u)<0) result.push(u);
+    });
   }
+
+  // 4. Compléter avec toutes les autres unités du joueur par maîtrise décroissante
+  if(result.length<count){
+    memberUnitNames.forEach(function(u){
+      if(result.indexOf(u)<0) result.push(u);
+    });
+  }
+
   return result.slice(0,count);
 }
 
