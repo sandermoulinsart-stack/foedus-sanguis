@@ -5229,41 +5229,44 @@ var OBJ_ROLES = {
 
 // Trouver les meilleures unités d'un joueur pour un rôle donné
 // Priorité : META du rôle → META hors rôle (prio 1→2→3) → non-META par maîtrise
-function getBestUnitsForRole(m, roleUnits, count){
-  var memberUnits=(m.units||[]).slice().sort(function(a,b){return (a.mastery||0)<(b.mastery||0)?1:-1;});
+// Retourne les meilleures unités d'un joueur pour un slot de rôle donné
+// Exotique : max 1 unité par joueur — Bouclier/Pusher/Anti-cav : jusqu'à count
+function getBestUnitsForRole(m, roleUnits, count, role){
+  var memberUnits=(m.units||[]).slice().sort(function(a,b){return (b.mastery||0)-(a.mastery||0);});
   var memberUnitNames=memberUnits.map(function(u){return u.name;});
   var metaList=DB.metaUnits||[];
+  var maxReturn=(role==='Exotique')?1:count;
   var result=[];
 
-  // 1. META du joueur qui correspondent au rôle, dans l'ordre du rôle
+  // 1. Unités META du joueur qui correspondent au rôle, dans l'ordre de priorité du rôle
   roleUnits.forEach(function(u){
-    if(memberUnitNames.indexOf(u)>=0&&result.indexOf(u)<0&&metaList.indexOf(u)>=0) result.push(u);
+    if(result.length<maxReturn&&memberUnitNames.indexOf(u)>=0&&metaList.indexOf(u)>=0&&result.indexOf(u)<0) result.push(u);
   });
 
-  // 2. META du joueur hors rôle, prio 1 → 2 → 3
-  if(result.length<count){
+  // 2. Autres unités META du joueur prio 1→2→3
+  if(result.length<maxReturn){
     [1,2,3].forEach(function(prio){
       memberUnitNames.forEach(function(u){
-        if(result.indexOf(u)<0&&metaList.indexOf(u)>=0&&UNIT_META[u]&&UNIT_META[u].prio===prio) result.push(u);
+        if(result.length<maxReturn&&result.indexOf(u)<0&&metaList.indexOf(u)>=0&&UNIT_META[u]&&UNIT_META[u].prio===prio) result.push(u);
       });
     });
   }
 
-  // 3. Unités du rôle non-META que le joueur possède
-  if(result.length<count){
+  // 3. Unités du rôle non-META
+  if(result.length<maxReturn){
     roleUnits.forEach(function(u){
-      if(memberUnitNames.indexOf(u)>=0&&result.indexOf(u)<0) result.push(u);
+      if(result.length<maxReturn&&memberUnitNames.indexOf(u)>=0&&result.indexOf(u)<0) result.push(u);
     });
   }
 
-  // 4. Compléter avec toutes les autres unités du joueur par maîtrise décroissante
-  if(result.length<count){
+  // 4. Compléter par maîtrise décroissante
+  if(result.length<maxReturn){
     memberUnitNames.forEach(function(u){
-      if(result.indexOf(u)<0) result.push(u);
+      if(result.length<maxReturn&&result.indexOf(u)<0) result.push(u);
     });
   }
 
-  return result.slice(0,count);
+  return result;
 }
 
 function assignMemberToRole(m, roleSlots){
@@ -5330,7 +5333,8 @@ function buildGroups(type, members, mode){
     grp.members.forEach(function(m){
       var slot=memberRoles[m.id];
       var roleUnits=slot?slot.units:[];
-      var bestUnits=getBestUnitsForRole(m,roleUnits,3);
+      var slotRole=slot?slot.role:'';
+      var bestUnits=getBestUnitsForRole(m,roleUnits,3,slotRole);
       unitAssignments[m.id]=bestUnits.concat(['','','']).slice(0,3);
       // Classe par défaut
       var firstClass=(m.classes&&m.classes[0])||m.classe||'';
