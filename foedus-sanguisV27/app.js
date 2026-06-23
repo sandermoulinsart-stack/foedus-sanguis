@@ -216,6 +216,10 @@ function localTrainingToSb(t){
 function sbSaveTraining(t){ return SB.from('trainings').upsert(localTrainingToSb(t)); }
 function sbDeleteTraining(id){ return SB.from('trainings').delete('id',id); }
 
+// ── Season mappers ────────────────────────────────────────
+function sbSaveSeason(s){ return SB.from('seasons').upsert(s); }
+function sbDeleteSeason(id){ return SB.from('seasons').delete('id',id); }
+
 
 function toggleSeedingMode(sel){
   var tw=document.getElementById('nt-teamsize-wrap');
@@ -365,6 +369,7 @@ function sbLoad(){
     SB.from('events').get(),
     SB.from('tournaments').get().catch(function(e){console.warn('[SB] tournaments:',e);return[];}),
     SB.from('trainings').get().catch(function(e){console.warn('[SB] trainings:',e);return[]}),
+    SB.from('seasons').get().catch(function(e){console.warn('[SB] seasons:',e);return[]}),
     SB.from('hierarchy').get().catch(function(e){console.warn('[SB] hierarchy:',e);return[];}),
     SB.from('presence').get().catch(function(e){console.warn('[SB] presence:',e);return[];}),
     SB.from('house_settings').get().catch(function(e){console.warn('[SB] settings:',e);return[];})
@@ -397,19 +402,20 @@ function sbLoad(){
     DB.events         = events.map(sbEventToLocal);
     DB.tournaments    = tournaments.map(sbTournamentToLocal);
     DB.trainings      = (res[10]||[]).map(sbTrainingToLocal);
-    DB.hierarchy      = (res[11]||[]);
-    DB.presence       = (res[12]||[]);
-    var settingsRow=(res[13]||[]).find(function(r){return r.key==='meta_units';});
+    DB.seasons       = (res[11]||[]).map(function(r){return r;});
+    DB.hierarchy      = (res[12]||[]);
+    DB.presence       = (res[13]||[]);
+    var settingsRow=(res[14]||[]).find(function(r){return r.key==='meta_units';});
     DB.metaUnits      = settingsRow ? (settingsRow.value||[]) : [];
-    var rhRow=(res[13]||[]).find(function(r){return r.key==='rh_users';});
+    var rhRow=(res[14]||[]).find(function(r){return r.key==='rh_users';});
     DB.rhUsers        = rhRow ? (rhRow.value||[]) : [];
-    var rhDataRow=(res[13]||[]).find(function(r){return r.key==='rh_data';});
+    var rhDataRow=(res[14]||[]).find(function(r){return r.key==='rh_data';});
     DB.rhData         = rhDataRow ? (rhDataRow.value||{}) : {};
-    var hillRow=(res[13]||[]).find(function(r){return r.key==='hill_king';});
+    var hillRow=(res[14]||[]).find(function(r){return r.key==='hill_king';});
     DB.hillKing       = hillRow ? (hillRow.value||{}) : {};
-    var hillBgRow=(res[13]||[]).find(function(r){return r.key==='hill_bg';});
+    var hillBgRow=(res[14]||[]).find(function(r){return r.key==='hill_bg';});
     DB.hillBg         = hillBgRow ? (hillBgRow.value||'') : '';
-    var hillHistRow=(res[13]||[]).find(function(r){return r.key==='hill_history';});
+    var hillHistRow=(res[14]||[]).find(function(r){return r.key==='hill_history';});
     DB.hillHistory    = hillHistRow ? (hillHistRow.value||[]) : [];
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
@@ -700,7 +706,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings('main', {house_name:DB.houseName, min_mastery:DB.minMastery, active_war_id:DB.activeWarId||null}).catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],trainings:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[]}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],trainings:[],seasons:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[]}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -1172,6 +1178,20 @@ function startRealtime(){
         }).catch(function(e){console.warn('[Realtime] groupes reload err',e);});
         return;
       }
+      if(tbl==='trainings'){
+        SB.from('trainings').get().then(function(rows){
+          DB.trainings=(rows||[]).map(sbTrainingToLocal);
+          _rerender();
+        }).catch(function(e){console.warn('[Realtime] trainings reload err',e);});
+        return;
+      }
+      if(tbl==='seasons'){
+        SB.from('seasons').get().then(function(rows){
+          DB.seasons=(rows||[]);
+          _rerender();
+        }).catch(function(e){console.warn('[Realtime] seasons reload err',e);});
+        return;
+      }
       // Fallback pour toute autre table non gérée
       _triggerReload();
     }catch(ex){ console.warn('[Realtime] parse err',ex); }
@@ -1376,8 +1396,8 @@ function renderSearchResults(q){
 // ════════════════════════════════════════
 function pgStats(){
   if(!CU||CU.username.toLowerCase()!=='adminfs') return '<div class="td ta-c" style="padding:60px">⛔ Accès réservé.</div>';
-  var wars=(DB.voteWars||[]).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
-  if(!wars.length)return'<div class="td ta-c" style="padding:40px">Aucune guerre dans l\'historique.</div>';
+  var wars=(DB.voteWars||[]).filter(function(w){return !w.seasonId;}).slice().sort(function(a,b){return b.date.localeCompare(a.date);});
+  if(!wars.length)return'<div class="td ta-c" style="padding:40px">Aucune guerre pour la saison en cours.</div>';
   var members=DB.members.filter(function(m){return m.status!=='recrue';});
   var stats={};
   members.forEach(function(m){
@@ -1405,7 +1425,7 @@ function pgStats(){
 // ════════════════════════════════════════
 function pgRank(){
   if(!CU||CU.username.toLowerCase()!=='adminfs') return '<div class="td ta-c" style="padding:60px">⛔ Accès réservé.</div>';
-  var wars=(DB.voteWars||[]);
+  var wars=(DB.voteWars||[]).filter(function(w){return !w.seasonId;});
   var members=DB.members.filter(function(m){return m.status!=='recrue';});
   var ranked=members.map(function(m){
     var present=0,late=0,absent=0,novote=0,total=wars.length;
@@ -1866,14 +1886,24 @@ function getMemberWarStatus(m, wars){
 function pgRH(){
   if(!isRH()) return '<div class="td ta-c" style="padding:60px">⛔ Accès réservé.</div>';
 
+  var rhTab = window._rhTab||'suivi';
+
   document.getElementById('tact').innerHTML =
-    '<button class="btn bol bsm" onclick="openRHOverviewW()" style="margin-right:4px">📊 Vue</button>'
-    + '<button class="btn bol bsm" onclick="openRHRulesW()" style="margin-right:4px">📖 Règles</button>'
-    + (HR('admin') ? '<button class="btn bol bsm" onclick="openRHUsersW()">👥 Accès RH</button>' : '');
+    (rhTab==='suivi' ? '<button class="btn bol bsm" onclick="openRHOverviewW()" style="margin-right:4px">📊 Vue</button>'
+      + '<button class="btn bol bsm" onclick="openRHRulesW()" style="margin-right:4px">📖 Règles</button>'
+      + (HR('admin') ? '<button class="btn bol bsm" onclick="openRHUsersW()">👥 Accès RH</button>' : '')
+    : (rhTab==='saisons'&&HR('admin') ? '<button class="btn bg bsm" onclick="openNewSeasonW()">+ Nouvelle saison</button>' : ''));
+
+  var tabBar = '<div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--b1)">'
+    +'<button onclick="setRHTab(this.dataset.t)" data-t="suivi" class="ftab'+(rhTab==='suivi'?' ftab-a':'')+'">👥 Suivi membres</button>'
+    +'<button onclick="setRHTab(this.dataset.t)" data-t="saisons" class="ftab'+(rhTab==='saisons'?' ftab-a':'')+'">📅 Saisons ('+(DB.seasons||[]).length+')</button>'
+    +'</div>';
+
+  if(rhTab==='saisons') return tabBar + pgRHSaisons();
 
   var members = DB.members.filter(function(m){return m.status!=='attente'&&!m.isGuest;})
     .sort(function(a,b){return a.username.localeCompare(b.username);});
-  var wars = (DB.voteWars||[]).filter(function(w){return w.status==='closed';})
+  var wars = (DB.voteWars||[]).filter(function(w){return w.status==='closed'&&!w.seasonId;})
     .sort(function(a,b){return b.date.localeCompare(a.date);}).slice(0,10);
 
   var activeFilter = window._rhFilter||'tous';
@@ -1902,7 +1932,7 @@ function pgRH(){
     return true;
   });
 
-  var h = '<div class="pan"><div class="ph"><span class="ptl">👥 Gestion RH</span>'
+  var h = tabBar+'<div class="pan"><div class="ph"><span class="ptl">👥 Suivi membres — Saison en cours</span>'
     +'<span style="font-size:11px;color:var(--tx3);margin-left:8px">'+filtered.length+'/'+members.length+' membres · '+wars.length+' dernières guerres</span>'
     +'</div><div class="pb">'+filterBar+'</div><div style="display:flex;flex-direction:column;gap:8px;padding-bottom:8px">';
 
@@ -1962,6 +1992,301 @@ function pgRH(){
   return h;
 }
 
+
+function setRHTab(t){ window._rhTab=t; go('rh'); }
+
+// ══════════════════════════════════════════════════════
+// SAISONS RH
+// ══════════════════════════════════════════════════════
+
+function getCurrentSeasonNumber(){
+  var seasons=DB.seasons||[];
+  if(!seasons.length) return 1;
+  var nums=seasons.map(function(s){return s.number||0;});
+  return Math.max.apply(null,nums)+1;
+}
+
+function pgRHSaisons(){
+  var seasons=(DB.seasons||[]).slice().sort(function(a,b){return (b.number||0)-(a.number||0);});
+  var currentWarCount=(DB.voteWars||[]).filter(function(w){return !w.seasonId;}).length;
+  var currentMembers=DB.members.filter(function(m){return m.status!=='attente'&&!m.isGuest;});
+  var currentActifs=currentMembers.filter(function(m){return m.status==='actif';}).length;
+  var nextNum=getCurrentSeasonNumber();
+
+  var h='<div class="pan" style="margin-bottom:16px;border-top:3px solid var(--gold)">'
+    +'<div class="ph"><span class="ptl">⚔️ Saison '+nextNum+' — En cours</span>'
+    +'<span style="font-size:11px;color:var(--tx3);margin-left:8px">depuis le début</span>'
+    +(HR('admin')?'<button class="btn bg bsm" style="margin-left:auto" onclick="confirmCloseSeason()">📦 Clôturer la saison</button>':'')
+    +'</div>'
+    +'<div class="pb">'
+    +'<div style="display:flex;gap:24px;flex-wrap:wrap">'
+    +'<div style="text-align:center"><div style="font-size:28px;font-weight:700;color:var(--gold)">'+currentWarCount+'</div><div style="font-size:11px;color:var(--tx3)">Guerres</div></div>'
+    +'<div style="text-align:center"><div style="font-size:28px;font-weight:700;color:#66bb6a">'+currentActifs+'</div><div style="font-size:11px;color:var(--tx3)">Membres actifs</div></div>'
+    +'<div style="text-align:center"><div style="font-size:28px;font-weight:700;color:var(--tx2)">'+currentMembers.length+'</div><div style="font-size:11px;color:var(--tx3)">Membres total</div></div>'
+    +'</div>'
+    +'</div></div>';
+
+  if(!seasons.length){
+    h+='<div class="td ta-c" style="padding:40px;color:var(--tx3)">Aucune saison archivée.</div>';
+    return h;
+  }
+
+  h+='<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:2px;margin-bottom:10px">SAISONS ARCHIVÉES</div>';
+
+  seasons.forEach(function(s){
+    var stats=s.stats||{};
+    var memberSnap=s.member_snapshot||[];
+    var warIds=s.war_ids||[];
+    var nbActifs=memberSnap.filter(function(m){return m.status==='actif';}).length;
+    var nbInactifs=memberSnap.filter(function(m){return m.status==='inactif';}).length;
+    // Top 3 présence
+    var ranked=Object.keys(stats).map(function(id){
+      var st=stats[id];
+      var snap=memberSnap.find(function(m){return m.id===id;})||{};
+      return{name:snap.username||id, rate:st.rate||0, present:st.present||0};
+    }).sort(function(a,b){return b.rate-a.rate;}).slice(0,3);
+
+    var expanded=window['_season_exp_'+s.id]||false;
+
+    h+='<div class="pan" style="margin-bottom:10px">'
+      +'<div class="ph" style="cursor:pointer" onclick="toggleSeasonExpand(\''+s.id+'\')">'
+      +'<span class="ptl">📅 Saison '+s.number+' — '+esc(s.name||'')+'</span>'
+      +'<div style="margin-left:auto;display:flex;align-items:center;gap:10px">'
+      +'<span style="font-size:11px;color:var(--tx3)">'+warIds.length+' guerres</span>'
+      +'<span style="font-size:11px;color:#66bb6a">'+nbActifs+' actifs</span>'
+      +'<span style="font-size:11px;color:var(--red3)">'+nbInactifs+' inactifs</span>'
+      +'<span style="font-size:11px;color:var(--tx4)">'+(expanded?'▲':'▼')+'</span>'
+      +'</div></div>';
+
+    if(expanded){
+      h+='<div class="pb">';
+      // Résumé rapide
+      h+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--b1)">';
+      h+='<span style="font-size:12px;color:var(--tx3)">📅 '+esc(s.started_at||'')+(s.closed_at?' → '+esc(s.closed_at):'')+'</span>';
+      h+='</div>';
+      // Top 3
+      if(ranked.length){
+        h+='<div style="margin-bottom:14px">'
+          +'<div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">🏆 TOP PRÉSENCE</div>'
+          +'<div style="display:flex;gap:10px;flex-wrap:wrap">';
+        var medals=['🥇','🥈','🥉'];
+        ranked.forEach(function(r,i){
+          h+='<div style="background:var(--bg2);border:1px solid var(--b1);border-radius:3px;padding:6px 12px;font-size:12px">'
+            +medals[i]+' <strong>'+esc(r.name)+'</strong> — '+r.rate+'% ('+r.present+' présences)'
+            +'</div>';
+        });
+        h+='</div></div>';
+      }
+      // Bouton rapport complet
+      h+='<div style="display:flex;gap:8px">'
+        +'<button class="btn bol bsm" onclick="openSeasonReport(\''+s.id+'\')">📊 Rapport complet</button>'
+        +(HR('admin')?'<button class="btn bred bsm" onclick="deleteSeasonW(\''+s.id+'\')">🗑️ Supprimer</button>':'')
+        +'</div>';
+      h+='</div>';
+    }
+    h+='</div>';
+  });
+
+  return h;
+}
+
+function toggleSeasonExpand(id){
+  window['_season_exp_'+id]=!window['_season_exp_'+id];
+  var el=document.getElementById('content');
+  if(el) el.innerHTML=pgRH();
+}
+
+function confirmCloseSeason(){
+  var nextNum=getCurrentSeasonNumber();
+  var currentWars=(DB.voteWars||[]).filter(function(w){return !w.seasonId;});
+  var currentMembers=DB.members.filter(function(m){return m.status!=='attente'&&!m.isGuest;});
+  OM('Clôturer la saison '+nextNum,
+    '<div style="background:rgba(201,162,39,.07);border:1px solid var(--golddim);border-radius:4px;padding:14px;margin-bottom:16px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px">📦 CE QUI SERA ARCHIVÉ</div>'
+    +'<div style="font-size:12px;color:var(--tx2);line-height:1.9">'
+    +'✅ Stats de participation ('+currentWars.length+' guerres)<br>'
+    +'✅ Classement final<br>'
+    +'✅ Données RH (discord, contact, absences, notes)<br>'
+    +'✅ Statuts membres ('+currentMembers.length+' membres)<br>'
+    +'✅ Sanctions actives et résolues'
+    +'</div></div>'
+    +'<div style="background:rgba(139,26,10,.1);border:1px solid var(--red2);border-radius:4px;padding:14px;margin-bottom:16px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--red3);margin-bottom:8px">🔄 CE QUI SERA REMIS À ZÉRO</div>'
+    +'<div style="font-size:12px;color:var(--tx2);line-height:1.9">'
+    +'🔄 Données RH → vides<br>'
+    +'🔄 Membres inactifs → actif<br>'
+    +'🔄 Sanctions résolues → purgées<br>'
+    +'🔄 Guerres → marquées saison '+nextNum+' (conservées, hors stats)'
+    +'</div></div>'
+    +'<div class="fg"><label class="fl">Nom de la saison (ex: Saison '+nextNum+' — Été 2026)</label>'
+    +'<input class="fi" id="season-name" value="Saison '+nextNum+'" placeholder="Saison '+nextNum+'..."></div>',
+    [{lbl:'Annuler',cls:'bol',fn:CM},
+     {lbl:'📦 Clôturer et archiver',cls:'btn bg',fn:function(){
+       var name=document.getElementById('season-name').value.trim()||'Saison '+nextNum;
+       CM();
+       executeSeason(nextNum, name);
+     }}]);
+}
+
+function executeSeason(num, name){
+  var today=nowDate();
+  var currentWars=(DB.voteWars||[]).filter(function(w){return !w.seasonId;});
+  var warIds=currentWars.map(function(w){return w.id;});
+  var allMembers=DB.members.filter(function(m){return m.status!=='attente'&&!m.isGuest;});
+
+  // Build stats snapshot
+  var statsSnap={};
+  allMembers.forEach(function(m){
+    var present=0,late=0,absent=0,novote=0,total=currentWars.length;
+    currentWars.forEach(function(w){
+      var v=(w.votes||{})[m.id];
+      if(!v){novote++;return;}
+      if(v.vote==='present'){
+        var warT=parseLocalDateTime(w.date,w.time);
+        var voteT=v.updatedAt?new Date(v.updatedAt).getTime():0;
+        if(warT&&voteT>warT) late++;
+        else present++;
+      } else if(v.vote==='absent'){absent++;}
+      else novote++;
+    });
+    var rate=total>0?Math.round((present+late)/total*100):0;
+    var score=(present*5)+(late*3)+(absent*3)+(novote*-1);
+    statsSnap[m.id]={present:present,late:late,absent:absent,novote:novote,total:total,rate:rate,score:Math.max(0,score)};
+  });
+
+  // Build member snapshot
+  var memberSnap=allMembers.map(function(m){
+    return{id:m.id,username:m.username,role:m.role,status:m.status,
+      sanguin:m.sanguin,chefGroupe:m.chefGroupe,grandChampion:m.grandChampion,
+      playerLevel:m.playerLevel||0,sanctions:(m.sanctions||[]).slice()};
+  });
+
+  // RH snapshot
+  var rhSnap=JSON.parse(JSON.stringify(DB.rhData||{}));
+
+  // Save season
+  var season={
+    id:'season'+Date.now(),
+    number:num,
+    name:name,
+    started_at:currentWars.length?currentWars[currentWars.length-1].date:today,
+    closed_at:today,
+    stats:statsSnap,
+    rh_snapshot:rhSnap,
+    member_snapshot:memberSnap,
+    war_ids:warIds
+  };
+
+  DB.seasons=DB.seasons||[];
+  DB.seasons.push(season);
+  sbSaveSeason(season).catch(function(e){console.warn('[Season] save err',e);});
+
+  // Mark wars with seasonId
+  var savePromises=[];
+  currentWars.forEach(function(w){
+    w.seasonId='season'+num;
+    savePromises.push(SB.from('vote_wars').upsert(localWarToSb(w)));
+  });
+
+  // Reset rh_data
+  DB.rhData={};
+  saveRHData();
+
+  // Reset membres: inactif→actif, purge sanctions résolues
+  var memberSaves=[];
+  allMembers.forEach(function(m){
+    var changed=false;
+    if(m.status==='inactif'){m.status='actif';changed=true;}
+    var before=(m.sanctions||[]).length;
+    m.sanctions=(m.sanctions||[]).filter(function(s){return !s.type||s.type.indexOf('✅')<0;});
+    if(m.sanctions.length!==before) changed=true;
+    if(changed) memberSaves.push(sbSaveMember(m));
+  });
+
+  Promise.all(savePromises.concat(memberSaves)).then(function(){
+    console.log('[Season] Clôture saison '+num+' OK — '+warIds.length+' guerres archivées');
+    window._rhTab='saisons';
+    go('rh');
+  }).catch(function(e){console.warn('[Season] reset err',e);});
+}
+
+function openSeasonReport(id){
+  var s=(DB.seasons||[]).find(function(x){return x.id===id;});
+  if(!s) return;
+  var stats=s.stats||{};
+  var memberSnap=s.member_snapshot||[];
+  var rhSnap=s.rh_snapshot||{};
+
+  var ranked=memberSnap.map(function(m){
+    var st=stats[m.id]||{present:0,late:0,absent:0,novote:0,total:0,rate:0,score:0};
+    return{m:m,st:st};
+  }).sort(function(a,b){return b.st.score-a.st.score||b.st.rate-a.st.rate;});
+
+  var medals=['🥇','🥈','🥉'];
+  var nbActifs=memberSnap.filter(function(m){return m.status==='actif';}).length;
+  var nbInactifs=memberSnap.filter(function(m){return m.status==='inactif';}).length;
+
+  var html='<div style="margin-bottom:16px;background:rgba(201,162,39,.07);border:1px solid var(--golddim);border-radius:4px;padding:12px">'
+    +'<div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:8px">RÉSUMÉ</div>'
+    +'<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--tx2)">'
+    +'<span>📅 '+esc(s.started_at||'')+' → '+esc(s.closed_at||'')+'</span>'
+    +'<span>⚔️ '+(s.war_ids||[]).length+' guerres</span>'
+    +'<span style="color:#66bb6a">✅ '+nbActifs+' actifs</span>'
+    +'<span style="color:var(--red3)">❌ '+nbInactifs+' inactifs</span>'
+    +'</div></div>'
+    +'<div style="overflow-x:auto"><table style="font-size:11px;width:100%;border-collapse:collapse">'
+    +'<thead><tr style="border-bottom:2px solid var(--b1)">'
+    +'<th style="padding:6px 8px;text-align:left">#</th>'
+    +'<th style="padding:6px 8px;text-align:left">Membre</th>'
+    +'<th style="padding:6px 8px;text-align:left">Statut</th>'
+    +'<th style="padding:6px 8px;text-align:center">✅</th>'
+    +'<th style="padding:6px 8px;text-align:center">⏰</th>'
+    +'<th style="padding:6px 8px;text-align:center">❌</th>'
+    +'<th style="padding:6px 8px;text-align:center">⏳</th>'
+    +'<th style="padding:6px 8px;text-align:center">Présence</th>'
+    +'<th style="padding:6px 8px;text-align:center">Score</th>'
+    +'<th style="padding:6px 8px;text-align:center">Discord</th>'
+    +'<th style="padding:6px 8px;text-align:center">Sanctions</th>'
+    +'</tr></thead><tbody>';
+
+  ranked.forEach(function(r,i){
+    var m=r.m, st=r.st;
+    var rc=st.rate>=70?'#66bb6a':st.rate>=40?'#f9a825':'var(--red3)';
+    var rh=rhSnap[m.id]||{};
+    var discordLabel=rh.discord===true?'✅':rh.discord===false?'❌':'—';
+    var sanctions=(m.sanctions||[]).filter(function(s){return s.type&&s.type.indexOf('✅')<0;}).length;
+    var statusColor=m.status==='actif'?'#66bb6a':m.status==='inactif'?'var(--red3)':'var(--tx3)';
+    html+='<tr style="border-bottom:1px solid var(--b1);'+(i<3?'background:rgba(201,162,39,.05)':'')+'">'
+      +'<td style="padding:5px 8px;font-weight:700;color:var(--gold)">'+(medals[i]||(i+1))+'</td>'
+      +'<td style="padding:5px 8px;font-weight:600">'+esc(m.username)+(m.sanguin?' 🩸':'')+(m.chefGroupe?' 🗡️':'')+(m.grandChampion?' 🏆':'')+'</td>'
+      +'<td style="padding:5px 8px;font-size:10px;color:'+statusColor+'">'+esc(m.status)+'</td>'
+      +'<td style="padding:5px 8px;text-align:center;color:#66bb6a">'+st.present+'</td>'
+      +'<td style="padding:5px 8px;text-align:center;color:#f9a825">'+st.late+'</td>'
+      +'<td style="padding:5px 8px;text-align:center;color:var(--red3)">'+st.absent+'</td>'
+      +'<td style="padding:5px 8px;text-align:center;color:var(--tx3)">'+st.novote+'</td>'
+      +'<td style="padding:5px 8px;text-align:center"><span style="color:'+rc+';font-weight:700">'+st.rate+'%</span></td>'
+      +'<td style="padding:5px 8px;text-align:center;font-weight:700;color:var(--gold)">'+st.score+'</td>'
+      +'<td style="padding:5px 8px;text-align:center">'+discordLabel+'</td>'
+      +'<td style="padding:5px 8px;text-align:center;color:'+(sanctions>0?'var(--red3)':'var(--tx3)')+'">'+sanctions+'</td>'
+      +'</tr>';
+  });
+
+  html+='</tbody></table></div>';
+
+  OM('📊 Rapport — '+esc(s.name||'Saison '+s.number), html, [{lbl:'Fermer',cls:'bol',fn:CM}]);
+}
+
+function deleteSeasonW(id){
+  if(!confirm('Supprimer définitivement cette saison archivée ?')) return;
+  DB.seasons=(DB.seasons||[]).filter(function(x){return x.id!==id;});
+  sbDeleteSeason(id).catch(function(e){console.warn(e);});
+  go('rh');
+}
+
+function openNewSeasonW(){
+  confirmCloseSeason();
+}
+
 function setRHFilter(btn){ window._rhFilter=btn.dataset.f; var el=document.getElementById('content'); if(el){var s=el.scrollTop;el.innerHTML=pgRH();el.scrollTop=s;} }
 
 function setRHFieldW(sel, id, field){
@@ -1973,7 +2298,7 @@ function setRHFieldW(sel, id, field){
 }
 
 function calcMemberScore(m){
-  var wars=(DB.voteWars||[]).filter(function(w){return w.status==='closed';});
+  var wars=(DB.voteWars||[]).filter(function(w){return w.status==='closed'&&!w.seasonId;});
   var score=0;
   wars.forEach(function(w){
     var v=(w.votes||{})[m.id];
@@ -6037,7 +6362,7 @@ function renderTrainingDetail(tr){
     +'<span style="margin-left:8px;font-size:10px;font-weight:700;color:'+statusColor+'">'+statusLabel+'</span>'
     +(canManage?'<div style="margin-left:auto;display:flex;gap:6px">'
       +(tr.status!=='finished'?'<button class="btn bol bsm" onclick="openTrainingTeamBuilder(this.dataset.id)" data-id="'+tr.id+'">👥 Équipes</button>':'' )
-      +'<button class="btn bol bsm" onclick="cycleTrainingStatus(\''+tr.id+'\')" >'+(tr.status==='open'?'▶ Démarrer':tr.status==='ongoing'?'✅ Terminer':'🔄 Rouvrir')+'</button>'
+      +'<button class="btn bol bsm" onclick="cycleTrainingStatus(this.dataset.id)" data-id="'+tr.id+'">'+(tr.status==='open'?'▶ En cours':tr.status==='ongoing'?'✅ Terminer':'🔄 Rouvrir')+'</button>'
       +'<button class="btn bol bsm" onclick="editTrainingW2(this.dataset.id)" data-id="'+tr.id+'">✏️</button>'
       +'</div>':'')
     +'</div>'
@@ -7674,7 +7999,7 @@ function sbWarToLocal(r){
     description:r.description||'', status:r.status||'open',
     votes:r.votes||{}, linkedGroupId:r.linked_group_id||null,
     linkedGroupIds:r.linked_group_ids||[], createdBy:r.created_by||'',
-    rl:r.rl||[]
+    rl:r.rl||[], seasonId:r.season_id||''
   };
 }
 function localWarToSb(w){
@@ -7683,7 +8008,7 @@ function localWarToSb(w){
     description:w.description||'', status:w.status||'open',
     votes:w.votes||{}, linked_group_id:w.linkedGroupId||null,
     linked_group_ids:w.linkedGroupIds||[], created_by:w.createdBy||'',
-    rl:w.rl||[]
+    rl:w.rl||[], season_id:w.seasonId||''
   };
 }
 function sbBannerToLocal(r){
