@@ -4837,9 +4837,9 @@ function renderBuilderConfig(cfg){
       html+='<div style="padding:10px 12px;border-top:1px solid var(--b1)">'
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
         +'<span style="font-size:11px;font-weight:700;color:var(--tx2)">'+esc(slot.role)+'</span>'
-        +'<span style="font-size:10px;color:var(--tx3)">×'+slot.count+'</span>'
+        +'<span style="font-size:10px;color:var(--tx3)">'+slot.count+' unité'+(slot.count>1?'s':'')+' cibles</span>'
         +'<div style="margin-left:auto;display:flex;gap:4px">'
-        +(slot.count>1?'<button onclick="builderSlotCount(this,-1)" data-grp="'+grp.key+'" data-si="'+si+'" class="btn bol bsm" style="font-size:10px;width:22px;padding:0">−</button>':'')
+        +(slot.count>1?'<button onclick="builderSlotCount(this,-1)" data-grp="'+grp.key+'" data-si="'+si+'" class="btn bol bsm" style="font-size:10px;width:22px;padding:0" title="Réduire le nombre d\'unités cibles">−</button>':'')
         +'<button onclick="builderSlotCount(this,1)" data-grp="'+grp.key+'" data-si="'+si+'" class="btn bol bsm" style="font-size:10px;width:22px;padding:0">+</button>'
         +'</div></div>'
         +'<div id="bcu-'+grp.key+'-'+si+'" style="display:flex;flex-direction:column;gap:4px">';
@@ -5207,20 +5207,25 @@ function getBestPrio(m){
 
 // Composition cible par objectif: {role: [unités prioritaires]}
 var OBJ_ROLES = {
+  // count = nb d'unités cibles sur 15 (5 joueurs × 3 unités)
+  // Exotique : max 2 unités par groupe, max 1 par joueur
   porte: [
-    {role:'Bouclier', count:1, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
-    {role:'Pusher',   count:2, units:['Fauchefers','Berserkers','Claymores','Milice Zykalienne','Piquiers vipères','Skjaldmös']},
-    {role:'Exotique', count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne','Grenadiers de Shenji']}
+    {role:'Exotique', count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne','Grenadiers de Shenji']},
+    {role:'Bouclier', count:7, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
+    {role:'Pusher',   count:3, units:['Fauchefers','Berserkers','Claymores','Piquiers vipères','Skjaldmös']},
+    {role:'Anti-cav', count:3, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers']}
   ],
   muraille: [
-    {role:'Bouclier', count:2, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
-    {role:'Anti-cav', count:2, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers','Piquiers vipères']},
-    {role:'Exotique', count:1, units:['Grenadiers de Shenji','Milice Zykalienne','Siphonaros','Equipe de Lionroar']}
+    {role:'Exotique', count:2, units:['Grenadiers de Shenji','Siphonaros','Milice Zykalienne','Equipe de Lionroar']},
+    {role:'Bouclier', count:7, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
+    {role:'Pusher',   count:3, units:['Fauchefers','Berserkers','Claymores','Piquiers vipères','Skjaldmös']},
+    {role:'Anti-cav', count:3, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers']}
   ],
   breche: [
-    {role:'Bouclier', count:1, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
-    {role:'Pusher',   count:2, units:['Fauchefers','Berserkers','Claymores','Milice Zykalienne','Piquiers vipères','Skjaldmös']},
-    {role:'Exotique', count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne','Grenadiers de Shenji']}
+    {role:'Exotique', count:2, units:['Equipe de Lionroar','Siphonaros','Milice Zykalienne','Grenadiers de Shenji']},
+    {role:'Bouclier', count:5, units:['Fidèles Symmachéens','Élus de Sparte','Lanciers impériaux','Mirmillons','Paladins Symmachéens','Prévôts lanciers']},
+    {role:'Pusher',   count:4, units:['Fauchefers','Berserkers','Claymores','Piquiers vipères','Skjaldmös']},
+    {role:'Anti-cav', count:4, units:['Gardes au modao','Phalange solaire','Piquiers impériaux','Hallebardiers']}
   ],
   refill: [
     {role:'any', count:5, units:[]}
