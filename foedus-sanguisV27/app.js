@@ -417,6 +417,8 @@ function sbLoad(){
     DB.hillBg         = hillBgRow ? (hillBgRow.value||'') : '';
     var hillHistRow=(res[14]||[]).find(function(r){return r.key==='hill_history';});
     DB.hillHistory    = hillHistRow ? (hillHistRow.value||[]) : [];
+    var builderRow=(res[14]||[]).find(function(r){return r.key==='builder_config';});
+    DB.builderConfig  = builderRow ? (builderRow.value||null) : null;
     SB_READY = true;
     sbStatus('✓ En ligne','#66bb6a');
     console.log('[SB] Chargé: '+DB.members.length+' membres, '+(DB.pendingMembers||[]).length+' en attente');
@@ -706,7 +708,7 @@ function sDB(){
   if(SB_READY) sbSaveSettings('main', {house_name:DB.houseName, min_mastery:DB.minMastery, active_war_id:DB.activeWarId||null}).catch(function(e){console.warn('[sDB]',e);});
 }
 
-var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],trainings:[],seasons:[],hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[]}, CU=null, CP='home';
+var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],trainings:[],seasons:[],builderConfig:null,hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[]}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
 var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,membre:1,recrue:0};
@@ -1141,6 +1143,7 @@ function startRealtime(){
             DB.metaUnits=((r.find(function(x){return x.key==='meta_units';})||{}).value)||[];
             DB.rhUsers=((r.find(function(x){return x.key==='rh_users';})||{}).value)||[];
             DB.rhData=((r.find(function(x){return x.key==='rh_data';})||{}).value)||{};
+            DB.builderConfig=((r.find(function(x){return x.key==='builder_config';})||{}).value)||null;
             DB.hillKing=((r.find(function(x){return x.key==='hill_king';})||{}).value)||{};
             DB.hillBg=((r.find(function(x){return x.key==='hill_bg';})||{}).value)||'';
             DB.hillHistory=((r.find(function(x){return x.key==='hill_history';})||{}).value)||[];
@@ -4793,6 +4796,138 @@ function memberUnitScore(m, priorityUnits){
   return score;
 }
 
+// Retourne la config active (DB.builderConfig si définie, sinon OBJ_ROLES par défaut)
+function getBuilderConfig(){
+  if(DB.builderConfig) return DB.builderConfig;
+  return {
+    porte:   JSON.parse(JSON.stringify(OBJ_ROLES.porte)),
+    muraille:JSON.parse(JSON.stringify(OBJ_ROLES.muraille)),
+    breche:  JSON.parse(JSON.stringify(OBJ_ROLES.breche)),
+    refill:  JSON.parse(JSON.stringify(OBJ_ROLES.refill))
+  };
+}
+
+function saveBuilderConfig(cfg){
+  DB.builderConfig=cfg;
+  sbSaveSettings('builder_config', cfg).catch(function(e){console.warn('[builder_config]',e);});
+}
+
+function openBuilderConfigW(){
+  if(!HR('officier'))return;
+  var cfg=getBuilderConfig();
+  renderBuilderConfig(cfg);
+}
+
+function renderBuilderConfig(cfg){
+  var grps=[
+    {key:'porte',    label:'🏰 Porte',    icon:'🏰'},
+    {key:'muraille', label:'🛡️ Muraille', icon:'🛡️'},
+    {key:'breche',   label:'⚔️ Brèche',   icon:'⚔️'}
+  ];
+
+  var html='<div style="font-size:11px;color:var(--tx3);margin-bottom:14px">Modifiez les unités prioritaires par slot. Les unités en haut de liste sont choisies en premier.</div>';
+
+  grps.forEach(function(grp){
+    var slots=cfg[grp.key]||[];
+    html+='<div style="margin-bottom:16px;border:1px solid var(--b1);border-radius:4px;overflow:hidden">'
+      +'<div style="background:var(--bg2);padding:8px 12px;font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px">'+grp.icon+' '+grp.label.toUpperCase()+'</div>';
+
+    slots.forEach(function(slot, si){
+      if(slot.role==='any') return; // skip refill
+      html+='<div style="padding:10px 12px;border-top:1px solid var(--b1)">'
+        +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+        +'<span style="font-size:11px;font-weight:700;color:var(--tx2)">'+esc(slot.role)+'</span>'
+        +'<span style="font-size:10px;color:var(--tx3)">×'+slot.count+'</span>'
+        +'<div style="margin-left:auto;display:flex;gap:4px">'
+        +(slot.count>1?'<button onclick="builderSlotCount(this,-1)" data-grp="'+grp.key+'" data-si="'+si+'" class="btn bol bsm" style="font-size:10px;width:22px;padding:0">−</button>':'')
+        +'<button onclick="builderSlotCount(this,1)" data-grp="'+grp.key+'" data-si="'+si+'" class="btn bol bsm" style="font-size:10px;width:22px;padding:0">+</button>'
+        +'</div></div>'
+        +'<div id="bcu-'+grp.key+'-'+si+'" style="display:flex;flex-direction:column;gap:4px">';
+
+      slot.units.forEach(function(u, ui){
+        html+='<div style="display:flex;align-items:center;gap:6px;background:var(--bg1);border:1px solid var(--b1);border-radius:3px;padding:4px 8px">'
+          +'<span style="font-size:10px;color:var(--tx3);min-width:16px">'+(ui+1)+'.</span>'
+          +'<span style="font-size:11px;flex:1">'+esc(u)+(DB.metaUnits&&DB.metaUnits.indexOf(u)>=0?'<span style="font-size:8px;background:var(--gold);color:#000;padding:1px 4px;border-radius:2px;margin-left:4px">META</span>':'')+'</span>'
+          +(ui>0?'<button onclick="builderUnitMove(this,-1)" data-grp="'+grp.key+'" data-si="'+si+'" data-ui="'+ui+'" class="btn bol bsm" style="font-size:9px;padding:1px 5px">↑</button>':'<span style="width:28px"></span>')
+          +(ui<slot.units.length-1?'<button onclick="builderUnitMove(this,1)" data-grp="'+grp.key+'" data-si="'+si+'" data-ui="'+ui+'" class="btn bol bsm" style="font-size:9px;padding:1px 5px">↓</button>':'<span style="width:28px"></span>')
+          +'<button onclick="builderUnitRemove(this)" data-grp="'+grp.key+'" data-si="'+si+'" data-ui="'+ui+'" class="btn bred bsm" style="font-size:9px;padding:1px 5px">✕</button>'
+          +'</div>';
+      });
+
+      // Add unit input
+      html+='<div style="display:flex;gap:4px;margin-top:4px">'
+        +'<select id="bca-'+grp.key+'-'+si+'" class="fs" style="flex:1;font-size:11px">'
+        +'<option value="">— Ajouter une unité...</option>'
+        +Object.keys(UNIT_META).map(function(u){
+          var isMeta=DB.metaUnits&&DB.metaUnits.indexOf(u)>=0;
+          var alreadyIn=slot.units.indexOf(u)>=0;
+          return'<option value="'+esc(u)+'"'+(alreadyIn?' disabled':'')+'>'+esc(u)+(isMeta?' ★':'')+'</option>';
+        }).join('')
+        +'</select>'
+        +'<button onclick="builderUnitAdd(this)" data-grp="'+grp.key+'" data-si="'+si+'" class="btn bol bsm">+ Ajouter</button>'
+        +'</div>';
+
+      html+='</div></div>';
+    });
+    html+='</div>';
+  });
+
+  OM('⚙️ Priorités du Constructeur', html, [
+    {lbl:'Annuler',cls:'bol',fn:CM},
+    {lbl:'🔄 Réinitialiser',cls:'btn bol',fn:function(){
+      if(!confirm('Réinitialiser aux valeurs par défaut ?')) return;
+      DB.builderConfig=null;
+      sbSaveSettings('builder_config', null).catch(function(e){console.warn(e);});
+      CM();
+      alert('✅ Config réinitialisée aux valeurs par défaut.');
+    }},
+    {lbl:'💾 Sauvegarder',cls:'btn bg',fn:function(){
+      saveBuilderConfig(cfg);
+      CM();
+      alert('✅ Priorités sauvegardées.');
+    }}
+  ]);
+  // Store ref for live editing
+  window._builderCfgEdit=cfg;
+}
+
+function builderUnitMove(btn, dir){
+  var cfg=window._builderCfgEdit;
+  if(!cfg) return;
+  var grp=btn.dataset.grp, si=parseInt(btn.dataset.si), ui=parseInt(btn.dataset.ui);
+  var units=cfg[grp][si].units;
+  var newUi=ui+dir;
+  if(newUi<0||newUi>=units.length) return;
+  var tmp=units[ui]; units[ui]=units[newUi]; units[newUi]=tmp;
+  renderBuilderConfig(cfg);
+}
+
+function builderUnitRemove(btn){
+  var cfg=window._builderCfgEdit;
+  if(!cfg) return;
+  var grp=btn.dataset.grp, si=parseInt(btn.dataset.si), ui=parseInt(btn.dataset.ui);
+  cfg[grp][si].units.splice(ui,1);
+  renderBuilderConfig(cfg);
+}
+
+function builderUnitAdd(btn){
+  var cfg=window._builderCfgEdit;
+  if(!cfg) return;
+  var grp=btn.dataset.grp, si=parseInt(btn.dataset.si);
+  var sel=document.getElementById('bca-'+grp+'-'+si);
+  if(!sel||!sel.value) return;
+  if(cfg[grp][si].units.indexOf(sel.value)<0) cfg[grp][si].units.push(sel.value);
+  renderBuilderConfig(cfg);
+}
+
+function builderSlotCount(btn, delta){
+  var cfg=window._builderCfgEdit;
+  if(!cfg) return;
+  var grp=btn.dataset.grp, si=parseInt(btn.dataset.si);
+  cfg[grp][si].count=Math.max(1, (cfg[grp][si].count||1)+delta);
+  renderBuilderConfig(cfg);
+}
+
 function openGrpBuilder(){
   if(!GRP_WAR_ID){alert('Sélectionnez une guerre avant de lancer le constructeur.');return;}
   var war=getSelectedWar();if(!war)return;
@@ -4814,7 +4949,7 @@ function openGrpBuilder(){
     +'<b>4.</b> Les groupes sont formés : <b>Porte</b> (Exotiques/Pushers), <b>Muraille</b> (Boucliers/Anti-cav), <b>Brèche</b> (Pushers/Anti-cav), <b>Refill</b> (reste, groupes de 5).<br>'
     +'<b>5.</b> Les chefs de groupe sont automatiquement désignés leaders. Les groupes restent <b>modifiables manuellement</b> après génération.'
     +'</div></div>'
-    +'<div style="margin-bottom:14px;color:var(--tx3);font-size:11px">'+available.length+' joueurs disponibles · RL exclus</div>'
+    +(HR('officier')?'<div style="margin-bottom:10px;display:flex;justify-content:flex-end"><button onclick="openBuilderConfigW();event.stopPropagation()" class="btn bol bsm">⚙️ Priorités unités</button></div>':'')+'<div style="margin-bottom:14px;color:var(--tx3);font-size:11px">'+available.length+' joueurs disponibles · RL exclus</div>'
     +'<div class="fg"><label class="fl">Type de guerre</label>'
     +'<div style="display:flex;gap:8px">'
     +'<div id="bt-ville" data-type="ville" onclick="selectBuildType(this.dataset.type)" style="flex:1;padding:12px;border:2px solid var(--gold);border-radius:4px;cursor:pointer;text-align:center;background:rgba(201,162,39,.1)">'
@@ -4901,6 +5036,8 @@ function getBestCat(m, type){
 function simulateBuild(type, members){
   var n=members.length;
   var targets=PCT_TARGETS[type]||PCT_TARGETS.ville;
+  // Use live config (editable by officiers)
+  var liveRoles=getBuilderConfig();
 
   // Calculer les quotas
   var quotas={};
@@ -5110,8 +5247,9 @@ function buildGroups(type, members){
     var unitAssignments={};
     var classAssignments={};
 
-    // Préparer les slots de rôles pour ce groupe
-    var roleSlots=(OBJ_ROLES[grp.obj]||OBJ_ROLES.refill).map(function(r){
+    // Préparer les slots de rôles pour ce groupe (config live)
+    var activeCfg=getBuilderConfig();
+    var roleSlots=(activeCfg[grp.obj]||activeCfg.refill||OBJ_ROLES.refill).map(function(r){
       return{role:r.role,count:r.count,units:r.units,assigned:0,members:[]};
     });
 
