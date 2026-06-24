@@ -762,7 +762,7 @@ function rb(m){
   var cls={admin:'badm',admin_assistant:'badm',baron:'bc',officier:'bo',evenement:'bev',recrutement:'bre',formation:'bfo',responsable_gdoc:'brg',membre:'bmb',recrue:'brc'};
   var main='<span class="badge '+(cls[m.role]||'bmb')+'">'+(RN[m.role]||m.role)+'</span>';
   var extras=(m.extraRoles||[]).filter(function(r){return r!==m.role;}).map(function(r){
-    return '<span class="badge '+(cls[r]||'bmb')+'" style="font-size:9px">'+(RN[r]||r)+'</span>';
+    return '<span class="badge '+(cls[r]||'bmb')+' " style=\'font-size:9px\'>'+(RN[r]||r)+'</span>';
   }).join('');
   return main+extras;
 }
