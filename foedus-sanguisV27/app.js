@@ -2032,24 +2032,64 @@ function pgRHSaisons(){
   var currentActifs=currentMembers.filter(function(m){return m.status==='actif';}).length;
   var nextNum=getCurrentSeasonNumber();
 
+
+  var currentInactifs=currentMembers.filter(function(m){return m.status==='inactif';}).length;
+  var currentRecrues=currentMembers.filter(function(m){return m.role==='recrue';}).length;
+  var currentRisque=currentMembers.filter(function(m){return m.status==='actif'&&m.role!=='recrue'&&computeMemberStatus(m)==='inactif';}).length;
+
+  var statusRows=currentMembers.filter(function(m){return m.role!=='recrue';}).slice()
+    .sort(function(a,b){
+      var ra=getMemberActivityReport(a), rb=getMemberActivityReport(b);
+      return rb.tranches.filter(function(t){return t.ok;}).length - ra.tranches.filter(function(t){return t.ok;}).length;
+    }).map(function(m){
+      var report=getMemberActivityReport(m);
+      var trOK=report.tranches.filter(function(t){return t.ok;}).length;
+      var trTotal=report.tranches.length;
+      var risk=m.status==='actif'&&report.computedStatus==='inactif';
+      var statusColor=m.status==='actif'?'#66bb6a':'var(--red3)';
+      return '<tr style="border-bottom:1px solid var(--b1)'+(risk?';background:rgba(249,168,37,.05)':'')+'">'
+        +'<td style="padding:4px 8px;font-size:11px;font-weight:600">'+esc(m.username)+'</td>'
+        +'<td style="padding:4px 8px;text-align:center;font-size:10px;color:'+statusColor+'">'+esc(m.status)+'</td>'
+        +'<td style="padding:4px 8px;text-align:center;font-size:10px;color:var(--tx3)">'+trOK+'/'+trTotal+'</td>'
+        +'<td style="padding:4px 8px;text-align:center;font-size:10px">'+(report.consecutive>=2?'<span style="color:#f9a825">⚠️ '+report.consecutive+'</span>':report.consecutive)+'</td>'
+        +(risk?'<td style="padding:4px 8px;font-size:9px;color:#f9a825">⚠️ Risque</td>':'<td></td>')
+        +'</tr>';
+    }).join('');
+
   var h='<div class="pan" style="margin-bottom:16px;border-top:3px solid var(--gold)">'
     +'<div class="ph"><span class="ptl">⚔️ Saison '+nextNum+' — En cours</span>'
     +'<span style="font-size:11px;color:var(--tx3);margin-left:8px">depuis le début</span>'
     +(HR('admin')?'<button class="btn bg bsm" style="margin-left:auto" onclick="confirmCloseSeason()">📦 Clôturer la saison</button>':'')
     +'</div>'
     +'<div class="pb">'
-    +'<div style="display:flex;gap:24px;flex-wrap:wrap">'
+    +'<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px">'
     +'<div style="text-align:center"><div style="font-size:28px;font-weight:700;color:var(--gold)">'+currentWarCount+'</div><div style="font-size:11px;color:var(--tx3)">Guerres</div></div>'
-    +'<div style="text-align:center"><div style="font-size:28px;font-weight:700;color:#66bb6a">'+currentActifs+'</div><div style="font-size:11px;color:var(--tx3)">Membres actifs</div></div>'
-    +'<div style="text-align:center"><div style="font-size:28px;font-weight:700;color:var(--tx2)">'+currentMembers.length+'</div><div style="font-size:11px;color:var(--tx3)">Membres total</div></div>'
+    +'<div style="text-align:center"><div style="font-size:28px;font-weight:700;color:#66bb6a">'+currentActifs+'</div><div style="font-size:11px;color:var(--tx3)">Actifs</div></div>'
+    +'<div style="text-align:center"><div style="font-size:28px;font-weight:700;color:var(--red3)">'+currentInactifs+'</div><div style="font-size:11px;color:var(--tx3)">Inactifs</div></div>'
+    +'<div style="text-align:center"><div style="font-size:28px;font-weight:700;color:#f9a825">'+currentRisque+'</div><div style="font-size:11px;color:var(--tx3)">À risque</div></div>'
+    +'<div style="text-align:center"><div style="font-size:28px;font-weight:700;color:var(--tx2)">'+currentRecrues+'</div><div style="font-size:11px;color:var(--tx3)">Recrues</div></div>'
     +'</div>'
+    +(statusRows?'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'
+    +'<thead><tr style="border-bottom:2px solid var(--b1);font-size:10px;color:var(--tx3)">'
+    +'<th style="padding:4px 8px;text-align:left">Membre</th>'
+    +'<th style="padding:4px 8px;text-align:center">Statut</th>'
+    +'<th style="padding:4px 8px;text-align:center">Tranches</th>'
+    +'<th style="padding:4px 8px;text-align:center">Consécutives</th>'
+    +'<th style="padding:4px 8px"></th>'
+    +'</tr></thead><tbody>'+statusRows+'</tbody></table></div>':'')
     +'</div></div>';
+
 
   if(!seasons.length){
     h+='<div class="td ta-c" style="padding:40px;color:var(--tx3)">Aucune saison archivée.</div>';
     return h;
   }
 
+  if(seasons.length>=2){
+    h+='<div style="margin-bottom:12px;display:flex;justify-content:flex-end">'
+      +'<button class="btn bol bsm" onclick="openSeasonCompareW()">📈 Comparer les saisons</button>'
+      +'</div>';
+  }
   h+='<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:2px;margin-bottom:10px">SAISONS ARCHIVÉES</div>';
 
   seasons.forEach(function(s){
@@ -2175,9 +2215,12 @@ function executeSeason(num, name){
 
   // Build member snapshot
   var memberSnap=allMembers.map(function(m){
+    var report=getMemberActivityReport(m);
     return{id:m.id,username:m.username,role:m.role,status:m.status,
       sanguin:m.sanguin,chefGroupe:m.chefGroupe,grandChampion:m.grandChampion,
-      playerLevel:m.playerLevel||0,sanctions:(m.sanctions||[]).slice()};
+      playerLevel:m.playerLevel||0,sanctions:(m.sanctions||[]).slice(),
+      wasWatched:needsWatch(m),
+      presenceRate:report.wars.length?Math.round(report.wars.filter(function(w){return w.participated;}).length/report.wars.length*100):0};
   });
 
   // RH snapshot
@@ -2295,6 +2338,77 @@ function openSeasonReport(id){
   OM('📊 Rapport — '+esc(s.name||'Saison '+s.number), html, [{lbl:'Fermer',cls:'bol',fn:CM}]);
 }
 
+
+function openSeasonCompareW(){
+  var seasons=(DB.seasons||[]).slice().sort(function(a,b){return (a.number||0)-(b.number||0);});
+  if(seasons.length<2){alert('Il faut au moins 2 saisons archivées pour comparer.');return;}
+
+  // Build unified member list across all seasons
+  var allUsernames={};
+  seasons.forEach(function(s){
+    (s.member_snapshot||[]).forEach(function(m){allUsernames[m.username]=true;});
+  });
+  var usernames=Object.keys(allUsernames).sort();
+
+  var html='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">'
+    +'<thead><tr style="border-bottom:2px solid var(--b1)">'
+    +'<th style="padding:6px 8px;text-align:left;min-width:120px">Membre</th>';
+
+  seasons.forEach(function(s){
+    html+='<th style="padding:6px 8px;text-align:center;min-width:80px" colspan="2">'+esc(s.name||'Saison '+s.number)+'</th>';
+  });
+  html+='</tr><tr style="border-bottom:1px solid var(--b1);font-size:10px;color:var(--tx3)">'
+    +'<th></th>';
+  seasons.forEach(function(){
+    html+='<th style="padding:3px 8px;text-align:center">Statut</th>'
+      +'<th style="padding:3px 8px;text-align:center">Présence</th>';
+  });
+  html+='</tr></thead><tbody>';
+
+  usernames.forEach(function(username){
+    var rowData=seasons.map(function(s){
+      var snap=(s.member_snapshot||[]).find(function(m){return m.username===username;});
+      var stat=s.stats&&snap?s.stats[snap.id]:null;
+      return{snap:snap,stat:stat};
+    });
+
+    // Check if ever watched
+    var everWatched=rowData.some(function(d){return d.snap&&d.snap.wasWatched;});
+
+    html+='<tr style="border-bottom:1px solid var(--b1)'+(everWatched?';background:rgba(139,26,10,.05)':'')+'">'
+      +'<td style="padding:5px 8px;font-weight:600">'+esc(username)+(everWatched?'<span style="font-size:8px;color:#ff6b6b;margin-left:4px">🔴</span>':'')+'</td>';
+
+    rowData.forEach(function(d,di){
+      if(!d.snap){
+        html+='<td colspan="2" style="padding:5px 8px;text-align:center;color:var(--tx3);font-size:10px">—</td>';
+        return;
+      }
+      var statusColor=d.snap.status==='actif'?'#66bb6a':'var(--red3)';
+      var rate=d.stat?d.stat.rate:d.snap.presenceRate||0;
+      var rateColor=rate>=70?'#66bb6a':rate>=40?'#f9a825':'var(--red3)';
+
+      // Evolution arrow vs previous season
+      var prevRate=di>0&&rowData[di-1].stat?rowData[di-1].stat.rate:(di>0&&rowData[di-1].snap?rowData[di-1].snap.presenceRate||0:null);
+      var arrow='';
+      if(prevRate!==null){
+        if(rate>prevRate+5) arrow='<span style="color:#66bb6a">↑</span>';
+        else if(rate<prevRate-5) arrow='<span style="color:var(--red3)">↓</span>';
+        else arrow='<span style="color:var(--tx3)">→</span>';
+      }
+
+      html+='<td style="padding:5px 8px;text-align:center"><span style="color:'+statusColor+';font-size:10px">'+esc(d.snap.status)+'</span>'+(d.snap.wasWatched?'<span style="font-size:8px;margin-left:2px">🔴</span>':'')+'</td>'
+        +'<td style="padding:5px 8px;text-align:center"><span style="color:'+rateColor+';font-weight:700">'+rate+'%</span>'+arrow+'</td>';
+    });
+
+    html+='</tr>';
+  });
+
+  html+='</tbody></table></div>'
+    +'<div style="margin-top:10px;font-size:10px;color:var(--tx3)">↑ amélioration &gt;5% · → stable · ↓ baisse &gt;5% · 🔴 membre à surveiller sur au moins une saison</div>';
+
+  OM('📈 Comparaison des saisons', html, [{lbl:'Fermer',cls:'bol',fn:CM}]);
+}
+
 function deleteSeasonW(id){
   if(!confirm('Supprimer définitivement cette saison archivée ?')) return;
   DB.seasons=(DB.seasons||[]).filter(function(x){return x.id!==id;});
@@ -2383,7 +2497,7 @@ function openRHMemberW(id){
   }
   activityHtml+='</div>';
 
-  var html = activityHtml+'<div style="margin-bottom:14px">'    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">SANCTIONS</div>'
+  var watchHtml=needsWatch(m)?'<div style="background:rgba(139,26,10,.15);border:1px solid #8b0000;border-radius:4px;padding:8px 12px;margin-bottom:14px;display:flex;align-items:center;gap:8px">'    +'<span style="font-size:14px">🔴</span>'    +'<div style="font-size:11px;color:#ff6b6b;font-weight:700">MEMBRE À SURVEILLER</div>'    +'<div style="font-size:10px;color:var(--tx3);margin-left:4px">'    +((m.sanctions||[]).filter(function(s){return !s.type||s.type.indexOf('✅')<0;}).length>0?'Sanction active · ':'')    +(m.status==='inactif'?'Inactif · ':'')      +(m.status==='actif'&&computeMemberStatus(m)==='inactif'?'Risque inactif · ':'')      +(isUnitStale(m)?'Unités inchangées · ':'')      +'</div></div>':'';  var html = watchHtml+activityHtml+'<div style="margin-bottom:14px">'    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">SANCTIONS</div>'
     +sanctionsList
     +'<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
     +'<button class="btn bol bsm" onclick="addRHSanction(\''+id+'\',\'1ère sanction ⚠️\')">+ 1ère sanction</button>'
@@ -3584,6 +3698,18 @@ function newBannerForm(){
 // ════════════════════════════════════════════════════════════════
 // CALCUL AUTOMATIQUE DES STATUTS
 // ════════════════════════════════════════════════════════════════
+// Retourne true si un membre doit être surveillé (cumul d'indicateurs RH)
+// Conditions : sanction active OU inactif OU risque inactif OU unités inchangées
+function needsWatch(m){
+  if(m.role==='recrue') return false;
+  var activeSanctions=(m.sanctions||[]).filter(function(s){return !s.type||s.type.indexOf('✅')<0;}).length;
+  if(activeSanctions>0) return true;
+  if(m.status==='inactif') return true;
+  if(m.status==='actif'&&computeMemberStatus(m)==='inactif') return true;
+  if(isUnitStale(m)) return true;
+  return false;
+}
+
 // Retourne true si le vote compte comme une participation (présent ou retard)
 function isParticipation(vote){
   return vote&&(vote.vote==='present'||vote.vote==='retard'||vote.vote==='late');
@@ -3783,6 +3909,7 @@ function pgMbr(){
         +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'" style="font-size:9px">'+esc(m.status)+'</span>'
         +rb(m)
         +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️</span>':'')
+        +(isRH()&&needsWatch(m)?'<span style="font-size:9px;background:rgba(139,26,10,.3);color:#ff6b6b;padding:1px 5px;border-radius:8px;border:1px solid #8b0000;font-weight:700">🔴 Surveiller</span>':'')
         +'</div>'
         +'<div style="display:flex;gap:4px;flex-shrink:0">'
         +(HR('officier')?'<button class="btn bol bsm" onclick="editMbrW(this);event.stopPropagation()" data-id="'+m.id+'" style="font-size:10px">✏️</button>':'')
@@ -3806,6 +3933,7 @@ function pgMbr(){
         +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'">'+esc(m.status)+'</span>'
         +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️ '+sanctions+'</span>':'')
         +(m.status==='actif'&&computeMemberStatus(m)==='inactif'?'<span class="badge bof" style="font-size:9px">⚠️ Risque inactif</span>':'')
+        +(isRH()&&needsWatch(m)?'<span style="font-size:9px;background:rgba(139,26,10,.3);color:#ff6b6b;padding:1px 5px;border-radius:8px;border:1px solid #8b0000;font-weight:700">🔴 Surveiller</span>':'')
         +'</div>'
         +(m.classes&&m.classes.length?'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">'+memberClassBadges(m)+'</div>':'')
         +'<div style="font-size:10px;color:var(--tx3);margin-top:4px">🛡️ '+(m.units&&m.units.length?m.units.length+' unité(s) · max '+maxMastery+'★':'Aucune unité')+'</div>'
