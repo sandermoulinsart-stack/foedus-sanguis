@@ -3934,7 +3934,9 @@ function pgUnit(){
   var activeSearch=window._unitSearch||'';
 
   // Tact buttons
-  document.getElementById('tact').innerHTML='';
+  document.getElementById('tact').innerHTML=
+    '<button class="btn bol bsm" onclick="openUnitStatsW()" style="margin-right:4px">📊 Stats guilde</button>'
+    +'<button class="btn bol bsm" onclick="openUnitSearchW()">🔍 Qui a quoi</button>';
 
   // Bloc d'information
   var infoH='<div style="background:rgba(201,162,39,.07);border:1px solid var(--golddim);border-radius:4px;padding:14px 18px;margin-bottom:20px;line-height:1.8">'
@@ -4017,6 +4019,178 @@ function setUnitSearch(v){window._unitSearch=v;
   var inp=document.getElementById('unit-search');
   if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length);}
 }
+
+// ══════════════════════════════════════════════════════
+// STATS GUILDE & QUI A QUOI
+// ══════════════════════════════════════════════════════
+
+function openUnitStatsW(){
+  var members=DB.members.filter(function(m){return m.status!=='attente'&&!m.isGuest;});
+  var total=members.length;
+  var metaList=DB.metaUnits||[];
+
+  // Compter par unité
+  var unitCount={};
+  members.forEach(function(m){
+    (m.units||[]).forEach(function(u){
+      unitCount[u.name]=(unitCount[u.name]||0)+1;
+    });
+  });
+
+  // Trier par popularité
+  var allUnits=Object.keys(unitCount).sort(function(a,b){return unitCount[b]-unitCount[a];});
+  var metaUnits=allUnits.filter(function(u){return metaList.indexOf(u)>=0;});
+  var otherUnits=allUnits.filter(function(u){return metaList.indexOf(u)<0;});
+
+  function renderSection(units, label, color){
+    if(!units.length) return '';
+    var h='<div style="margin-bottom:16px">'
+      +'<div style="font-size:10px;font-weight:700;color:'+color+';letter-spacing:1px;margin-bottom:8px">'+label+'</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:12px">'
+      +'<thead><tr style="border-bottom:1px solid var(--b1)">'
+      +'<th style="padding:5px 8px;text-align:left">Unité</th>'
+      +'<th style="padding:5px 8px;text-align:center">Membres</th>'
+      +'<th style="padding:5px 8px;text-align:left">Couverture</th>'
+      +'</tr></thead><tbody>';
+    units.forEach(function(u){
+      var nb=unitCount[u]||0;
+      var pct=Math.round(nb/total*100);
+      var rs=unitRarityStyle(u);
+      var barColor=pct>=50?'#66bb6a':pct>=25?'#f9a825':'var(--red3)';
+      h+='<tr style="border-bottom:1px solid var(--b1)">'
+        +'<td style="padding:5px 8px"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+rs.border+';margin-right:5px"></span>'+esc(u)+'</td>'
+        +'<td style="padding:5px 8px;text-align:center;font-weight:700;color:var(--tx1)">'+nb+'</td>'
+        +'<td style="padding:5px 8px">'
+        +'<div style="display:flex;align-items:center;gap:6px">'
+        +'<div style="flex:1;height:6px;background:var(--bg1);border-radius:3px;overflow:hidden">'
+        +'<div style="width:'+pct+'%;height:100%;background:'+barColor+';border-radius:3px"></div>'
+        +'</div>'
+        +'<span style="font-size:10px;color:var(--tx3);min-width:30px">'+pct+'%</span>'
+        +'</div></td>'
+        +'</tr>';
+    });
+    h+='</tbody></table></div>';
+    return h;
+  }
+
+  var html='<div style="font-size:11px;color:var(--tx3);margin-bottom:14px">'+total+' membres actifs</div>'
+    +renderSection(metaUnits,'★ UNITÉS META','var(--gold)')
+    +renderSection(otherUnits,'AUTRES UNITÉS','var(--tx3)');
+
+  OM('📊 Statistiques des Unités — Guilde', html, [{lbl:'Fermer',cls:'bol',fn:CM}]);
+}
+
+function openUnitSearchW(){
+  renderUnitSearch('','','');
+}
+
+function renderUnitSearch(searchUnit, searchMember, filterMeta){
+  var members=DB.members.filter(function(m){return m.status!=='attente'&&!m.isGuest;});
+  var metaList=DB.metaUnits||[];
+
+  // Build all units list for dropdown
+  var allUnitNames={};
+  members.forEach(function(m){(m.units||[]).forEach(function(u){allUnitNames[u.name]=true;});});
+  var unitNames=Object.keys(allUnitNames).sort();
+
+  var html='<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">'
+    // Search by unit
+    +'<div>'
+    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:5px">TROUVER LES MEMBRES PAR UNITÉ</div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<select id="us-unit" class="fs" style="flex:1;font-size:12px" onchange="renderUnitSearchLive()">'
+    +'<option value="">— Choisir une unité...</option>'
+    +(metaList.length?'<optgroup label="★ META">'+metaList.filter(function(u){return allUnitNames[u];}).map(function(u){return'<option value="'+esc(u)+'"'+(searchUnit===u?' selected':'')+'>'+esc(u)+'</option>';}).join('')+'</optgroup>':'')
+    +'<optgroup label="Autres">'+unitNames.filter(function(u){return metaList.indexOf(u)<0;}).map(function(u){return'<option value="'+esc(u)+'"'+(searchUnit===u?' selected':'')+'>'+esc(u)+'</option>';}).join('')+'</optgroup>'
+    +'</select>'
+    +'</div>'
+    +'</div>'
+    // Search by member
+    +'<div>'
+    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:5px">TROUVER LES UNITÉS D\'UN MEMBRE</div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<input id="us-member" class="fi" style="flex:1;font-size:12px" placeholder="Pseudo du membre..." value="'+esc(searchMember)+'" oninput="renderUnitSearchLive()">'
+    +'</div>'
+    +'</div>'
+    // Filter META only
+    +'<div style="display:flex;align-items:center;gap:8px">'
+    +'<input type="checkbox" id="us-meta"'+(filterMeta?' checked':'')+' onchange="renderUnitSearchLive()" style="cursor:pointer">'
+    +'<label for="us-meta" style="font-size:12px;color:var(--tx2);cursor:pointer">Unités META uniquement</label>'
+    +'</div>'
+    +'</div>'
+    +'<div id="us-results">';
+
+  // Results
+  var su=searchUnit, sm=searchMember.toLowerCase(), fm=filterMeta;
+
+  if(su){
+    // Members who have this unit
+    var havers=members.filter(function(m){
+      return (m.units||[]).some(function(u){return u.name===su&&(!fm||metaList.indexOf(u.name)>=0);});
+    }).sort(function(a,b){
+      var ua=(a.units||[]).find(function(u){return u.name===su;});
+      var ub=(b.units||[]).find(function(u){return u.name===su;});
+      return (ub?ub.mastery||0:0)-(ua?ua.mastery||0:0);
+    });
+    var isMeta=metaList.indexOf(su)>=0;
+    html+='<div style="margin-bottom:8px"><span style="font-size:11px;font-weight:700;color:var(--tx2)">'+esc(su)+'</span>'
+      +(isMeta?'<span style="font-size:8px;background:var(--gold);color:#000;padding:1px 4px;border-radius:2px;margin-left:6px">META</span>':'')
+      +'<span style="font-size:11px;color:var(--tx3);margin-left:8px">'+havers.length+' membre(s)</span></div>';
+    if(!havers.length){
+      html+='<div style="color:var(--tx3);font-size:12px;padding:10px 0">Aucun membre n\'a cette unité.</div>';
+    } else {
+      html+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      havers.forEach(function(m){
+        var u=(m.units||[]).find(function(x){return x.name===su;});
+        var stars=u?'★'.repeat(u.mastery||0):'';
+        html+='<div style="background:var(--bg2);border:1px solid var(--b1);border-radius:3px;padding:5px 10px;font-size:11px;display:flex;align-items:center;gap:6px">'
+          +avaHTML(m,16)
+          +'<span style="color:var(--tx1)">'+esc(m.username)+'</span>'
+          +(stars?'<span style="color:var(--gold);font-size:10px">'+stars+'</span>':'')
+          +'</div>';
+      });
+      html+='</div>';
+    }
+  } else if(sm){
+    // Units of matching members
+    var matched=members.filter(function(m){return m.username.toLowerCase().indexOf(sm)>=0;});
+    matched.forEach(function(m){
+      var units=(m.units||[]).filter(function(u){return !fm||metaList.indexOf(u.name)>=0;})
+        .slice().sort(function(a,b){return (b.mastery||0)-(a.mastery||0);});
+      html+='<div style="margin-bottom:12px">'
+        +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'+avaHTML(m,20)
+        +'<span style="font-size:12px;font-weight:700;color:var(--tx1)">'+esc(m.username)+'</span>'
+        +'<span style="font-size:10px;color:var(--tx3)">'+units.length+' unité(s)</span>'
+        +'</div>'
+        +(units.length===0?'<div style="font-size:11px;color:var(--tx3);padding-left:26px">Aucune unité'+(fm?' META':'')+'.</div>'
+          :'<div style="display:flex;flex-wrap:wrap;gap:4px;padding-left:26px">'
+          +units.map(function(u){
+            var rs=unitRarityStyle(u.name);
+            var isMeta=metaList.indexOf(u.name)>=0;
+            return'<span style="font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid '+(isMeta?'rgba(201,162,39,.5)':'var(--b1)')+';background:'+(isMeta?'rgba(201,162,39,.1)':'var(--bg1)')+';color:'+rs.color+'">'
+              +(isMeta?'★ ':'')+esc(u.name)+' '+'★'.repeat(u.mastery||0)+'</span>';
+          }).join('')
+          +'</div>')
+        +'</div>';
+    });
+    if(!matched.length) html+='<div style="color:var(--tx3);font-size:12px;padding:10px 0">Aucun membre trouvé.</div>';
+  } else {
+    html+='<div style="color:var(--tx3);font-size:12px;padding:10px 0;text-align:center">Choisissez une unité ou tapez un pseudo.</div>';
+  }
+
+  html+='</div>';
+  OM('🔍 Qui a quoi', html, [{lbl:'Fermer',cls:'bol',fn:CM}]);
+  // Store state for live refresh
+  window._usState={unit:su,member:searchMember,meta:fm};
+}
+
+function renderUnitSearchLive(){
+  var su=document.getElementById('us-unit')?document.getElementById('us-unit').value:'';
+  var sm=document.getElementById('us-member')?document.getElementById('us-member').value:'';
+  var fm=document.getElementById('us-meta')?document.getElementById('us-meta').checked:false;
+  renderUnitSearch(su,sm,fm);
+}
+
 function togUnit(name){
   var units=CU.units||[];
   var idx=units.findIndex(function(u){return u.name===name;});
