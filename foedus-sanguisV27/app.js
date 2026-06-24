@@ -737,6 +737,16 @@ function uid(){return 'm'+Date.now()+Math.random().toString(36).slice(2,6);}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function sanitize(s,n){return String(s||'').slice(0,n||200);}
 function safeInt(v,d){var n=parseInt(v);return isNaN(n)?d:n;}
+
+// Retourne true si les unités du membre n'ont pas été mises à jour depuis 60 jours
+function isUnitStale(m){
+  if(!m.units||m.units.length===0) return false; // pas d'unités = pas de tag
+  if(!m.unitsUpdatedAt) return true; // jamais modifié = considéré inchangé
+  var last=new Date(m.unitsUpdatedAt).getTime();
+  if(isNaN(last)) return true;
+  var days=(Date.now()-last)/(1000*60*60*24);
+  return days>=60;
+}
 function fmtDate(d){if(!d)return'';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 
 function st(n,mx){
@@ -1968,8 +1978,9 @@ function pgRH(){
     h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
     h += avaHTML(m,28);
     h += '<div style="flex:1;min-width:0">';
+    var staleTag=(isUnitStale(m)&&(HR('recrutement')||HR('officier')))?'<span style="font-size:8px;background:rgba(249,168,37,.15);color:#f9a825;padding:1px 5px;border-radius:8px;border:1px solid rgba(249,168,37,.4);margin-left:5px;vertical-align:middle">⚠️ Unités inchangées</span>':'';
     h += '<div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(m.username)
-      +(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+'</div>';
+      +(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+staleTag+'</div>';
     h += '<div style="font-size:11px;color:'+ws.color+'">'+ws.label+'</div>';
     h += '</div>';
     h += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">';
@@ -4255,6 +4266,7 @@ function togUnit(name){
     // Déjà sélectionnée → demander confirmation de retrait
     if(!confirm('Retirer "'+name+'" de tes unités ?'))return;
     CU.units.splice(idx,1);
+    CU.unitsUpdatedAt=new Date().toISOString();
     sbSaveMember(CU);
     _rerenderUnit();
   } else {
@@ -4291,6 +4303,7 @@ function confirmAddUnit(btn){
   var mastery=parseInt(btn.dataset.mas)||1;
   CU.units = CU.units||[];
   CU.units.push({name:name, mastery:mastery});
+  CU.unitsUpdatedAt=new Date().toISOString();
   sbSaveMember(CU);
   CM();
   _rerenderUnit();
@@ -4308,11 +4321,13 @@ function togUnitW(el){togUnit(el.dataset.u);}
 
 function setM(idx,val){
   if(CU.units[idx]) CU.units[idx].mastery=val;
+  CU.unitsUpdatedAt=new Date().toISOString();
   sbSaveMember(CU);
   _rerenderUnit();
 }
 function remU(idx){
   CU.units.splice(idx,1);
+  CU.unitsUpdatedAt=new Date().toISOString();
   sbSaveMember(CU);
   _rerenderUnit();
 }
@@ -8398,7 +8413,7 @@ function sbMemberToLocal(r){
     id:r.id, username:r.username, pin:r.pin||'',
     role:r.role||'recrue', status:r.status||'actif',
     sanguin:r.sanguin||false, chefGroupe:r.chef_groupe||false, grandChampion:r.grand_champion||false,
-    joinDate:r.joined_at||'', note:r.note||'', units:r.units||[], avatar:r.avatar||'',
+    joinDate:r.joined_at||'', note:r.note||'', units:r.units||[], avatar:r.avatar||'', unitsUpdatedAt:r.units_updated_at||'',
     classe:r.classe||'', classes:r.classes||[],
     playerLevel:r.player_level||0, influenceLevel:r.influence_level||0,
     sanctions:r.sanctions||[],
@@ -8411,7 +8426,7 @@ function localMemberToSb(m){
     role:m.role||'recrue', status:m.status||'actif',
     sanguin:m.sanguin||false, chef_groupe:m.chefGroupe||false, grand_champion:m.grandChampion||false,
     joined_at:m.joinDate||m.date||'',
-    note:m.note||m.message||'', units:m.units||[], avatar:m.avatar||'',
+    note:m.note||m.message||'', units:m.units||[], avatar:m.avatar||'', units_updated_at:m.unitsUpdatedAt||null,
     classe:m.classe||'', classes:m.classes||[],
     player_level:m.playerLevel||0, influence_level:m.influenceLevel||0,
     sanctions:m.sanctions||[],
