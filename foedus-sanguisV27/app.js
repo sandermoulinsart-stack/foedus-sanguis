@@ -727,7 +727,11 @@ function HR(r){
   var role=_HR_ROLE||CU.role;
   if(role==='admin')return true;
   if(role==='admin_assistant'&&r!=='admin')return true;
-  return(RL[role]||0)>=(RL[r]||0);
+  if((RL[role]||0)>=(RL[r]||0))return true;
+  // Vérifier les rôles supplémentaires (extra_roles)
+  var extras=CU.extraRoles||[];
+  if(extras.indexOf(r)>=0)return true;
+  return false;
 }
 function _setHRRole(role){_HR_ROLE=role;} // Appelé uniquement au login
 function gM(id){return DB.members.find(function(m){return m.id===id});}
@@ -3993,6 +3997,7 @@ function openMbrProfile(id){
   if(m.chefGroupe)    html+='<span class="badge" style="background:rgba(112,144,168,.2);color:var(--teal2)">🗡️ Chef de Groupe</span>';
   if(m.sanguin)       html+='<span class="badge" style="background:rgba(139,26,10,.2);color:var(--red3)">🩸 Garde Sanguin</span>';
   if(m.grandChampion) html+='<span class="badge" style="background:rgba(201,162,39,.15);color:var(--gold)">🏆 Grand Champion</span>';
+  (m.extraRoles||[]).forEach(function(r){html+='<span class="badge '+(cls[r]||'bmb')+'" style="font-size:9px">'+esc(RN[r]||r)+'</span>';});
   html+='</div>';
   if(m.joinDate) html+='<div style="font-size:11px;color:var(--tx3);margin-top:6px">Membre depuis '+fmtDate(m.joinDate.slice(0,10))+'</div>';
   if(m.playerLevel||m.influenceLevel){
@@ -4103,6 +4108,16 @@ function editMbr(id){
     +'<div class="fr2"><div class="fg"><label class="fl">Rôle</label><select class="fs" id="em-r">'+allowedRoles.map(function(e){return'<option value="'+e[0]+'"'+(m.role===e[0]?' selected':'')+'>'+e[1]+'</option>';}).join('')+'</select></div>'
     +'<div class="fg"><label class="fl">Statut</label><select class="fs" id="em-s"><option value="actif"'+(m.status==='actif'?' selected':'')+'>Actif</option><option value="inactif"'+(m.status==='inactif'?' selected':'')+'>Inactif</option></select></div></div>'
     +'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-sg"'+(m.sanguin?' checked':'')+'>Garde Sanguin 🩸</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-cg"'+(m.chefGroupe?' checked':'')+'>Chef de Groupe 🗡️</label></div>'+'<div class="fg"><label class="fl" style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="em-gc"'+(m.grandChampion?' checked':'')+'>Grand Champion 🏆</label></div>'
+    +'<div class="fg"><label class="fl" style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px">RÔLES SUPPLÉMENTAIRES</label>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">'
+    +(function(){
+      var er=m.extraRoles||[];
+      return '<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="checkbox" id="em-ex-evenement"'+(er.indexOf('evenement')>=0?' checked':'')+'>Resp. Événements</label>'
+        +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="checkbox" id="em-ex-recrutement"'+(er.indexOf('recrutement')>=0?' checked':'')+'>Resp. Recrutement</label>'
+        +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="checkbox" id="em-ex-formation"'+(er.indexOf('formation')>=0?' checked':'')+'>Resp. Formation</label>'
+        +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="checkbox" id="em-ex-responsable_gdoc"'+(er.indexOf('responsable_gdoc')>=0?' checked':'')+'>Resp. GDoc</label>';
+    })()
+    +'</div></div>'
     +'<div class="fg"><label class="fl">Note</label><input class="fi" id="em-n" value="'+esc(m.note||'')+'"></div>'
     +'<div class="fg"><label class="fl">Nouveau PIN (vide = inchangé)</label><input class="fi" type="password" id="em-p"></div>',
     [{lbl:'Annuler',cls:'bol',fn:CM},{lbl:'Sauvegarder',cls:'btn bg',fn:function(){
@@ -4115,6 +4130,11 @@ function editMbr(id){
       m.username=sanitize(gVal('em-u'),50)||m.username;
       m.role=newRole;m.status=gVal('em-s');
       m.sanguin=gChk('em-sg');m.chefGroupe=gChk('em-cg');m.grandChampion=gChk('em-gc');m.note=gVal('em-n');
+      var extras=[];
+      ['evenement','recrutement','formation','responsable_gdoc'].forEach(function(r){
+        if(gChk('em-ex-'+r)) extras.push(r);
+      });
+      m.extraRoles=extras;
       var np=gVal('em-p');
       function save(){
         if(m.id===CU.id)CU=m;
@@ -8672,7 +8692,7 @@ function sbMemberToLocal(r){
     id:r.id, username:r.username, pin:r.pin||'',
     role:r.role||'recrue', status:r.status||'actif',
     sanguin:r.sanguin||false, chefGroupe:r.chef_groupe||false, grandChampion:r.grand_champion||false,
-    joinDate:r.joined_at||'', note:r.note||'', units:r.units||[], avatar:r.avatar||'', unitsUpdatedAt:r.units_updated_at||'',
+    joinDate:r.joined_at||'', note:r.note||'', units:r.units||[], avatar:r.avatar||'', unitsUpdatedAt:r.units_updated_at||'', extraRoles:r.extra_roles||[],
     classe:r.classe||'', classes:r.classes||[],
     playerLevel:r.player_level||0, influenceLevel:r.influence_level||0,
     sanctions:r.sanctions||[],
@@ -8685,7 +8705,7 @@ function localMemberToSb(m){
     role:m.role||'recrue', status:m.status||'actif',
     sanguin:m.sanguin||false, chef_groupe:m.chefGroupe||false, grand_champion:m.grandChampion||false,
     joined_at:m.joinDate||m.date||'',
-    note:m.note||m.message||'', units:m.units||[], avatar:m.avatar||'', units_updated_at:m.unitsUpdatedAt||null,
+    note:m.note||m.message||'', units:m.units||[], avatar:m.avatar||'', units_updated_at:m.unitsUpdatedAt||null, extra_roles:m.extraRoles||[],
     classe:m.classe||'', classes:m.classes||[],
     player_level:m.playerLevel||0, influence_level:m.influenceLevel||0,
     sanctions:m.sanctions||[],
