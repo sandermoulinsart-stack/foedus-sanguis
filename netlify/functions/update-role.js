@@ -7,7 +7,7 @@ const SB_URL = 'https://xwtwmteqbmvwqjyicgal.supabase.co';
 const ROLE_LEVEL = {
   admin: 8, admin_assistant: 7, baron: 6, officier: 5,
   evenement: 4, recrutement: 4, formation: 4,
-  garde_sanguin: 2, membre: 1, recrue: 0
+  chef_groupe: 3, garde_sanguin: 2, responsable_gdoc: 3, membre: 1, recrue: 0
 };
 
 async function sbGet(table, params) {
