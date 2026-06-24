@@ -3837,14 +3837,27 @@ function openMbrProfile(id){
   if(m.note) html+='<div style="background:var(--bg1);border-radius:3px;padding:10px;font-size:12px;color:var(--tx2);font-style:italic">'+esc(m.note)+'</div>';
   var btns=[{lbl:'Fermer',cls:'bol',fn:CM}];
   if(HR('officier')) btns.unshift({lbl:'✏️ Modifier',cls:'btn bg',fn:function(){CM();editMbr(id);}});
-  if(isGDoc()&&!HR('officier')&&m.role==='recrue') btns.unshift({lbl:'✅ Passer Membre',cls:'btn bg',fn:function(){
-    if(!confirm('Passer '+m.username+' au rôle Membre ?')) return;
-    CM();
-    fetch('/.netlify/functions/update-role',{method:'POST',headers:{'Content-Type':'application/json','x-foedus-key':PUSH_SECRET},body:JSON.stringify({callerId:CU.id,targetId:m.id,newRole:'membre'})})
-      .then(function(r){return r.json();})
-      .then(function(d){if(d.success){m.role='membre';go('mbr');}else alert('Erreur: '+d.error);})
-      .catch(function(e){console.warn(e);});
+  if(isGDoc()&&!HR('officier')) btns.unshift({lbl:'📝 Note',cls:'btn bol',fn:function(){
+    OM('Note — '+esc(m.username),
+      '<div class="fg"><label class="fl">Commentaire</label><textarea class="ft" id="gdoc-note" style="min-height:80px">'+esc(m.note||'')+'</textarea></div>',
+      [{lbl:'Annuler',cls:'bol',fn:function(){CM();openMbrProfile(id);}},
+       {lbl:'💾 Sauvegarder',cls:'btn bg',fn:function(){
+         m.note=gVal('gdoc-note');
+         sbSaveMember(m).then(function(){CM();openMbrProfile(id);}).catch(function(e){console.warn(e);});
+       }}]);
   }});
+  if(isGDoc()&&!HR('officier')&&(m.role==='recrue'||m.role==='membre')){
+    var toRole=m.role==='recrue'?'membre':'recrue';
+    var toLbl=m.role==='recrue'?'✅ Passer Membre':'↩️ Repasser Recrue';
+    btns.unshift({lbl:toLbl,cls:'btn '+(m.role==='recrue'?'bg':'bol'),fn:function(){
+      if(!confirm('Passer '+m.username+' en '+toRole+' ?')) return;
+      CM();
+      fetch('/.netlify/functions/update-role',{method:'POST',headers:{'Content-Type':'application/json','x-foedus-key':FOEDUS_PUSH_SECRET},body:JSON.stringify({callerId:CU.id,targetId:m.id,newRole:toRole})})
+        .then(function(r){return r.json();})
+        .then(function(d){if(d.success){m.role=toRole;go('mbr');}else alert('Erreur: '+d.error);})
+        .catch(function(e){console.warn(e);});
+    }});
+  }
   OM(esc(m.username),html,btns);
 }
 
