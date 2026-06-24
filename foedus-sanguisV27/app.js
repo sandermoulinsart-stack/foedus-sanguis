@@ -3935,7 +3935,7 @@ function pgUnit(){
 
   // Tact buttons
   document.getElementById('tact').innerHTML=
-    '<button class="btn bol bsm" onclick="openUnitStatsW()" style="margin-right:4px">📊 Stats guilde</button>'
+    '<button class="btn bol bsm" onclick="openUnitStatsW()" style="margin-right:4px">📊 Stats Maison</button>'
     +'<button class="btn bol bsm" onclick="openUnitSearchW()">🔍 Qui a quoi</button>';
 
   // Bloc d'information
@@ -4077,7 +4077,7 @@ function openUnitStatsW(){
     +renderSection(metaUnits,'★ UNITÉS META','var(--gold)')
     +renderSection(otherUnits,'AUTRES UNITÉS','var(--tx3)');
 
-  OM('📊 Statistiques des Unités — Guilde', html, [{lbl:'Fermer',cls:'bol',fn:CM}]);
+  OM('📊 Statistiques des Unités — Maison', html, [{lbl:'Fermer',cls:'bol',fn:CM}]);
 }
 
 function openUnitSearchW(){
