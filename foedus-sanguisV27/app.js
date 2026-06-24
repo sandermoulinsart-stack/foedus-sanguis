@@ -2358,8 +2358,32 @@ function openRHMemberW(id){
       }).join('')
     : '<div style="color:var(--tx3);font-size:12px">Aucune sanction.</div>';
 
-  var html = '<div style="margin-bottom:14px">'
-    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">SANCTIONS</div>'
+  // Activity report
+  var report=getMemberActivityReport(m);
+  var activityHtml='<div style="margin-bottom:14px;background:var(--bg1);border:1px solid var(--b1);border-radius:4px;padding:12px">'    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px">📊 ACTIVITÉ ('+report.total+' guerres)</div>'    +'<span style="font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700;'    +(report.computedStatus==='actif'?'background:rgba(102,187,106,.2);color:#66bb6a':'background:rgba(139,26,10,.2);color:var(--red3)')    +'">'+(report.computedStatus==='actif'?'✅ Actif':'❌ Inactif')+'</span>'    +(report.consecutive>=2?'<span style="font-size:10px;color:#f9a825">⚠️ '+report.consecutive+' absences consécutives</span>':'')    +'</div>';
+
+  if(report.total===0){
+    activityHtml+='<div style="font-size:11px;color:var(--tx3)">Aucune guerre clôturée cette saison.</div>';
+  } else {
+    // Tranches
+    if(report.tranches.length){
+      activityHtml+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">';
+      report.tranches.forEach(function(tr,ti){
+        activityHtml+='<div style="background:var(--bg2);border:1px solid '+(tr.ok?'rgba(102,187,106,.4)':'rgba(139,26,10,.4)')+';border-radius:3px;padding:5px 8px;font-size:10px">'          +'<div style="font-weight:700;color:'+(tr.ok?'#66bb6a':'var(--red3)')+';margin-bottom:4px">Tranche '+(ti+1)+' '+(tr.ok?'✅':'❌')+'</div>'          +tr.wars.map(function(w){return'<div style="color:'+(w.participated?'#66bb6a':w.label==='Absent'?'var(--red3)':'var(--tx3)')+'">'+(w.participated?'✅':w.label==='Absent'?'❌':'—')+' '+esc(w.title.slice(0,20))+'</div>';}).join('')          +'</div>';
+      });
+      activityHtml+='</div>';
+    }
+    // Last 9 wars summary bar
+    activityHtml+='<div style="display:flex;gap:3px;flex-wrap:wrap">';
+    report.wars.forEach(function(w){
+      var col=w.participated?'#66bb6a':w.label==='Absent'?'var(--red3)':'var(--tx3)';
+      activityHtml+='<div title="'+esc(w.title)+' ('+esc(w.date)+') — '+esc(w.label)+'" style="width:22px;height:22px;border-radius:3px;background:var(--bg2);border:1px solid '+col+';display:flex;align-items:center;justify-content:center;font-size:10px;cursor:help">'+(w.participated?'✅':w.label==='Absent'?'❌':'—')+'</div>';
+    });
+    activityHtml+='</div>';
+  }
+  activityHtml+='</div>';
+
+  var html = activityHtml+'<div style="margin-bottom:14px">'    +'<div style="font-size:10px;font-weight:700;color:var(--tx3);letter-spacing:1px;margin-bottom:8px">SANCTIONS</div>'
     +sanctionsList
     +'<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
     +'<button class="btn bol bsm" onclick="addRHSanction(\''+id+'\',\'1ère sanction ⚠️\')">+ 1ère sanction</button>'
@@ -3560,40 +3584,82 @@ function newBannerForm(){
 // ════════════════════════════════════════════════════════════════
 // CALCUL AUTOMATIQUE DES STATUTS
 // ════════════════════════════════════════════════════════════════
-function computeMemberStatus(m){
-  // Récupérer les 3 dernières guerres clôturées, triées du plus récent au plus ancien
-  var closedWars=(DB.voteWars||[])
-    .filter(function(w){return w.status!=='open'})
-    .sort(function(a,b){return b.date.localeCompare(a.date)})
-    .slice(0,3);
+// Retourne true si le vote compte comme une participation (présent ou retard)
+function isParticipation(vote){
+  return vote&&(vote.vote==='present'||vote.vote==='retard'||vote.vote==='late');
+}
 
-  // Pas assez d'historique (moins de 3 guerres clôturées) — ne rien changer
+// Calcule le statut d'activité d'un membre selon les nouvelles règles :
+// INACTIF : 3 absences/novote consécutives
+// ACTIF   : au moins 1 participation dans chacune des 3 tranches de 3 guerres (sur les 9 dernières)
+// Recrues : ignorées (appelant doit vérifier)
+function computeMemberStatus(m){
+  var closedWars=(DB.voteWars||[])
+    .filter(function(w){return w.status==='closed'&&!w.seasonId;})
+    .sort(function(a,b){return b.date.localeCompare(a.date);});
+
+  // Pas assez d'historique — ne rien changer
   if(closedWars.length<3) return m.status;
 
-  var votes=closedWars.map(function(w){
-    var v=(w.votes||{})[m.id];
-    return v?v.vote:null; // null = pas voté
-  });
-
-  // Règle 1 : 3 sans-vote de suite → Inactif
-  if(votes.every(function(v){return v===null;})) return 'inactif';
-
-  // Règle 2 : 3 absences de suite (vote 'absent') → Inactif
-  if(votes.every(function(v){return v==='absent';})) return 'inactif';
-
-  // Règle 3 : Mix absent + sans-vote, aucun engagement → Inactif
-  // (ex: absent, null, absent ou null, absent, null)
-  var hasEngaged=votes.some(function(v){return v==='present';});
-  if(!hasEngaged){
-    var hasAbsent=votes.some(function(v){return v==='absent';});
-    var hasNoVote=votes.some(function(v){return v===null;});
-    if(hasAbsent&&hasNoVote) return 'inactif';
+  // ── Règle INACTIF : 3 non-participations consécutives ──────────
+  var consecutive=0;
+  for(var i=0;i<closedWars.length;i++){
+    var v=(closedWars[i].votes||{})[m.id];
+    if(!isParticipation(v)) consecutive++;
+    else break;
+    if(consecutive>=3) return 'inactif';
   }
 
-  // Règle 4 : Au moins 1 présent parmi les 3 → Actif
-  if(hasEngaged) return 'actif';
+  // ── Règle ACTIF : 1 participation par tranche de 3 sur 9 ──────
+  var last9=closedWars.slice(0,9);
+  // Si moins de 9 guerres, on calcule sur les tranches complètes disponibles
+  var nbTranches=Math.floor(last9.length/3);
+  if(nbTranches<1) return m.status;
 
-  return m.status; // Conserver le statut actuel dans les cas non couverts
+  var allTranchesOK=true;
+  for(var t=0;t<nbTranches;t++){
+    var tranche=last9.slice(t*3,(t+1)*3);
+    var hasOne=tranche.some(function(w){
+      return isParticipation((w.votes||{})[m.id]);
+    });
+    if(!hasOne){allTranchesOK=false;break;}
+  }
+  if(allTranchesOK) return 'actif';
+
+  return m.status; // Conserver si aucune règle ne s'applique clairement
+}
+
+// Retourne le détail d'activité d'un membre pour le rapport RH
+// { wars: [{date, title, participated}], tranches: [{ok, wars}], consecutive: N, status: 'actif'|'inactif' }
+function getMemberActivityReport(m){
+  var closedWars=(DB.voteWars||[])
+    .filter(function(w){return w.status==='closed'&&!w.seasonId;})
+    .sort(function(a,b){return b.date.localeCompare(a.date);})
+    .slice(0,9);
+
+  var wars=closedWars.map(function(w){
+    var v=(w.votes||{})[m.id];
+    var participated=isParticipation(v);
+    var label=!v?'—':v.vote==='absent'?'Absent':'Présent';
+    return{date:w.date,title:w.title,participated:participated,label:label};
+  });
+
+  var consecutive=0;
+  for(var i=0;i<wars.length;i++){
+    if(!wars[i].participated) consecutive++;
+    else break;
+  }
+
+  var tranches=[];
+  var nbT=Math.floor(wars.length/3);
+  for(var t=0;t<nbT;t++){
+    var tr=wars.slice(t*3,(t+1)*3);
+    var ok=tr.some(function(x){return x.participated;});
+    tranches.push({ok:ok,wars:tr});
+  }
+
+  var computedStatus=computeMemberStatus(m);
+  return{wars:wars,tranches:tranches,consecutive:consecutive,computedStatus:computedStatus,total:closedWars.length};
 }
 
 // Mise à jour silencieuse des statuts — appelée automatiquement à la clôture d'une guerre
@@ -3739,6 +3805,7 @@ function pgMbr(){
         +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">'+rb(m)
         +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'">'+esc(m.status)+'</span>'
         +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️ '+sanctions+'</span>':'')
+        +(m.status==='actif'&&computeMemberStatus(m)==='inactif'?'<span class="badge bof" style="font-size:9px">⚠️ Risque inactif</span>':'')
         +'</div>'
         +(m.classes&&m.classes.length?'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px">'+memberClassBadges(m)+'</div>':'')
         +'<div style="font-size:10px;color:var(--tx3);margin-top:4px">🛡️ '+(m.units&&m.units.length?m.units.length+' unité(s) · max '+maxMastery+'★':'Aucune unité')+'</div>'
