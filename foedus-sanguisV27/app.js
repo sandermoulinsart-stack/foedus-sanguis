@@ -4188,7 +4188,64 @@ function renderUnitSearchLive(){
   var su=document.getElementById('us-unit')?document.getElementById('us-unit').value:'';
   var sm=document.getElementById('us-member')?document.getElementById('us-member').value:'';
   var fm=document.getElementById('us-meta')?document.getElementById('us-meta').checked:false;
-  renderUnitSearch(su,sm,fm);
+  // Mettre à jour uniquement les résultats sans recréer le modal (évite la perte de focus)
+  var resultsEl=document.getElementById('us-results');
+  if(!resultsEl){renderUnitSearch(su,sm,fm);return;}
+
+  var members=DB.members.filter(function(m){return m.status!=='attente'&&!m.isGuest;});
+  var metaList=DB.metaUnits||[];
+  var html='';
+
+  if(su){
+    var havers=members.filter(function(m){
+      return (m.units||[]).some(function(u){return u.name===su&&(!fm||metaList.indexOf(u.name)>=0);});
+    }).sort(function(a,b){
+      var ua=(a.units||[]).find(function(u){return u.name===su;});
+      var ub=(b.units||[]).find(function(u){return u.name===su;});
+      return (ub?ub.mastery||0:0)-(ua?ua.mastery||0:0);
+    });
+    var isMeta=metaList.indexOf(su)>=0;
+    html+='<div style="margin-bottom:8px"><span style="font-size:11px;font-weight:700;color:var(--tx2)">'+esc(su)+'</span>'
+      +(isMeta?'<span style="font-size:8px;background:var(--gold);color:#000;padding:1px 4px;border-radius:2px;margin-left:6px">META</span>':'')
+      +'<span style="font-size:11px;color:var(--tx3);margin-left:8px">'+havers.length+' membre(s)</span></div>';
+    if(!havers.length){
+      html+='<div style="color:var(--tx3);font-size:12px;padding:10px 0">Aucun membre n\'a cette unité.</div>';
+    } else {
+      html+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      havers.forEach(function(m){
+        var u=(m.units||[]).find(function(x){return x.name===su;});
+        var stars=u?'★'.repeat(u.mastery||0):'';
+        html+='<div style="background:var(--bg2);border:1px solid var(--b1);border-radius:3px;padding:5px 10px;font-size:11px;display:flex;align-items:center;gap:6px">'
+          +avaHTML(m,16)+'<span style="color:var(--tx1)">'+esc(m.username)+'</span>'
+          +(stars?'<span style="color:var(--gold);font-size:10px">'+stars+'</span>':'')+'</div>';
+      });
+      html+='</div>';
+    }
+  } else if(sm){
+    var matched=members.filter(function(m){return m.username.toLowerCase().indexOf(sm.toLowerCase())>=0;});
+    matched.forEach(function(m){
+      var units=(m.units||[]).filter(function(u){return !fm||metaList.indexOf(u.name)>=0;})
+        .slice().sort(function(a,b){return (b.mastery||0)-(a.mastery||0);});
+      html+='<div style="margin-bottom:12px">'
+        +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'+avaHTML(m,20)
+        +'<span style="font-size:12px;font-weight:700;color:var(--tx1)">'+esc(m.username)+'</span>'
+        +'<span style="font-size:10px;color:var(--tx3)">'+units.length+' unité(s)</span></div>'
+        +(units.length===0?'<div style="font-size:11px;color:var(--tx3);padding-left:26px">Aucune unité'+(fm?' META':'')+'.</div>'
+          :'<div style="display:flex;flex-wrap:wrap;gap:4px;padding-left:26px">'
+          +units.map(function(u){
+            var rs=unitRarityStyle(u.name);
+            var isMeta2=metaList.indexOf(u.name)>=0;
+            return'<span style="font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid '+(isMeta2?'rgba(201,162,39,.5)':'var(--b1)')+';background:'+(isMeta2?'rgba(201,162,39,.1)':'var(--bg1)')+';color:'+rs.color+'">'
+              +(isMeta2?'★ ':'')+esc(u.name)+' '+'★'.repeat(u.mastery||0)+'</span>';
+          }).join('')+'</div>')
+        +'</div>';
+    });
+    if(!matched.length) html+='<div style="color:var(--tx3);font-size:12px;padding:10px 0">Aucun membre trouvé.</div>';
+  } else {
+    html='<div style="color:var(--tx3);font-size:12px;padding:10px 0;text-align:center">Choisissez une unité ou tapez un pseudo.</div>';
+  }
+
+  resultsEl.innerHTML=html;
 }
 
 function togUnit(name){
