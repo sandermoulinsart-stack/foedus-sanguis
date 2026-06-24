@@ -711,8 +711,8 @@ function sDB(){
 var DB={houseName:'FOEDUS SANGUIS',minMastery:1,activeWarId:null,members:[],pendingMembers:[],groups:[],groupSessions:[],voteWars:[],banners:[],forumThreads:[],events:[],formations:[],trainings:[],seasons:[],builderConfig:null,hierarchy:[],presence:[],metaUnits:[],rhUsers:[],rhData:{},hillKing:{},hillBg:'',threadReads:{},hillHistory:[]}, CU=null, CP='home';
 var FV='list', CT=null, FmV='list', CFm=null;
 
-var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,chef_groupe:3,garde_sanguin:2,responsable_gdoc:3,membre:1,recrue:0};
-var RN={admin:'Admin',admin_assistant:'Admin Assistant',baron:'Baron',officier:'Officier',evenement:'Resp. Événements',recrutement:'Resp. Recrutement',formation:'Resp. Formation',chef_groupe:'Chef de Groupe',garde_sanguin:'Garde Sanguin',responsable_gdoc:'Resp. GDoc',membre:'Membre',recrue:'Recrue'};
+var RL={admin:8,admin_assistant:7,baron:6,officier:5,evenement:4,recrutement:4,formation:4,responsable_gdoc:3,membre:1,recrue:0};
+var RN={admin:'Admin',admin_assistant:'Admin Assistant',baron:'Baron',officier:'Officier',evenement:'Resp. Événements',recrutement:'Resp. Recrutement',formation:'Resp. Formation',responsable_gdoc:'Resp. GDoc',membre:'Membre',recrue:'Recrue'};
 var MO=['','Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
 
 
@@ -755,7 +755,7 @@ function st(n,mx){
   return h;
 }
 function rb(m){
-  var cls={admin:'badm',admin_assistant:'badm',baron:'bc',officier:'bo',evenement:'bev',recrutement:'bre',formation:'bfo',chef_groupe:'bcg',garde_sanguin:'bgs',responsable_gdoc:'brg',membre:'bmb',recrue:'brc'};
+  var cls={admin:'badm',admin_assistant:'badm',baron:'bc',officier:'bo',evenement:'bev',recrutement:'bre',formation:'bfo',responsable_gdoc:'brg',membre:'bmb',recrue:'brc'};
   return '<span class="badge '+(cls[m.role]||'bmb')+'">'+(RN[m.role]||m.role)+'</span>';
 }
 function avaHTML(m,sz){
