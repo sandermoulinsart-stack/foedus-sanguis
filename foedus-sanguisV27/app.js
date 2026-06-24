@@ -3708,7 +3708,7 @@ function pgMbr(){
         +' onclick="openMbrProfileW(this)" data-id="'+m.id+'">'
         +avaHTML(m,28)
         +'<div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
-        +'<span style="font-size:13px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+(m.isGuest?' <span style="font-size:9px;background:rgba(201,162,39,.15);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(201,162,39,.3)">🎟️ Invité</span>':'')+'</span>'
+        +'<span style="font-size:13px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+(m.isGuest?' <span style="font-size:9px;background:rgba(201,162,39,.15);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(201,162,39,.3)">🎟️ Invité</span>':'')+(isUnitStale(m)&&(HR('recrutement')||HR('officier'))?'<span style="font-size:8px;background:rgba(249,168,37,.15);color:#f9a825;padding:1px 5px;border-radius:8px;border:1px solid rgba(249,168,37,.4);margin-left:4px">⚠️ Unités inchangées</span>':'')+'</span>'
         +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'" style="font-size:9px">'+esc(m.status)+'</span>'
         +rb(m)
         +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️</span>':'')
@@ -3730,7 +3730,7 @@ function pgMbr(){
         +'<div style="display:flex;align-items:center;gap:10px">'
         +avaHTML(m,38)
         +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:14px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+(m.isGuest?' <span style="font-size:9px;background:rgba(201,162,39,.15);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(201,162,39,.3)">🎟️ Invité</span>':'')+'</div>'
+        +'<div style="font-size:14px;font-weight:700;color:'+(isMe?'var(--gold)':'var(--tx1)')+'">'+esc(m.username)+(m.chefGroupe?' 🗡️':'')+(m.sanguin?' 🩸':'')+(m.grandChampion?' 🏆':'')+(m.isGuest?' <span style="font-size:9px;background:rgba(201,162,39,.15);color:var(--gold);padding:1px 5px;border-radius:8px;border:1px solid rgba(201,162,39,.3)">🎟️ Invité</span>':'')+(isUnitStale(m)&&(HR('recrutement')||HR('officier'))?'<span style="font-size:8px;background:rgba(249,168,37,.15);color:#f9a825;padding:1px 5px;border-radius:8px;border:1px solid rgba(249,168,37,.4);margin-left:4px">⚠️ Unités inchangées</span>':'')+'</div>'
         +'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">'+rb(m)
         +'<span class="badge '+(m.status==='actif'?'bok':'bof')+'">'+esc(m.status)+'</span>'
         +(sanctions>0&&HR('officier')?'<span class="badge bred" style="font-size:9px">⚠️ '+sanctions+'</span>':'')
