@@ -3790,6 +3790,9 @@ function getMemberActivityReport(m){
 
 // Mise à jour silencieuse des statuts — appelée automatiquement à la clôture d'une guerre
 function silentUpdateStatuses(){
+  // Pas assez de guerres clôturées cette saison — ne rien changer
+  var closedWars=(DB.voteWars||[]).filter(function(w){return w.status==='closed'&&!w.seasonId;});
+  if(closedWars.length<3) return;
   DB.members.forEach(function(m){
     if(m.role==='recrue') return;
     var newStatus=computeMemberStatus(m);
