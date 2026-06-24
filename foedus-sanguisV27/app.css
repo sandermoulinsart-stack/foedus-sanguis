@@ -57,6 +57,8 @@ tr:last-child td{border-bottom:none}
 .bre{background:rgba(46,168,190,.2);color:var(--teal2);border:1px solid var(--teal)}
 .bcg{background:rgba(155,89,182,.2);color:#c39bd3;border:1px solid #6c3483}
 .bgs{background:rgba(139,0,0,.3);color:#ff6b6b;border:1px solid #8b0000}
+.brg{background:rgba(0,150,136,.2);color:#4db6ac;border:1px solid #00695c}
+.bcg{background:rgba(255,152,0,.2);color:#ffb74d;border:1px solid #e65100}
 .bmb{background:rgba(42,61,82,.5);color:var(--tx2);border:1px solid var(--b1)}
 .brc{background:rgba(42,61,82,.2);color:var(--tx3);border:1px solid var(--tx3)}
 .bok{background:rgba(39,174,96,.15);color:#2ecc71;border:1px solid #27ae60}
