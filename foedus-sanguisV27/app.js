@@ -8532,7 +8532,8 @@ function showGuestTournamentPage(tour){
 
   var div=document.createElement('div');
   div.id='guest-tournament-page';
-  div.style.cssText='min-height:100vh;background:#080a0c;padding:20px;font-family:Spectral,serif;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+  document.body.style.cssText='overflow-y:auto;-webkit-overflow-scrolling:touch;background:#080a0c';
+  div.style.cssText='width:100%;background:#080a0c;padding:20px 20px 60px;font-family:Spectral,serif;box-sizing:border-box;';
 
   var statusColor=tour.status==='open'?'#66bb6a':tour.status==='ongoing'?'#f9a825':'#888';
   var statusLabel=tour.status==='open'?'Registration Open':tour.status==='ongoing'?'Ongoing':'Completed';
@@ -8664,7 +8665,8 @@ function showGuestEventPage(ev, token){
   document.getElementById('app').style.display='none';
   var div=document.createElement('div');
   div.id='guest-event-page';
-  div.style.cssText='min-height:100vh;background:#080a0c;color:#e8e0cc;font-family:Spectral,serif;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+  document.body.style.cssText='overflow-y:auto;-webkit-overflow-scrolling:touch;background:#080a0c';
+  div.style.cssText='width:100%;background:#080a0c;color:#e8e0cc;font-family:Spectral,serif;padding:20px 20px 60px;box-sizing:border-box;';
   div.innerHTML='<div style="max-width:480px;width:100%;margin:0 auto">'
     +'<div style="text-align:center;margin-bottom:32px">'
     +'<img src="/icon-512.png" style="width:80px;height:80px;object-fit:contain;margin-bottom:12px">'
