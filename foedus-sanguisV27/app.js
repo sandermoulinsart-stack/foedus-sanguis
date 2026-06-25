@@ -3723,13 +3723,20 @@ function isParticipation(vote){
   return vote&&(vote.vote==='present'||vote.vote==='retard'||vote.vote==='late');
 }
 
+// Retourne true si la guerre tombe dans la période d'absence déclarée du membre
+function isWarInAbsence(m, w){
+  var d=DB.rhData&&DB.rhData[m.id];
+  if(!d||!d.absenceFrom||!d.absenceTo) return false;
+  return w.date>=d.absenceFrom&&w.date<=d.absenceTo;
+}
+
 // Calcule le statut d'activité d'un membre selon les nouvelles règles :
-// INACTIF : 3 absences/novote consécutives
+// INACTIF : 3 absences/novote consécutives (les guerres pendant congé sont ignorées)
 // ACTIF   : au moins 1 participation dans chacune des 3 tranches de 3 guerres (sur les 9 dernières)
 // Recrues : ignorées (appelant doit vérifier)
 function computeMemberStatus(m){
   var closedWars=(DB.voteWars||[])
-    .filter(function(w){return w.status==='closed'&&!w.seasonId;})
+    .filter(function(w){return w.status==='closed'&&!w.seasonId&&!isWarInAbsence(m,w);})
     .sort(function(a,b){return b.date.localeCompare(a.date);});
 
   // Pas assez d'historique — ne rien changer
@@ -3746,7 +3753,6 @@ function computeMemberStatus(m){
 
   // ── Règle ACTIF : 1 participation par tranche de 3 sur 9 ──────
   var last9=closedWars.slice(0,9);
-  // Si moins de 9 guerres, on calcule sur les tranches complètes disponibles
   var nbTranches=Math.floor(last9.length/3);
   if(nbTranches<1) return m.status;
 
@@ -3760,7 +3766,7 @@ function computeMemberStatus(m){
   }
   if(allTranchesOK) return 'actif';
 
-  return m.status; // Conserver si aucune règle ne s'applique clairement
+  return m.status;
 }
 
 // Retourne le détail d'activité d'un membre pour le rapport RH
@@ -3773,9 +3779,10 @@ function getMemberActivityReport(m){
 
   var wars=closedWars.map(function(w){
     var v=(w.votes||{})[m.id];
-    var participated=isParticipation(v);
-    var label=!v?'—':v.vote==='absent'?'Absent':'Présent';
-    return{date:w.date,title:w.title,participated:participated,label:label};
+    var inAbsence=isWarInAbsence(m,w);
+    var participated=inAbsence?true:isParticipation(v); // absence = neutre, compte comme OK
+    var label=inAbsence?'Congé':(!v?'—':v.vote==='absent'?'Absent':'Présent');
+    return{date:w.date,title:w.title,participated:participated,label:label,inAbsence:inAbsence};
   });
 
   var consecutive=0;
