@@ -8532,7 +8532,7 @@ function showGuestTournamentPage(tour){
 
   var div=document.createElement('div');
   div.id='guest-tournament-page';
-  div.style.cssText='min-height:100vh;background:#080a0c;padding:20px;font-family:Spectral,serif;';
+  div.style.cssText='min-height:100vh;background:#080a0c;padding:20px;font-family:Spectral,serif;overflow-y:auto;-webkit-overflow-scrolling:touch;';
 
   var statusColor=tour.status==='open'?'#66bb6a':tour.status==='ongoing'?'#f9a825':'#888';
   var statusLabel=tour.status==='open'?'Registration Open':tour.status==='ongoing'?'Ongoing':'Completed';
@@ -8664,8 +8664,8 @@ function showGuestEventPage(ev, token){
   document.getElementById('app').style.display='none';
   var div=document.createElement('div');
   div.id='guest-event-page';
-  div.style.cssText='min-height:100vh;background:#080a0c;color:#e8e0cc;font-family:Spectral,serif;display:flex;align-items:center;justify-content:center;padding:20px';
-  div.innerHTML='<div style="max-width:480px;width:100%">'
+  div.style.cssText='min-height:100vh;background:#080a0c;color:#e8e0cc;font-family:Spectral,serif;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+  div.innerHTML='<div style="max-width:480px;width:100%;margin:0 auto">'
     +'<div style="text-align:center;margin-bottom:32px">'
     +'<img src="/icon-512.png" style="width:80px;height:80px;object-fit:contain;margin-bottom:12px">'
     +'<div style="font-family:Cinzel,serif;font-size:22px;font-weight:700;color:#c9a227;letter-spacing:2px">FOEDUS SANGUIS</div>'
