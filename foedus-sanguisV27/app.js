@@ -6140,9 +6140,7 @@ function castVote(warId,voteVal){
     }
   }
 
-  sbSaveWar(w).then(function(){
-    silentUpdateStatuses();
-  }).catch(function(e){console.warn('[castVote]',e);});
+  sbSaveWar(w).catch(function(e){console.warn('[castVote]',e);});
   go('vote');
 }
 
