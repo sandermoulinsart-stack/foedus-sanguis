@@ -146,10 +146,10 @@ function localFormationToSb(f){
     image:f.image||'',thumbnail:f.thumbnail||'',content:f.content||'',comments:f.comments||[],is_meta:f.isMeta||false,category:f.category||'',form_type:f.formType||'unit',created_by:f.createdBy||CU.username||'',featured:f.featured||false};
 }
 function sbEventToLocal(r){
-  return {id:r.id,title:r.title,date:r.date||'',time:r.time||'',description:r.description||'',image:r.image||'',featured:r.featured||false,votes:r.votes||{},voteOpen:r.vote_open||false};
+  return {id:r.id,title:r.title,date:r.date||'',time:r.time||'',description:r.description||'',image:r.image||'',featured:r.featured||false,votes:r.votes||{},voteOpen:r.vote_open||false,inviteToken:r.invite_token||''};
 }
 function localEventToSb(e){
-  return {id:e.id,title:e.title,date:e.date||'',time:e.time||'',description:e.description||'',image:e.image||'',featured:e.featured||false,votes:e.votes||{},vote_open:e.voteOpen||false};
+  return {id:e.id,title:e.title,date:e.date||'',time:e.time||'',description:e.description||'',image:e.image||'',featured:e.featured||false,votes:e.votes||{},vote_open:e.voteOpen||false,invite_token:e.inviteToken||''};
 }
 function sbSaveThread(t){ return SB.from('forum_threads').upsert(localThreadToSb(t)); }
 function sbDeleteThread(id){ return SB.from('forum_threads').delete('id',id); }
@@ -6991,6 +6991,7 @@ function renderCalDetail(detail){
       +(e.voteOpen?'<span style="font-size:10px;font-weight:700;color:#66bb6a;border:1px solid #388e3c;padding:2px 8px;border-radius:3px">VOTE OUVERT</span>':'')
       +(canManage?'<button class="btn bol bsm" onclick="toggleEventVoteW(this)" data-id="'+e.id+'">'+(e.voteOpen?'🔒 Clôturer vote':'📋 Ouvrir vote')+'</button>':'')
       +(canManage?'<button class="btn bol bsm" onclick="editEventW(this)" data-id="'+e.id+'">✏️</button>':'')
+      +(canManage?'<button class="btn bol bsm" onclick="generateEventInviteToken(this.dataset.id)" data-id="'+e.id+'">🔗 Inviter</button>':'')
       +'</div>'
       +'</div>'
       +(e.image?'<div style="width:100%;height:220px;overflow:hidden;border-radius:3px;margin-bottom:12px"><img src="'+esc(e.image)+'" style="width:100%;height:100%;object-fit:cover"></div>':'')
@@ -8374,6 +8375,25 @@ document.addEventListener('click', function(e){
     try{return new URLSearchParams(window.location.search).get('tourney');}catch(e){return null;}
   })();
 
+  var _guestEventToken=(function(){
+    try{return new URLSearchParams(window.location.search).get('event');}catch(e){return null;}
+  })();
+
+  if(_guestEventToken){
+    fetch(SB_URL+'/rest/v1/events?invite_token=eq.'+encodeURIComponent(_guestEventToken)+'&select=*',{
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+    }).then(function(r){return r.json();}).then(function(rows){
+      if(!rows||!rows.length){
+        document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#080a0c;color:#c9a227;font-family:Cinzel,serif;font-size:18px;text-align:center;padding:20px">Invalid or expired invitation link.</div>';
+        return;
+      }
+      showGuestEventPage(sbEventToLocal(rows[0]), _guestEventToken);
+    }).catch(function(){
+      document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#080a0c;color:var(--red3);font-family:Cinzel,serif;font-size:16px;text-align:center;padding:20px">Connection error. Please try again.</div>';
+    });
+    return;
+  }
+
   if(_guestToken){
     // Charger les tournois pour trouver le tournoi lié
     fetch(SB_URL+'/rest/v1/tournaments?invite_token=eq.'+encodeURIComponent(_guestToken)+'&select=*',{
@@ -8621,6 +8641,103 @@ function guestJoinTeam(teamIdx){
 }
 
 // Générer un token d'invitation pour un tournoi
+
+// ── Event Invite System ──────────────────────────────────────
+function generateEventInviteToken(eventId){
+  var chars='abcdefghijklmnopqrstuvwxyz0123456789';
+  var token='';
+  for(var i=0;i<12;i++) token+=chars[Math.floor(Math.random()*chars.length)];
+  var e=DB.events.find(function(x){return x.id===eventId;});
+  if(!e)return;
+  e.inviteToken=token;
+  sbSaveEvent(e).then(function(){
+    var link=window.location.origin+'/?event='+token;
+    OM('🔗 Invitation Link',
+      '<div style="margin-bottom:12px;font-size:13px;color:var(--tx2)">Share this link to invite external players to this event.</div>'
+      +'<div style="background:var(--bg1);border:1px solid var(--golddim);border-radius:4px;padding:10px 12px;font-size:12px;word-break:break-all;color:var(--gold);font-family:monospace">'+link+'</div>'
+      +'<button onclick="copyGuestLink(this)" data-link="'+link+'" style="margin-top:10px;width:100%;background:var(--gold);border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:13px;padding:10px;border-radius:3px;cursor:pointer">📋 Copy link</button>',
+      [{lbl:'Close',cls:'bol',fn:CM}]
+    );
+  }).catch(function(e){alert('Error generating link.');console.warn(e);});
+}
+
+function showGuestEventPage(ev, token){
+  document.getElementById('ls').style.display='none';
+  document.getElementById('app').style.display='none';
+  var div=document.createElement('div');
+  div.id='guest-event-page';
+  div.style.cssText='min-height:100vh;background:#080a0c;color:#e8e0cc;font-family:Spectral,serif;display:flex;align-items:center;justify-content:center;padding:20px';
+  div.innerHTML='<div style="max-width:480px;width:100%">'
+    +'<div style="text-align:center;margin-bottom:32px">'
+    +'<img src="/icon-512.png" style="width:80px;height:80px;object-fit:contain;margin-bottom:12px">'
+    +'<div style="font-family:Cinzel,serif;font-size:22px;font-weight:700;color:#c9a227;letter-spacing:2px">FOEDUS SANGUIS</div>'
+    +'<div style="font-size:13px;color:#a09070;margin-top:4px">Conqueror\'s Blade — Event Invitation</div>'
+    +'</div>'
+    +'<div style="background:#10141a;border:1px solid #2a3040;border-radius:6px;padding:24px;margin-bottom:20px">'
+    +'<div style="font-family:Cinzel,serif;font-size:16px;font-weight:700;color:#c9a227;margin-bottom:8px">'+esc(ev.title)+'</div>'
+    +'<div style="font-size:13px;color:#a09070;margin-bottom:4px">📅 '+esc(ev.date)+(ev.time?' at '+esc(ev.time):'')+'</div>'
+    +(ev.description?'<div style="font-size:13px;color:#e8e0cc;margin-top:10px;line-height:1.7">'+esc(ev.description)+'</div>':'')
+    +'</div>'
+    +'<div style="background:#10141a;border:1px solid #2a3040;border-radius:6px;padding:24px">'
+    +'<div style="font-family:Cinzel,serif;font-size:14px;font-weight:700;color:#c9a227;margin-bottom:16px">Register for this event</div>'
+    +'<div style="margin-bottom:12px"><label style="display:block;font-size:11px;color:#a09070;letter-spacing:1px;margin-bottom:5px">IN-GAME USERNAME</label>'
+    +'<input id="guest-ev-name" style="width:100%;background:#080a0c;border:1px solid #2a3040;color:#e8e0cc;padding:10px 12px;border-radius:3px;font-size:14px;box-sizing:border-box" placeholder="Your exact username in CB"></div>'
+    +'<div style="margin-bottom:16px"><label style="display:block;font-size:11px;color:#a09070;letter-spacing:1px;margin-bottom:5px">YOUR HOUSE</label>'
+    +'<input id="guest-ev-house" style="width:100%;background:#080a0c;border:1px solid #2a3040;color:#e8e0cc;padding:10px 12px;border-radius:3px;font-size:14px;box-sizing:border-box" placeholder="Your house name"></div>'
+    +'<div id="guest-ev-msg" style="font-size:13px;color:#e74c3c;margin-bottom:12px;display:none"></div>'
+    +'<button onclick="guestRegisterEvent()" style="width:100%;background:#c9a227;border:none;color:#000;font-family:Cinzel,serif;font-weight:700;font-size:14px;padding:13px;border-radius:3px;cursor:pointer;letter-spacing:1px">⚔️ Register for this event</button>'
+    +'</div>'
+    +'</div>';
+  document.body.appendChild(div);
+  window._guestEventData={ev:ev,token:token};
+}
+
+function guestRegisterEvent(){
+  var name=document.getElementById('guest-ev-name').value.trim();
+  var house=document.getElementById('guest-ev-house').value.trim();
+  var msg=document.getElementById('guest-ev-msg');
+  if(!name){msg.textContent='Please enter your username.';msg.style.display='block';return;}
+  if(!house){msg.textContent='Please enter your house name.';msg.style.display='block';return;}
+  var ev=window._guestEventData.ev;
+  var guestId='guest_'+Date.now();
+  var guestMember={
+    id:guestId, username:name, pin:'0000',
+    role:'membre', status:'actif', sanguin:false,
+    chefGroupe:false, grandChampion:false,
+    joinDate:new Date().toISOString().split('T')[0],
+    note:'Guest — '+house, units:[], avatar:'', classe:'', classes:[],
+    player_level:0, influence_level:0, sanctions:[],
+    is_guest:true, guest_tournament_id:ev.id, guest_house:house,
+    isGuest:true, guestTournamentId:ev.id, guestHouse:house
+  };
+  // Add to event votes
+  ev.votes=ev.votes||{};
+  ev.votes[guestId]=true;
+  // Save guest member + update event votes
+  fetch(SB_URL+'/rest/v1/membres',{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+    body:JSON.stringify({id:guestId,username:name,pin:'0000',role:'membre',status:'actif',sanguin:false,chef_groupe:false,grand_champion:false,joined_at:new Date().toISOString().split('T')[0],note:'Guest — '+house,units:[],avatar:'',classe:'',classes:[],player_level:0,influence_level:0,sanctions:[],is_guest:true,guest_tournament_id:ev.id,guest_house:house,extra_roles:[]})
+  }).then(function(){
+    return fetch(SB_URL+'/rest/v1/events?id=eq.'+encodeURIComponent(ev.id),{
+      method:'PATCH',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({votes:ev.votes})
+    });
+  }).then(function(){
+    var p=document.getElementById('guest-event-page');
+    if(p) p.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px">'
+      +'<div style="font-size:48px">✅</div>'
+      +'<div style="font-family:Cinzel,serif;font-size:20px;color:#c9a227">Registration confirmed!</div>'
+      +'<div style="font-size:14px;color:#a09070;text-align:center">Welcome, '+esc(name)+'.<br>You are registered for '+esc(ev.title)+'.</div>'
+      +'</div>';
+  }).catch(function(e){
+    msg.textContent='Registration error. Please try again.';
+    msg.style.display='block';
+    console.warn(e);
+  });
+}
+
 function generateInviteToken(el){
   var tournamentId=typeof el==='string'?el:el.dataset.id;
   var chars='abcdefghijklmnopqrstuvwxyz0123456789';
